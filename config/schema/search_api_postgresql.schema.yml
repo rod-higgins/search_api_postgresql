@@ -1,0 +1,43 @@
+search_api.backend.plugin.postgresql:
+  type: mapping
+  label: 'PostgreSQL backend configuration'
+  mapping:
+    connection:
+      type: mapping
+      label: 'Database connection settings'
+      mapping:
+        database:
+          type: string
+          label: 'Database name'
+        host:
+          type: string
+          label: 'Database host'
+        port:
+          type: integer
+          label: 'Database port'
+        username:
+          type: string
+          label: 'Username'
+        password:
+          type: string
+          label: 'Password'
+        ssl_mode:
+          type: string
+          label: 'SSL Mode'
+        options:
+          type: sequence
+          label: 'Additional PDO options'
+          sequence:
+            type: string
+    index_prefix:
+      type: string
+      label: 'Index table prefix'
+    fts_configuration:
+      type: string
+      label: 'PostgreSQL FTS configuration'
+    debug:
+      type: boolean
+      label: 'Debug mode'
+    batch_size:
+      type: integer
+      label: 'Indexing batch size'

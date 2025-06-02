@@ -1,0 +1,13 @@
+name: 'Search API PostgreSQL'
+type: module
+description: 'PostgreSQL backend for Search API using native full-text search capabilities with Azure Database compatibility'
+core_version_requirement: ^10.4 || ^11
+package: Search
+dependencies:
+  - search_api:search_api
+  - drupal:system (>=10.4.0)
+
+test_dependencies:
+  - search_api:search_api_test
+
+configure: search_api.admin_index

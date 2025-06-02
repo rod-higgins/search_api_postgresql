@@ -1,0 +1,25 @@
+{
+  "name": "drupal/search_api_postgresql",
+  "type": "drupal-module",
+  "description": "PostgreSQL backend for Search API using native full-text search capabilities",
+  "keywords": ["drupal", "search", "postgresql", "full-text"],
+  "license": "GPL-2.0+",
+  "homepage": "https://www.drupal.org/project/search_api_postgresql",
+  "minimum-stability": "dev",
+  "support": {
+    "issues": "https://www.drupal.org/project/issues/search_api_postgresql",
+    "source": "https://git.drupalcode.org/project/search_api_postgresql"
+  },
+  "require": {
+    "drupal/core": "^10.4 || ^11",
+    "drupal/search_api": "^1.31",
+    "ext-pdo_pgsql": "*"
+  },
+  "require-dev": {
+    "drupal/core-dev": "^10.4 || ^11"
+  },
+  "suggest": {
+    "drupal/facets": "For faceted search functionality",
+    "drupal/search_api_autocomplete": "For autocomplete functionality"
+  }
+}

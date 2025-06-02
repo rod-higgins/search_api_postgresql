@@ -1,0 +1,57 @@
+<?php
+
+/**
+ * @file
+ * Search API PostgreSQL module.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+
+/**
+ * Implements hook_help().
+ */
+function search_api_postgresql_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    case 'help.page.search_api_postgresql':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('The Search API PostgreSQL module provides a backend for Search API that uses PostgreSQL native full-text search capabilities. It is optimized for Azure Database for PostgreSQL but works with any PostgreSQL 12+ installation.') . '</p>';
+      $output .= '<h3>' . t('Features') . '</h3>';
+      $output .= '<ul>';
+      $output .= '<li>' . t('Native PostgreSQL full-text search using tsvector and tsquery') . '</li>';
+      $output .= '<li>' . t('Support for faceted search, autocomplete, and spell checking') . '</li>';
+      $output .= '<li>' . t('Optimized for Azure Database for PostgreSQL') . '</li>';
+      $output .= '<li>' . t('Multiple language configurations') . '</li>';
+      $output .= '<li>' . t('Advanced ranking and relevance scoring') . '</li>';
+      $output .= '</ul>';
+      return $output;
+  }
+}
+
+/**
+ * Implements hook_requirements().
+ */
+function search_api_postgresql_requirements($phase) {
+  $requirements = [];
+
+  if ($phase == 'runtime') {
+    // Check if PDO PostgreSQL is available.
+    if (!extension_loaded('pdo_pgsql')) {
+      $requirements['search_api_postgresql_pdo'] = [
+        'title' => t('Search API PostgreSQL'),
+        'value' => t('PDO PostgreSQL extension not found'),
+        'description' => t('The Search API PostgreSQL module requires the PDO PostgreSQL extension to be installed.'),
+        'severity' => REQUIREMENT_ERROR,
+      ];
+    }
+    else {
+      $requirements['search_api_postgresql_pdo'] = [
+        'title' => t('Search API PostgreSQL'),
+        'value' => t('PDO PostgreSQL extension found'),
+        'severity' => REQUIREMENT_OK,
+      ];
+    }
+  }
+
+  return $requirements;
+}
