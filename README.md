@@ -1,14 +1,17 @@
 # Search API PostgreSQL
 
-This module provides a PostgreSQL backend for the Search API module, leveraging PostgreSQL's native full-text search capabilities including tsvector and tsquery for optimal performance.
+This module provides a PostgreSQL backend for the Search API module, leveraging PostgreSQL's native full-text search capabilities including tsvector and tsquery for optimal performance, with enhanced AI text embeddings support for semantic search.
 
 ## Features
 
 - **Native PostgreSQL Full-Text Search**: Uses tsvector and GIN indexes for fast searching
+- **AI Text Embeddings**: Semantic search using Azure AI Services with vector similarity
+- **Hybrid Search**: Combines traditional full-text search with vector similarity search
 - **Azure Database Compatible**: Optimized for Azure Database for PostgreSQL
 - **Advanced Search Features**: Supports faceting, autocomplete, spell checking, and more
 - **Multi-language Support**: Configurable text search configurations for different languages
 - **Performance Optimized**: Efficient indexing and querying strategies
+- **Secure Key Storage**: Integration with Drupal Key module for API key management
 
 ## Requirements
 
@@ -16,6 +19,8 @@ This module provides a PostgreSQL backend for the Search API module, leveraging 
 - PostgreSQL 12+
 - PHP PDO PostgreSQL extension
 - Search API module
+- **For AI Embeddings**: pgvector extension for PostgreSQL
+- **For Secure Keys**: Key module (recommended)
 
 ## Installation
 
@@ -29,7 +34,20 @@ This module provides a PostgreSQL backend for the Search API module, leveraging 
    drush en search_api_postgresql
    ```
 
+3. **For AI Embeddings** (optional), install pgvector extension:
+   ```sql
+   CREATE EXTENSION vector;
+   ```
+
+4. **For Secure Key Storage** (recommended):
+   ```bash
+   composer require drupal/key
+   drush en key
+   ```
+
 ## Configuration
+
+### Basic Configuration
 
 1. **Create a Search API Server**:
    - Go to `/admin/config/search/search-api`
@@ -44,10 +62,32 @@ This module provides a PostgreSQL backend for the Search API module, leveraging 
    - **Username/Password**: Database credentials
    - **SSL Mode**: Recommended "require" for Azure Database
 
-3. **Advanced Settings**:
-   - **FTS Configuration**: Language-specific stemming and stop words
-   - **Index Prefix**: Table name prefix for search indexes
-   - **Batch Size**: Items processed per indexing batch
+### AI Embeddings Configuration
+
+1. **Enable AI Text Embeddings**:
+   - Check "Enable AI Text Embeddings" in the backend configuration
+   - Configure Azure AI Services connection details
+
+2. **Azure AI Services Setup**:
+   - **Endpoint**: Your Azure AI Services endpoint (e.g., `https://yourservice.openai.azure.com/`)
+   - **API Key Storage**: Choose between direct storage or Key module
+   - **Model**: Select embedding model (text-embedding-ada-002, text-embedding-3-small, etc.)
+   - **Dimensions**: Vector dimensions (1536 for ada-002, configurable for newer models)
+
+3. **Hybrid Search Settings**:
+   - **Vector Weight**: Weight for vector similarity in hybrid search (0-1)
+   - **Full-text Weight**: Weight for traditional search in hybrid search (0-1)
+   - **Similarity Threshold**: Minimum similarity score for vector results
+
+### Secure API Key Storage
+
+For production environments, use the Key module for secure API key storage:
+
+1. Install and enable the Key module
+2. Create a new key at `/admin/config/system/keys`
+3. In the PostgreSQL backend configuration:
+   - Set "API Key Storage Method" to "Use Key module"
+   - Select your created key
 
 ## Azure Database for PostgreSQL Setup
 
@@ -60,8 +100,17 @@ SSL Mode: require
 Username: myuser@myserver
 ```
 
+### Installing pgvector on Azure
+
+1. Connect to your Azure PostgreSQL server
+2. Enable the vector extension:
+   ```sql
+   CREATE EXTENSION vector;
+   ```
+
 ## Supported Features
 
+### Traditional Search
 - ✅ Full-text search with relevance ranking
 - ✅ Faceted search
 - ✅ Autocomplete suggestions  
@@ -70,6 +119,14 @@ Username: myuser@myserver
 - ✅ Complex query conditions
 - ✅ Sorting and pagination
 - ✅ Random sorting
+
+### AI-Enhanced Search
+- ✅ Vector similarity search using embeddings
+- ✅ Hybrid search (combining full-text and vector search)
+- ✅ Semantic search capabilities
+- ✅ Automatic embedding generation
+- ✅ Configurable similarity thresholds
+- ✅ Support for multiple embedding models
 
 ## Field Types
 
@@ -82,13 +139,38 @@ Username: myuser@myserver
 | date | TIMESTAMP | Date/time values |
 | boolean | BOOLEAN | True/false values |
 | postgresql_fulltext | TEXT | Optimized for tsvector |
+| vector | VECTOR(n) | Vector embeddings for AI search |
+
+## Search Modes
+
+### Traditional Full-Text Search
+Standard PostgreSQL full-text search using tsvector and tsquery.
+
+### Vector Similarity Search
+Semantic search using AI-generated embeddings and cosine similarity.
+
+### Hybrid Search
+Combines both traditional and vector search with configurable weights:
+- Results are scored using both relevance and similarity
+- Weights can be adjusted based on your content and use case
+- Provides the best of both worlds: exact matches and semantic understanding
 
 ## Performance Tips
 
 1. **Use GIN Indexes**: Automatically created for tsvector columns
-2. **Optimize Batch Size**: Adjust based on your content size
-3. **Language Configuration**: Choose appropriate FTS configuration
-4. **Regular Maintenance**: Monitor index usage and performance
+2. **Vector Indexes**: HNSW or IVFFlat indexes for fast vector similarity
+3. **Optimize Batch Size**: Adjust based on your content size
+4. **Language Configuration**: Choose appropriate FTS configuration
+5. **Embedding Batching**: Configure appropriate batch sizes for API calls
+6. **Regular Maintenance**: Monitor index usage and performance
+
+## API Usage and Costs
+
+When using AI embeddings:
+- Monitor your Azure AI Services usage and costs
+- Consider implementing caching for frequently searched content
+- Use appropriate batch sizes to optimize API calls
+- Text is automatically chunked for long content
 
 ## Development
 
@@ -104,7 +186,47 @@ Username: myuser@myserver
 
 ### Debugging
 
-Enable debug mode in the backend configuration to log all database queries for troubleshooting.
+Enable debug mode in the backend configuration to log:
+- Database queries
+- Embedding API calls
+- Vector similarity calculations
+
+### Custom Embedding Fields
+
+You can create custom vector fields in your Search API index:
+1. Add a field with "Vector" data type
+2. Populate it with your own embeddings
+3. The backend will automatically create appropriate indexes
+
+## Troubleshooting
+
+### Common Issues
+
+1. **pgvector extension not found**:
+   - Ensure pgvector is installed and enabled in PostgreSQL
+   - Check that your user has permissions to create extensions
+
+2. **Azure AI API errors**:
+   - Verify your endpoint URL and API key
+   - Check your Azure AI Services quotas and limits
+   - Ensure your deployment name matches the model configuration
+
+3. **Vector index creation fails**:
+   - Check PostgreSQL version (requires 12+)
+   - Verify pgvector extension is properly installed
+   - Check database permissions
+
+### Performance Issues
+
+1. **Slow vector searches**:
+   - Ensure vector indexes are created (HNSW recommended)
+   - Consider adjusting similarity thresholds
+   - Monitor PostgreSQL query performance
+
+2. **High API costs**:
+   - Implement result caching
+   - Optimize embedding batch sizes
+   - Consider re-embedding frequency
 
 ## Contributing
 
@@ -118,3 +240,5 @@ GPL-2.0+
 
 - [Issue Queue](https://www.drupal.org/project/issues/search_api_postgresql)
 - [Documentation](https://www.drupal.org/docs/contributed-modules/search-api-postgresql)
+- [Azure AI Services Documentation](https://docs.microsoft.com/en-us/azure/cognitive-services/openai/)
+- [pgvector Documentation](https://github.com/pgvector/pgvector)

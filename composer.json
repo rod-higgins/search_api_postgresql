@@ -1,8 +1,8 @@
 {
   "name": "drupal/search_api_postgresql",
   "type": "drupal-module",
-  "description": "PostgreSQL backend for Search API using native full-text search capabilities with optional Azure AI vector search support",
-  "keywords": ["drupal", "search", "postgresql", "full-text", "vector", "azure", "ai", "semantic"],
+  "description": "PostgreSQL backend for Search API using native full-text search capabilities with AI text embeddings support",
+  "keywords": ["drupal", "search", "postgresql", "full-text", "ai", "embeddings", "vector"],
   "license": "GPL-2.0+",
   "homepage": "https://www.drupal.org/project/search_api_postgresql",
   "minimum-stability": "dev",
@@ -14,19 +14,21 @@
     "drupal/core": "^10.4 || ^11",
     "drupal/search_api": "^1.31",
     "ext-pdo_pgsql": "*",
-    "ext-curl": "*"
+    "guzzlehttp/guzzle": "^7.0"
   },
   "require-dev": {
     "drupal/core-dev": "^10.4 || ^11"
   },
   "suggest": {
     "drupal/facets": "For faceted search functionality",
-    "drupal/search_api_autocomplete": "For autocomplete functionality"
+    "drupal/search_api_autocomplete": "For autocomplete functionality",
+    "drupal/key": "For secure API key storage (recommended for production)",
+    "pgvector/pgvector": "PostgreSQL extension for vector similarity search (required for AI embeddings)"
   },
   "extra": {
     "drush": {
       "services": {
-        "drush.services.yml": "^9 || ^10 || ^11"
+        "drush.services.yml": "^10 || ^11"
       }
     }
   }
