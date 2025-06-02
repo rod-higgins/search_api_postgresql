@@ -1,0 +1,13 @@
+services:
+  search_api_postgresql.azure_openai_embedding:
+    class: Drupal\search_api_postgresql\Service\AzureOpenAIEmbeddingService
+    arguments: ['', '', '', '2024-02-01', 1536, 3, 1000]
+    # This service is instantiated manually in the backend with actual config values
+    
+  search_api_postgresql.vector_index_manager:
+    class: Drupal\search_api_postgresql\PostgreSQL\VectorIndexManager
+    # Arguments provided at runtime by the backend
+    
+  search_api_postgresql.vector_query_builder:
+    class: Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder
+    # Arguments provided at runtime by the backend
