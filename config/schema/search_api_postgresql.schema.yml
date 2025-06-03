@@ -79,6 +79,28 @@ search_api.backend.plugin.postgresql:
         weight_fulltext:
           type: float
           label: 'Full-text search weight in hybrid mode'
+        cache:
+          type: mapping
+          label: 'Embedding cache configuration'
+          mapping:
+            enabled:
+              type: boolean
+              label: 'Enable embedding caching'
+            backend:
+              type: string
+              label: 'Cache backend (database or memory)'
+            ttl:
+              type: integer
+              label: 'Cache TTL in seconds'
+            max_entries:
+              type: integer
+              label: 'Maximum cache entries'
+            compression:
+              type: boolean
+              label: 'Enable cache compression'
+            cleanup_probability:
+              type: float
+              label: 'Cache cleanup probability'
 
 search_api.backend.plugin.postgresql_azure:
   type: mapping
@@ -202,3 +224,28 @@ search_api.backend.plugin.postgresql_azure:
         rate_limit_delay:
           type: integer
           label: 'Rate limit delay in milliseconds'
+    cache:
+      type: mapping
+      label: 'Embedding cache configuration'
+      mapping:
+        enabled:
+          type: boolean
+          label: 'Enable embedding caching'
+        backend:
+          type: string
+          label: 'Cache backend (database or memory)'
+        ttl:
+          type: integer
+          label: 'Cache TTL in seconds'
+        max_entries:
+          type: integer
+          label: 'Maximum cache entries'
+        compression:
+          type: boolean
+          label: 'Enable cache compression'
+        cleanup_probability:
+          type: float
+          label: 'Cache cleanup probability'
+        table_name:
+          type: string
+          label: 'Cache table name'

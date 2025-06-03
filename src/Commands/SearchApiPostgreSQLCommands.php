@@ -302,6 +302,323 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
   }
 
   /**
+   * Shows embedding cache statistics.
+   *
+   * @param string $server_id
+   *   The Search API server ID.
+   *
+   * @command search-api-postgresql:cache-stats
+   * @aliases sapg-cache-stats
+   * @usage search-api-postgresql:cache-stats my_server
+   *   Show embedding cache statistics for the specified server.
+   */
+  public function showCacheStats($server_id) {
+    $server = Server::load($server_id);
+    
+    if (!$server) {
+      throw new \Exception("Server '{$server_id}' not found.");
+    }
+
+    $backend = $server->getBackend();
+    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure'])) {
+      throw new \Exception("Server '{$server_id}' is not using PostgreSQL backend.");
+    }
+
+    try {
+      // Get cache manager from the backend
+      $reflection = new \ReflectionClass($backend);
+      $method = $reflection->getMethod('connect');
+      $method->setAccessible(TRUE);
+      $method->invoke($backend);
+
+      // Check if embedding service exists and has cache
+      $property = $reflection->getProperty('embeddingService');
+      $property->setAccessible(TRUE);
+      $embedding_service = $property->getValue($backend);
+
+      if (!$embedding_service) {
+        $this->output()->writeln('<comment>Embedding service is not configured for this server.</comment>');
+        return;
+      }
+
+      // Get cache stats
+      if (method_exists($embedding_service, 'getCacheStats')) {
+        $stats = $embedding_service->getCacheStats();
+        
+        if (!$stats['cache_enabled']) {
+          $this->output()->writeln('<comment>Embedding cache is not enabled for this server.</comment>');
+          return;
+        }
+
+        $this->output()->writeln("Embedding Cache Statistics for server: {$server_id}");
+        $this->output()->writeln("=====================================");
+        
+        // Display basic stats
+        $this->output()->writeln("Cache Hits: " . ($stats['hits'] ?? 0));
+        $this->output()->writeln("Cache Misses: " . ($stats['misses'] ?? 0));
+        $this->output()->writeln("Hit Rate: " . ($stats['hit_rate'] ?? 0) . "%");
+        
+        if (isset($stats['total_entries'])) {
+          $this->output()->writeln("Total Entries: " . $stats['total_entries']);
+        }
+        
+        if (isset($stats['expired_entries'])) {
+          $this->output()->writeln("Expired Entries: " . $stats['expired_entries']);
+        }
+        
+        if (isset($stats['average_dimensions'])) {
+          $this->output()->writeln("Average Dimensions: " . $stats['average_dimensions']);
+        }
+        
+        // Display cost savings if available
+        if (isset($stats['estimated_cost_saved_usd'])) {
+          $this->output()->writeln("Estimated Cost Saved: $" . $stats['estimated_cost_saved_usd']);
+        }
+        
+        if (isset($stats['estimated_tokens_saved'])) {
+          $this->output()->writeln("Estimated Tokens Saved: " . number_format($stats['estimated_tokens_saved']));
+        }
+        
+        // Display cache performance
+        if (isset($stats['oldest_entry'])) {
+          $this->output()->writeln("Oldest Entry: " . $stats['oldest_entry']);
+        }
+        
+        if (isset($stats['newest_entry'])) {
+          $this->output()->writeln("Newest Entry: " . $stats['newest_entry']);
+        }
+      } else {
+        $this->output()->writeln('<comment>Cache statistics not available for this embedding service.</comment>');
+      }
+    }
+    catch (\Exception $e) {
+      throw new \Exception("Failed to get cache statistics: " . $e->getMessage());
+    }
+  }
+
+  /**
+   * Clears the embedding cache.
+   *
+   * @param string $server_id
+   *   The Search API server ID.
+   *
+   * @command search-api-postgresql:cache-clear
+   * @aliases sapg-cache-clear
+   * @usage search-api-postgresql:cache-clear my_server
+   *   Clear embedding cache for the specified server.
+   */
+  public function clearCache($server_id) {
+    $server = Server::load($server_id);
+    
+    if (!$server) {
+      throw new \Exception("Server '{$server_id}' not found.");
+    }
+
+    $backend = $server->getBackend();
+    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure'])) {
+      throw new \Exception("Server '{$server_id}' is not using PostgreSQL backend.");
+    }
+
+    // Confirm with user
+    if (!$this->confirm("This will clear all cached embeddings for server '{$server_id}'. Continue?")) {
+      throw new UserAbortException();
+    }
+
+    try {
+      // Get embedding service from the backend
+      $reflection = new \ReflectionClass($backend);
+      $method = $reflection->getMethod('connect');
+      $method->setAccessible(TRUE);
+      $method->invoke($backend);
+
+      $property = $reflection->getProperty('embeddingService');
+      $property->setAccessible(TRUE);
+      $embedding_service = $property->getValue($backend);
+
+      if (!$embedding_service) {
+        throw new \Exception('Embedding service is not configured for this server.');
+      }
+
+      if (method_exists($embedding_service, 'invalidateCache')) {
+        $result = $embedding_service->invalidateCache();
+        
+        if ($result) {
+          $this->output()->writeln('<info>✓ Embedding cache cleared successfully</info>');
+        } else {
+          $this->output()->writeln('<comment>Cache clear operation completed (no entries to clear)</comment>');
+        }
+      } else {
+        throw new \Exception('Cache clearing not supported by this embedding service.');
+      }
+    }
+    catch (\Exception $e) {
+      throw new \Exception("Failed to clear cache: " . $e->getMessage());
+    }
+  }
+
+  /**
+   * Performs embedding cache maintenance.
+   *
+   * @param string $server_id
+   *   The Search API server ID.
+   *
+   * @command search-api-postgresql:cache-maintenance
+   * @aliases sapg-cache-maint
+   * @usage search-api-postgresql:cache-maintenance my_server
+   *   Perform cache maintenance (cleanup expired entries, optimize storage).
+   */
+  public function cacheMaintenance($server_id) {
+    $server = Server::load($server_id);
+    
+    if (!$server) {
+      throw new \Exception("Server '{$server_id}' not found.");
+    }
+
+    $backend = $server->getBackend();
+    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure'])) {
+      throw new \Exception("Server '{$server_id}' is not using PostgreSQL backend.");
+    }
+
+    try {
+      // Get cache manager service
+      $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
+      
+      $this->output()->writeln('<info>Starting cache maintenance...</info>');
+      
+      $stats_before = $cache_manager->getCacheStatistics();
+      $results = $cache_manager->performMaintenance();
+      $stats_after = $cache_manager->getCacheStatistics();
+      
+      if ($results['success']) {
+        $this->output()->writeln('<info>✓ Cache maintenance completed successfully</info>');
+        
+        $entries_cleaned = $results['entries_cleaned'] ?? 0;
+        if ($entries_cleaned > 0) {
+          $this->output()->writeln("Cleaned up {$entries_cleaned} cache entries");
+        }
+        
+        $this->output()->writeln("Entries before: " . ($stats_before['total_entries'] ?? 0));
+        $this->output()->writeln("Entries after: " . ($stats_after['total_entries'] ?? 0));
+      } else {
+        throw new \Exception('Cache maintenance failed');
+      }
+    }
+    catch (\Exception $e) {
+      throw new \Exception("Cache maintenance failed: " . $e->getMessage());
+    }
+  }
+
+  /**
+   * Warms up the embedding cache with common content.
+   *
+   * @param string $index_id
+   *   The Search API index ID.
+   * @param array $options
+   *   Additional options.
+   *
+   * @command search-api-postgresql:cache-warmup
+   * @aliases sapg-cache-warmup
+   * @option limit
+   *   Maximum number of items to warm up (default: 100)
+   * @option field
+   *   Field to use for cache warmup (default: all text fields)
+   * @usage search-api-postgresql:cache-warmup my_index --limit=50
+   *   Warm up cache with 50 most recent items from the index.
+   */
+  public function cacheWarmup($index_id, array $options = ['limit' => 100, 'field' => NULL]) {
+    $index = \Drupal::entityTypeManager()->getStorage('search_api_index')->load($index_id);
+    
+    if (!$index) {
+      throw new \Exception("Index '{$index_id}' not found.");
+    }
+
+    $server = $index->getServerInstance();
+    $backend = $server->getBackend();
+    
+    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure'])) {
+      throw new \Exception("Index '{$index_id}' is not using PostgreSQL backend.");
+    }
+
+    $config = $backend->getConfiguration();
+    if (!($config['ai_embeddings']['enabled'] ?? FALSE) && !($config['azure_embedding']['enabled'] ?? FALSE)) {
+      throw new \Exception("AI embeddings are not enabled for this index.");
+    }
+
+    $limit = (int) $options['limit'];
+    if ($limit < 1 || $limit > 1000) {
+      $limit = 100;
+    }
+
+    try {
+      // Get embedding service
+      $reflection = new \ReflectionClass($backend);
+      $method = $reflection->getMethod('connect');
+      $method->setAccessible(TRUE);
+      $method->invoke($backend);
+
+      $property = $reflection->getProperty('embeddingService');
+      $property->setAccessible(TRUE);
+      $embedding_service = $property->getValue($backend);
+
+      if (!$embedding_service || !method_exists($embedding_service, 'warmupCache')) {
+        throw new \Exception('Cache warmup not supported by this embedding service.');
+      }
+
+      // Get sample content from the index
+      $this->output()->writeln("<info>Collecting sample content from index '{$index_id}'...</info>");
+      
+      $query = $index->query();
+      $query->range(0, $limit);
+      $query->addField('search_api_excerpt'); // Get text content
+      
+      $results = $query->execute();
+      $items = $results->getResultItems();
+      
+      if (empty($items)) {
+        $this->output()->writeln('<comment>No items found in the index for cache warmup.</comment>');
+        return;
+      }
+
+      // Extract text content for warmup
+      $texts = [];
+      foreach ($items as $item) {
+        $fields = $item->getFields();
+        $text_content = '';
+        
+        foreach ($fields as $field_id => $field) {
+          if ($field->getType() === 'text' || $field->getType() === 'postgresql_fulltext') {
+            $values = $field->getValues();
+            if (!empty($values)) {
+              $text_content .= ' ' . reset($values);
+            }
+          }
+        }
+        
+        if (!empty(trim($text_content))) {
+          $texts[] = trim($text_content);
+        }
+      }
+
+      if (empty($texts)) {
+        $this->output()->writeln('<comment>No text content found for cache warmup.</comment>');
+        return;
+      }
+
+      $this->output()->writeln("<info>Starting cache warmup for " . count($texts) . " items...</info>");
+      
+      $results = $embedding_service->warmupCache($texts);
+      
+      $this->output()->writeln('<info>Cache warmup completed:</info>');
+      $this->output()->writeln("✓ Cached: " . $results['cached']);
+      $this->output()->writeln("⚠ Failed: " . $results['failed']);
+      $this->output()->writeln("- Skipped: " . $results['skipped']);
+    }
+    catch (\Exception $e) {
+      throw new \Exception("Cache warmup failed: " . $e->getMessage());
+    }
+  }
+
+  /**
    * Validates key configuration for a server.
    *
    * @param string $server_id

@@ -11,3 +11,43 @@ services:
   search_api_postgresql.vector_query_builder:
     class: Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder
     # Arguments provided at runtime by the backend
+
+  # Embedding Cache Services
+  search_api_postgresql.embedding_cache.database:
+    class: Drupal\search_api_postgresql\Cache\DatabaseEmbeddingCache
+    arguments: 
+      - '@database'
+      - '@logger.channel.search_api_postgresql'
+      - '%search_api_postgresql.embedding_cache.config%'
+    tags:
+      - { name: 'search_api_postgresql.embedding_cache' }
+
+  search_api_postgresql.embedding_cache.memory:
+    class: Drupal\search_api_postgresql\Cache\MemoryEmbeddingCache
+    arguments: 
+      - '@logger.channel.search_api_postgresql'
+      - '%search_api_postgresql.embedding_cache.config%'
+    tags:
+      - { name: 'search_api_postgresql.embedding_cache' }
+
+  # Default embedding cache service (alias to database cache)
+  search_api_postgresql.embedding_cache:
+    alias: search_api_postgresql.embedding_cache.database
+    public: true
+
+  # Cache manager service for advanced cache operations
+  search_api_postgresql.cache_manager:
+    class: Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
+    arguments:
+      - '@search_api_postgresql.embedding_cache'
+      - '@logger.channel.search_api_postgresql'
+      - '@config.factory'
+
+parameters:
+  # Default embedding cache configuration
+  search_api_postgresql.embedding_cache.config:
+    default_ttl: 2592000  # 30 days
+    max_entries: 100000
+    cleanup_probability: 0.01  # 1% chance of cleanup on write
+    enable_compression: true
+    table_name: 'search_api_postgresql_embedding_cache'

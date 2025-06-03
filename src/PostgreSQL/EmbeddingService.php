@@ -3,12 +3,13 @@
 namespace Drupal\search_api_postgresql\PostgreSQL;
 
 use Drupal\search_api\SearchApiException;
+use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
 use Psr\Log\LoggerInterface;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 
 /**
- * Service for generating text embeddings using Azure AI Services.
+ * Service for generating text embeddings using Azure AI Services with caching.
  */
 class EmbeddingService {
 
@@ -41,6 +42,13 @@ class EmbeddingService {
   protected $httpClient;
 
   /**
+   * The embedding cache manager.
+   *
+   * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
+   */
+  protected $cacheManager;
+
+  /**
    * Constructs an EmbeddingService object.
    *
    * @param array $config
@@ -49,11 +57,14 @@ class EmbeddingService {
    *   The API key.
    * @param \Psr\Log\LoggerInterface $logger
    *   The logger.
+   * @param \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager $cache_manager
+   *   The embedding cache manager (optional).
    */
-  public function __construct(array $config, string $api_key, LoggerInterface $logger) {
+  public function __construct(array $config, string $api_key, LoggerInterface $logger, EmbeddingCacheManager $cache_manager = NULL) {
     $this->config = $config;
     $this->apiKey = $api_key;
     $this->logger = $logger;
+    $this->cacheManager = $cache_manager;
     $this->httpClient = new Client([
       'timeout' => 30,
       'headers' => [
@@ -64,7 +75,7 @@ class EmbeddingService {
   }
 
   /**
-   * Generates embeddings for given texts.
+   * Generates embeddings for given texts with caching.
    *
    * @param array $texts
    *   Array of text strings to generate embeddings for.
@@ -80,17 +91,97 @@ class EmbeddingService {
       return [];
     }
 
-    // Process texts in batches.
-    $batch_size = $this->config['batch_size'] ?? 10;
-    $batches = array_chunk($texts, $batch_size);
-    $all_embeddings = [];
-
-    foreach ($batches as $batch) {
-      $batch_embeddings = $this->processBatch($batch);
-      $all_embeddings = array_merge($all_embeddings, $batch_embeddings);
+    // Preprocess texts
+    $processed_texts = [];
+    $original_indices = [];
+    
+    foreach ($texts as $index => $text) {
+      $processed = $this->preprocessText($text);
+      if (!empty($processed)) {
+        $processed_texts[] = $processed;
+        $original_indices[] = $index;
+      }
     }
 
-    return $all_embeddings;
+    if (empty($processed_texts)) {
+      return [];
+    }
+
+    $final_embeddings = [];
+    $texts_to_generate = [];
+    $indices_to_generate = [];
+
+    // Check cache for all texts
+    if ($this->cacheManager) {
+      $metadata = $this->getCacheMetadata();
+      $cached_embeddings = $this->cacheManager->getCachedEmbeddingsBatch($processed_texts, $metadata);
+
+      // Separate cached and uncached texts
+      foreach ($processed_texts as $i => $text) {
+        $original_index = $original_indices[$i];
+        
+        if (isset($cached_embeddings[$i])) {
+          $final_embeddings[$original_index] = $cached_embeddings[$i];
+        } else {
+          $texts_to_generate[] = $text;
+          $indices_to_generate[] = $original_index;
+        }
+      }
+
+      $this->logger->debug('Embedding cache lookup: @cached cached, @uncached to generate', [
+        '@cached' => count($final_embeddings),
+        '@uncached' => count($texts_to_generate),
+      ]);
+    } else {
+      // No cache, generate all embeddings
+      $texts_to_generate = $processed_texts;
+      $indices_to_generate = $original_indices;
+    }
+
+    // Generate embeddings for uncached texts in batches
+    if (!empty($texts_to_generate)) {
+      $batch_size = $this->config['batch_size'] ?? 10;
+      $batches = array_chunk($texts_to_generate, $batch_size);
+      $batch_indices = array_chunk($indices_to_generate, $batch_size);
+
+      foreach ($batches as $batch_index => $batch) {
+        $batch_embeddings = $this->processBatch($batch);
+        $current_indices = $batch_indices[$batch_index];
+
+        // Add new embeddings to final result
+        foreach ($batch_embeddings as $i => $embedding) {
+          if (isset($current_indices[$i])) {
+            $original_index = $current_indices[$i];
+            $final_embeddings[$original_index] = $embedding;
+          }
+        }
+
+        // Cache the new embeddings
+        if ($this->cacheManager && !empty($batch_embeddings)) {
+          $metadata = $this->getCacheMetadata();
+          $this->cacheManager->cacheEmbeddingsBatch($batch, $batch_embeddings, $metadata);
+        }
+      }
+    }
+
+    return $final_embeddings;
+  }
+
+  /**
+   * Generates a single embedding for a text with caching.
+   *
+   * @param string $text
+   *   The text to generate embedding for.
+   *
+   * @return array
+   *   The embedding vector.
+   *
+   * @throws \Drupal\search_api\SearchApiException
+   *   If embedding generation fails.
+   */
+  public function generateEmbedding(string $text) {
+    $embeddings = $this->generateEmbeddings([$text]);
+    return reset($embeddings);
   }
 
   /**
@@ -168,20 +259,49 @@ class EmbeddingService {
   }
 
   /**
-   * Generates a single embedding for a text.
+   * Preprocesses text before embedding generation.
    *
    * @param string $text
-   *   The text to generate embedding for.
+   *   The input text.
+   *
+   * @return string
+   *   The preprocessed text.
+   */
+  protected function preprocessText($text) {
+    // Remove excessive whitespace
+    $text = preg_replace('/\s+/', ' ', trim($text));
+    
+    // Remove null bytes and control characters
+    $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
+    
+    // Limit text length (Azure OpenAI has token limits)
+    $max_chars = 8000; // Conservative limit for token count
+    if (strlen($text) > $max_chars) {
+      $text = substr($text, 0, $max_chars);
+      // Try to break at word boundary
+      $last_space = strrpos($text, ' ');
+      if ($last_space !== FALSE && $last_space > $max_chars * 0.8) {
+        $text = substr($text, 0, $last_space);
+      }
+    }
+
+    return $text;
+  }
+
+  /**
+   * Gets cache metadata for this embedding service.
    *
    * @return array
-   *   The embedding vector.
-   *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If embedding generation fails.
+   *   Metadata array for cache key generation.
    */
-  public function generateEmbedding(string $text) {
-    $embeddings = $this->generateEmbeddings([$text]);
-    return reset($embeddings);
+  protected function getCacheMetadata() {
+    return [
+      'service' => 'azure_ai_services',
+      'endpoint' => $this->config['endpoint'] ?? '',
+      'model' => $this->config['model'] ?? '',
+      'dimensions' => $this->config['dimensions'] ?? 1536,
+      'api_version' => '2023-05-15',
+    ];
   }
 
   /**
@@ -344,15 +464,73 @@ class EmbeddingService {
    * Gets the API usage statistics.
    *
    * @return array
-   *   Usage statistics.
+   *   Usage statistics including cache information.
    */
   public function getUsageStats() {
-    // This would be enhanced to track actual usage.
-    return [
+    $stats = [
       'total_requests' => 0,
       'total_tokens' => 0,
       'total_embeddings' => 0,
+      'cache_enabled' => $this->cacheManager !== NULL,
     ];
+
+    // Add cache statistics if available
+    if ($this->cacheManager) {
+      $cache_stats = $this->cacheManager->getCacheStatistics();
+      $stats['cache'] = $cache_stats;
+    }
+
+    return $stats;
+  }
+
+  /**
+   * Gets cache statistics for this service.
+   *
+   * @return array
+   *   Cache statistics if cache manager is available.
+   */
+  public function getCacheStats() {
+    if ($this->cacheManager) {
+      return $this->cacheManager->getCacheStatistics();
+    }
+    return ['cache_enabled' => FALSE];
+  }
+
+  /**
+   * Invalidates cache entries for this service.
+   *
+   * @return bool
+   *   TRUE if cache was invalidated.
+   */
+  public function invalidateCache() {
+    if ($this->cacheManager) {
+      $metadata = $this->getCacheMetadata();
+      return $this->cacheManager->invalidateByMetadata($metadata) > 0;
+    }
+    return FALSE;
+  }
+
+  /**
+   * Performs cache warmup for an array of texts.
+   *
+   * @param array $texts
+   *   Array of texts to warm up.
+   *
+   * @return array
+   *   Warmup results.
+   */
+  public function warmupCache(array $texts) {
+    if (!$this->cacheManager || empty($texts)) {
+      return ['cached' => 0, 'failed' => 0, 'skipped' => 0];
+    }
+
+    $embedding_generator = function($text) {
+      // Generate embedding without using cache
+      return $this->processBatch([$text])[0] ?? NULL;
+    };
+
+    $metadata = $this->getCacheMetadata();
+    return $this->cacheManager->warmupCache($texts, $embedding_generator, $metadata);
   }
 
 }
