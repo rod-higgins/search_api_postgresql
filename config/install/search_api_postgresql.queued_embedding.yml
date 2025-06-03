@@ -1,3 +1,4 @@
+# Default queued embedding service settings
 enabled: false
 default_dimension: 1536
 fallback_to_sync: true

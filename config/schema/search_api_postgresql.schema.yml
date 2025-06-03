@@ -1,3 +1,5 @@
+# Configuration schema for Search API PostgreSQL backends
+
 search_api.backend.plugin.postgresql:
   type: mapping
   label: 'PostgreSQL backend configuration'
@@ -6,21 +8,21 @@ search_api.backend.plugin.postgresql:
       type: mapping
       label: 'Database connection settings'
       mapping:
-        database:
-          type: string
-          label: 'Database name'
         host:
           type: string
           label: 'Database host'
         port:
           type: integer
           label: 'Database port'
+        database:
+          type: string
+          label: 'Database name'
         username:
           type: string
           label: 'Username'
         password_key:
           type: string
-          label: 'Password key reference'
+          label: 'Password key reference (Key module)'
         ssl_mode:
           type: string
           label: 'SSL Mode'
@@ -79,28 +81,6 @@ search_api.backend.plugin.postgresql:
         weight_fulltext:
           type: float
           label: 'Full-text search weight in hybrid mode'
-        cache:
-          type: mapping
-          label: 'Embedding cache configuration'
-          mapping:
-            enabled:
-              type: boolean
-              label: 'Enable embedding caching'
-            backend:
-              type: string
-              label: 'Cache backend (database or memory)'
-            ttl:
-              type: integer
-              label: 'Cache TTL in seconds'
-            max_entries:
-              type: integer
-              label: 'Maximum cache entries'
-            compression:
-              type: boolean
-              label: 'Enable cache compression'
-            cleanup_probability:
-              type: float
-              label: 'Cache cleanup probability'
 
 search_api.backend.plugin.postgresql_azure:
   type: mapping
@@ -110,21 +90,21 @@ search_api.backend.plugin.postgresql_azure:
       type: mapping
       label: 'Database connection settings'
       mapping:
-        database:
-          type: string
-          label: 'Database name'
         host:
           type: string
           label: 'Database host'
         port:
           type: integer
           label: 'Database port'
+        database:
+          type: string
+          label: 'Database name'
         username:
           type: string
           label: 'Username'
         password_key:
           type: string
-          label: 'Password key reference'
+          label: 'Password key reference (Key module)'
         ssl_mode:
           type: string
           label: 'SSL Mode'
@@ -224,28 +204,98 @@ search_api.backend.plugin.postgresql_azure:
         rate_limit_delay:
           type: integer
           label: 'Rate limit delay in milliseconds'
-    cache:
+
+# Queue processing configuration schema
+search_api_postgresql.queue_settings:
+  type: config_object
+  label: 'Search API PostgreSQL Queue Settings'
+  mapping:
+    enabled:
+      type: boolean
+      label: 'Enable queue processing globally'
+    default_enabled:
+      type: boolean
+      label: 'Enable queue processing by default for new servers'
+    batch_size:
+      type: integer
+      label: 'Default batch size for queue processing'
+    max_processing_time:
+      type: integer
+      label: 'Maximum processing time per queue run (seconds)'
+    priority_levels:
       type: mapping
-      label: 'Embedding cache configuration'
+      label: 'Priority level definitions'
       mapping:
-        enabled:
-          type: boolean
-          label: 'Enable embedding caching'
-        backend:
-          type: string
-          label: 'Cache backend (database or memory)'
-        ttl:
+        high:
           type: integer
-          label: 'Cache TTL in seconds'
-        max_entries:
+          label: 'High priority value'
+        normal:
           type: integer
-          label: 'Maximum cache entries'
-        compression:
-          type: boolean
-          label: 'Enable cache compression'
-        cleanup_probability:
-          type: float
-          label: 'Cache cleanup probability'
-        table_name:
+          label: 'Normal priority value'
+        low:
+          type: integer
+          label: 'Low priority value'
+    servers:
+      type: mapping
+      label: 'Server-specific queue settings'
+      mapping:
+        '[a-zA-Z0-9_]+':
+          type: mapping
+          label: 'Server queue configuration'
+          mapping:
+            enabled:
+              type: boolean
+              label: 'Enable queue processing for this server'
+            batch_size:
+              type: integer
+              label: 'Server-specific batch size'
+            priority:
+              type: string
+              label: 'Default priority for this server'
+            max_items_per_run:
+              type: integer
+              label: 'Maximum items to process per queue run'
+
+# Queued embedding service configuration schema
+search_api_postgresql.queued_embedding:
+  type: config_object
+  label: 'Queued Embedding Service Settings'
+  mapping:
+    enabled:
+      type: boolean
+      label: 'Enable queued embedding processing'
+    default_dimension:
+      type: integer
+      label: 'Default embedding dimension'
+    fallback_to_sync:
+      type: boolean
+      label: 'Fall back to synchronous processing if queue fails'
+    batch_threshold:
+      type: integer
+      label: 'Use batch processing for this many or more items'
+    priority_mapping:
+      type: mapping
+      label: 'Priority mapping for different operation types'
+      mapping:
+        realtime:
           type: string
-          label: 'Cache table name'
+          label: 'Priority for real-time operations'
+        index:
+          type: string
+          label: 'Priority for indexing operations'
+        bulk:
+          type: string
+          label: 'Priority for bulk operations'
+    performance:
+      type: mapping
+      label: 'Performance settings'
+      mapping:
+        max_memory_usage:
+          type: integer
+          label: 'Maximum memory usage per worker (MB)'
+        rate_limit:
+          type: integer
+          label: 'Rate limit for API calls (requests per minute)'
+        timeout:
+          type: integer
+          label: 'Timeout for individual operations (seconds)'

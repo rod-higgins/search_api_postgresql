@@ -1,13 +1,15 @@
 services:
+  # Azure OpenAI Embedding Service
   search_api_postgresql.azure_openai_embedding:
     class: Drupal\search_api_postgresql\Service\AzureOpenAIEmbeddingService
-    arguments: ['', '', '', '2024-02-01', 1536, 3, 1000]
     # This service is instantiated manually in the backend with actual config values
     
+  # Vector Index Manager
   search_api_postgresql.vector_index_manager:
     class: Drupal\search_api_postgresql\PostgreSQL\VectorIndexManager
     # Arguments provided at runtime by the backend
     
+  # Vector Query Builder
   search_api_postgresql.vector_query_builder:
     class: Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder
     # Arguments provided at runtime by the backend
@@ -18,7 +20,7 @@ services:
     arguments: 
       - '@database'
       - '@logger.channel.search_api_postgresql'
-      - '%search_api_postgresql.embedding_cache.config%'
+      - '%search_api_postgresql.embedding_cache%'
     tags:
       - { name: 'search_api_postgresql.embedding_cache' }
 
@@ -26,7 +28,7 @@ services:
     class: Drupal\search_api_postgresql\Cache\MemoryEmbeddingCache
     arguments: 
       - '@logger.channel.search_api_postgresql'
-      - '%search_api_postgresql.embedding_cache.config%'
+      - '%search_api_postgresql.embedding_cache%'
     tags:
       - { name: 'search_api_postgresql.embedding_cache' }
 
@@ -64,49 +66,7 @@ services:
     tags:
       - { name: 'search_api_postgresql.embedding_service' }
 
-  # Connection pool service for better performance
-  search_api_postgresql.connection_pool:
-    class: Drupal\search_api_postgresql\Database\ConnectionPool
-    arguments:
-      - '@logger.channel.search_api_postgresql'
-      - '%search_api_postgresql.connection_pool.config%'
-
-  # Performance monitoring service
-  search_api_postgresql.performance_monitor:
-    class: Drupal\search_api_postgresql\Performance\PerformanceMonitor
-    arguments:
-      - '@logger.channel.search_api_postgresql'
-      - '@config.factory'
-      - '@cache.default'
-
-  # Security validator service
-  search_api_postgresql.security_validator:
-    class: Drupal\search_api_postgresql\Security\SecurityValidator
-    arguments:
-      - '@key.repository'
-      - '@logger.channel.search_api_postgresql'
-
-parameters:
-  # Default embedding cache configuration
-  search_api_postgresql.embedding_cache.config:
-    default_ttl: 2592000  # 30 days
-    max_entries: 100000
-    cleanup_probability: 0.01  # 1% chance of cleanup on write
-    enable_compression: true
-    table_name: 'search_api_postgresql_embedding_cache'
-
-  # Connection pool configuration
-  search_api_postgresql.connection_pool.config:
-    max_connections: 5
-    connection_timeout: 30
-    idle_timeout: 300
-    validation_query: 'SELECT 1'
-    retry_attempts: 3
-
-  # Performance monitoring configuration
-  search_api_postgresql.performance_monitor.config:
-    enabled: true
-    slow_query_threshold: 2.0  # seconds
-    memory_usage_threshold: 128  # MB
-    cache_hit_rate_threshold: 0.8  # 80%
-    sample_rate: 0.1  # 10% of operations
+  # Logger channel
+  logger.channel.search_api_postgresql:
+    parent: logger.channel_base
+    arguments: ['search_api_postgresql']
