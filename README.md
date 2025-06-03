@@ -1,288 +1,513 @@
 # Search API PostgreSQL
 
-This module provides a PostgreSQL backend for the Search API module, leveraging PostgreSQL's native full-text search capabilities including tsvector and tsquery for optimal performance, with enhanced AI text embeddings support for semantic search and **secure credential storage**.
+A comprehensive PostgreSQL backend for Drupal's Search API module, featuring native full-text search capabilities with **AI-powered vector search** and **semantic search** through Azure OpenAI and direct OpenAI integration.
 
-## Features
+## 🚀 Features
 
-- **Native PostgreSQL Full-Text Search**: Uses tsvector and GIN indexes for fast searching
-- **AI Text Embeddings**: Semantic search using Azure AI Services with vector similarity
-- **Hybrid Search**: Combines traditional full-text search with vector similarity search
-- **Azure Database Compatible**: Optimized for Azure Database for PostgreSQL
-- **Secure Credential Storage**: Uses Drupal Key module for secure API key and password storage
-- **Advanced Search Features**: Supports faceting, autocomplete, spell checking, and more
-- **Multi-language Support**: Configurable text search configurations for different languages
-- **Performance Optimized**: Efficient indexing and querying strategies
+### Core Search Capabilities
+- **Native PostgreSQL Full-Text Search**: Uses tsvector and GIN indexes for blazing-fast text search
+- **AI-Powered Vector Search**: Semantic search using OpenAI embeddings with PostgreSQL pgvector
+- **Hybrid Search**: Intelligently combines traditional text search with AI similarity search
+- **Multi-language Support**: Configurable PostgreSQL text search configurations
+- **Advanced Search Features**: Faceting, autocomplete, spell checking, and more
 
-## Requirements
+### AI & Vector Search
+- **Multiple AI Providers**: Azure OpenAI Service and direct OpenAI API support
+- **Multiple Embedding Models**: Support for text-embedding-ada-002, text-embedding-3-small, text-embedding-3-large
+- **Vector Indexing**: IVFFlat and HNSW indexing methods optimized for different use cases
+- **Intelligent Caching**: Database and memory-based embedding cache with compression
+- **Graceful Degradation**: Automatic fallback to text search when AI services are unavailable
 
-- Drupal 10.4+ or Drupal 11
-- PostgreSQL 12+
-- PHP PDO PostgreSQL extension
-- Search API module
-- **Key module** (required for secure credential storage)
-- **For AI Embeddings**: pgvector extension for PostgreSQL
+### Enterprise Features
+- **Secure Credential Storage**: Uses Drupal Key module - no plain text passwords or API keys
+- **Queue Processing**: Background embedding generation with batch processing
+- **Performance Monitoring**: Real-time analytics, cost tracking, and performance metrics
+- **Error Recovery**: Automatic error detection, classification, and recovery strategies
+- **Circuit Breaker Pattern**: Protects against cascading failures
+- **Horizontal Scaling**: Supports connection pooling and distributed processing
 
-## Installation
+## 🔧 Requirements
 
-1. Install via Composer:
-   ```bash
-   composer require drupal/search_api_postgresql
-   ```
+### Core Requirements
+- **Drupal**: 10.4+ or 11.x
+- **PHP**: 8.1+ with PDO PostgreSQL extension
+- **PostgreSQL**: 12+ (13+ recommended for Azure Database)
+- **Drupal Modules**: Search API, Key module
+- **PHP Extensions**: pdo_pgsql, curl, json
 
-2. Enable the module and its dependencies:
-   ```bash
-   drush en search_api_postgresql key
-   ```
+### For AI Features (Optional)
+- **PostgreSQL pgvector extension**: Required for vector similarity search
+- **Azure OpenAI Service** OR **OpenAI API access**: For embedding generation
+- **Sufficient memory**: Vector operations are memory-intensive
 
-3. **For AI Embeddings** (optional), install pgvector extension:
-   ```sql
-   CREATE EXTENSION vector;
-   ```
+## 📦 Installation
 
-## Security-First Configuration
+### 1. Install via Composer
 
-This module requires the Key module for secure credential storage. **All passwords and API keys are stored securely using the Key module** instead of plain text in configuration.
+```bash
+composer require drupal/search_api_postgresql
+```
+
+### 2. Enable Required Modules
+
+```bash
+drush en search_api_postgresql search_api key
+```
+
+### 3. Install pgvector Extension (For AI Features)
+
+**Azure Database for PostgreSQL:**
+```bash
+# Via Azure CLI
+az postgres flexible-server parameter set \
+  --resource-group myresourcegroup \
+  --server-name myserver \
+  --name shared_preload_libraries \
+  --value 'vector'
+
+# Restart server, then connect and run:
+CREATE EXTENSION vector;
+```
+
+**Self-hosted PostgreSQL:**
+```bash
+# Install pgvector (varies by system)
+git clone https://github.com/pgvector/pgvector.git
+cd pgvector
+make
+make install
+
+# Then in PostgreSQL:
+CREATE EXTENSION vector;
+```
+
+## 🔐 Security-First Configuration
+
+This module prioritizes security by requiring the Key module for all sensitive credentials.
 
 ### Step 1: Create Secure Keys
 
-Before configuring the backend, create keys for your credentials:
+**Never store passwords or API keys in plain text!**
 
 1. **Database Password Key**:
-   - Go to `/admin/config/system/keys/add`
-   - Create a key named "PostgreSQL Database Password"
-   - Choose appropriate key type and provider (e.g., Configuration, Environment, File)
-   - Store your database password securely
+   - Navigate to `/admin/config/system/keys/add`
+   - Create key: "PostgreSQL Database Password"
+   - Choose secure provider (Environment, File, HashiCorp Vault, etc.)
 
-2. **Azure AI API Key** (if using AI embeddings):
-   - Create another key named "Azure AI API Key"
-   - Store your Azure AI Services API key securely
+2. **AI API Key** (if using AI features):
+   - Create key: "OpenAI API Key" or "Azure OpenAI API Key"
+   - Store your API key securely
 
-### Step 2: Configure Search API Server
+### Step 2: Configure Search Server
 
-1. **Create a Search API Server**:
+1. **Create Server**:
    - Go to `/admin/config/search/search-api`
    - Add server
-   - Select "PostgreSQL" or "PostgreSQL with Azure AI Vector Search" as the backend
+   - Choose backend:
+     - **"PostgreSQL"** - Standard backend with optional AI
+     - **"PostgreSQL with Azure AI Vector Search"** - Azure-optimized
 
-2. **Database Connection Settings**:
-   - **Host**: Your PostgreSQL server hostname
-   - **Port**: Usually 5432
-   - **Database**: Your database name
-   - **Username**: Your database username
-   - **Database Password Key**: Select the key you created for the database password
-   - **SSL Mode**: Recommended "require" for Azure Database
+2. **Database Connection**:
+   ```yaml
+   Host: your-db-host.com (or myserver.postgres.database.azure.com)
+   Port: 5432
+   Database: your_database
+   Username: your_username
+   Database Password Key: [Select your secure key]
+   SSL Mode: require  # Recommended for production
+   ```
 
-### AI Embeddings Configuration
+## 🤖 AI Configuration Options
 
-1. **Enable AI Text Embeddings**:
-   - Check "Enable AI Text Embeddings" in the backend configuration
+### Option 1: Azure OpenAI Service (Recommended for Enterprise)
 
-2. **Azure AI Services Setup**:
-   - **Endpoint**: Your Azure AI Services endpoint (e.g., `https://yourservice.openai.azure.com/`)
-   - **Azure AI Services API Key**: Select the key you created for the API key
-   - **Model**: Select embedding model (text-embedding-ada-002, text-embedding-3-small, etc.)
-   - **Dimensions**: Vector dimensions (1536 for ada-002, configurable for newer models)
+**Prerequisites:**
+- Azure OpenAI Service deployed
+- Embedding model deployed (text-embedding-ada-002 or newer)
 
-3. **Hybrid Search Settings**:
-   - **Vector Weight**: Weight for vector similarity in hybrid search (0-1)
-   - **Full-text Weight**: Weight for traditional search in hybrid search (0-1)
-   - **Similarity Threshold**: Minimum similarity score for vector results
+**Configuration:**
+```yaml
+Enable AI Text Embeddings: ✓
+Azure AI Services Endpoint: https://yourservice.openai.azure.com/
+Azure AI Services API Key: [Select your secure key]
+Deployment Name: your-embedding-deployment
+Embedding Model: text-embedding-ada-002
+Vector Dimensions: 1536  # Auto-detected based on model
+```
 
-## Security Best Practices
+**Hybrid Search Settings:**
+```yaml
+Text Search Weight: 0.6    # Traditional PostgreSQL FTS
+Vector Search Weight: 0.4  # AI similarity search
+Similarity Threshold: 0.15 # Minimum similarity score (0-1)
+```
 
-### Key Storage Recommendations
+### Option 2: Direct OpenAI API
 
-1. **Production Environment**:
-   - Use external key providers (Environment variables, HashiCorp Vault, etc.)
-   - Never store credentials in configuration or database in plain text
-   - Regularly rotate API keys and passwords
+**Prerequisites:**
+- OpenAI API key
 
-2. **Development Environment**:
-   - Use Configuration key provider for development
-   - Keep development keys separate from production
+**Configuration:**
+```yaml
+Enable AI Text Embeddings: ✓
+Service Provider: OpenAI Direct
+API Key: [Select your secure key]
+Model: text-embedding-3-small  # or text-embedding-3-large
+Vector Dimensions: 1536  # or 3072 for text-embedding-3-large
+```
 
-3. **Azure Security**:
-   - Use Azure Managed Identity when possible
-   - Configure network security groups to restrict database access
-   - Enable SSL/TLS for all connections
+## 🏗️ Backend Comparison
 
-### Key Management Commands
+| Feature | PostgreSQL | PostgreSQL with Azure AI |
+|---------|------------|-------------------------|
+| **Full-text Search** | ✅ Native tsvector | ✅ Native tsvector |
+| **Vector Search** | ✅ Optional | ✅ Optimized |
+| **AI Provider** | Any (OpenAI, Azure) | Azure-optimized |
+| **Hybrid Search** | ✅ Configurable | ✅ Advanced tuning |
+| **Enterprise Features** | ✅ Full support | ✅ Azure-specific optimizations |
+| **Best For** | Flexible deployments | Azure-first organizations |
 
-Use the provided Drush commands to validate your key configuration:
+## 🔍 Search Modes
+
+### 1. Traditional Full-Text Search
+```php
+$query = $index->query();
+$query->keys('search terms');
+// Uses PostgreSQL tsvector matching
+```
+
+### 2. Vector Similarity Search
+```php
+$query = $index->query();
+$query->setOption('search_mode', 'vector_only');
+$query->keys('find content similar to this concept');
+// Pure semantic similarity using AI embeddings
+```
+
+### 3. Hybrid Search (Default with AI enabled)
+```php
+$query = $index->query();
+$query->keys('artificial intelligence machine learning');
+// Combines text matching AND semantic similarity
+// Results are ranked using both traditional relevance and AI similarity
+```
+
+## 🚀 Advanced Features
+
+### Queue Processing
+
+Enable background embedding generation for better performance:
 
 ```bash
-# Validate all keys for a server
-drush search-api-postgresql:validate-keys my_server
+# Enable queue processing
+drush search-api-postgresql:queue-server my_server enable
 
-# Test Azure AI connection using secure keys
+# Process queue manually
+drush search-api-postgresql:queue-process --max-items=100
+
+# Check queue status
+drush search-api-postgresql:queue-status
+```
+
+### Embedding Cache Management
+
+```bash
+# View cache statistics
+drush search-api-postgresql:cache-stats my_server
+
+# Clear embedding cache
+drush search-api-postgresql:cache-clear my_server
+
+# Perform cache maintenance
+drush search-api-postgresql:cache-maintenance my_server
+```
+
+### Performance Monitoring
+
+```bash
+# View embedding statistics
+drush search-api-postgresql:embedding-stats my_index
+
+# Check vector support
+drush search-api-postgresql:check-vector-support my_server
+
+# Validate secure key configuration
+drush search-api-postgresql:validate-keys my_server
+```
+
+## 📊 Performance Optimization
+
+### Vector Index Configuration
+
+**For Azure Database for PostgreSQL:**
+```yaml
+Vector Index Method: IVFFlat  # Better for Azure
+IVFFlat Lists: 100           # Adjust based on data size
+```
+
+**For High-Performance Deployments:**
+```yaml
+Vector Index Method: HNSW    # Better recall
+HNSW M: 16                   # Controls index build time vs search speed
+HNSW ef_construction: 64     # Higher = better recall, slower build
+```
+
+### Caching Strategy
+
+```yaml
+Enable Embedding Caching: ✓
+Cache Backend: database      # or 'memory' for speed
+Cache TTL: 2592000          # 30 days
+Max Cache Entries: 100000
+Enable Compression: ✓        # Saves storage space
+```
+
+### Batch Processing
+
+```yaml
+Enable Queue Processing: ✓
+Batch Threshold: 5           # Use batches for 5+ items
+Batch Size: 10              # Items per API call
+Rate Limit Delay: 100ms     # Respect API limits
+```
+
+## 💰 Cost Management
+
+### Azure OpenAI Pricing (Approximate)
+- **text-embedding-ada-002**: ~$0.0001 per 1K tokens
+- **text-embedding-3-small**: ~$0.00002 per 1K tokens  
+- **text-embedding-3-large**: ~$0.00013 per 1K tokens
+
+### Cost Optimization Strategies
+
+1. **Smart Caching**: Cache embeddings to avoid regeneration
+2. **Batch Processing**: Reduce API call overhead
+3. **Content Filtering**: Only embed searchable content
+4. **Model Selection**: Choose appropriate model for your use case
+
+### Example Costs
+- **1,000 blog posts** (~500 words each): $0.25 - $5.00 one-time
+- **10,000 product descriptions**: $2.50 - $50.00 one-time
+- **Ongoing updates**: Depends on content change frequency
+
+## 🔧 Drush Commands
+
+### Server Management
+```bash
+# Test Azure AI connection
 drush search-api-postgresql:test-ai my_server
 
 # Check vector support
 drush search-api-postgresql:check-vector-support my_server
+
+# Validate key configuration
+drush search-api-postgresql:validate-keys my_server
 ```
 
-## Azure Database for PostgreSQL Setup
-
-For Azure Database for PostgreSQL, use these recommended settings:
-
-```
-Host: myserver.postgres.database.azure.com
-Port: 5432
-SSL Mode: require
-Username: myuser@myserver
-```
-
-### Installing pgvector on Azure
-
-1. Connect to your Azure PostgreSQL server
-2. Enable the vector extension:
-   ```sql
-   CREATE EXTENSION vector;
-   ```
-
-## Supported Features
-
-### Traditional Search
-- ✅ Full-text search with relevance ranking
-- ✅ Faceted search
-- ✅ Autocomplete suggestions  
-- ✅ Spell checking
-- ✅ Multi-language configurations
-- ✅ Complex query conditions
-- ✅ Sorting and pagination
-- ✅ Random sorting
-
-### AI-Enhanced Search
-- ✅ Vector similarity search using embeddings
-- ✅ Hybrid search (combining full-text and vector search)
-- ✅ Semantic search capabilities
-- ✅ Automatic embedding generation
-- ✅ Configurable similarity thresholds
-- ✅ Support for multiple embedding models
-
-### Security Features
-- ✅ Secure credential storage using Key module
-- ✅ No plain text passwords or API keys in configuration
-- ✅ Support for multiple key storage providers
-- ✅ Credential validation and testing tools
-
-## Field Types
-
-| Search API Type | PostgreSQL Type | Description |
-|-----------------|-----------------|-------------|
-| text | TEXT | Standard text content |
-| string | VARCHAR(255) | Short string values |
-| integer | INTEGER | Numeric integers |
-| decimal | DECIMAL(10,2) | Decimal numbers |
-| date | TIMESTAMP | Date/time values |
-| boolean | BOOLEAN | True/false values |
-| postgresql_fulltext | TEXT | Optimized for tsvector |
-| vector | VECTOR(n) | Vector embeddings for AI search |
-
-## Search Modes
-
-### Traditional Full-Text Search
-Standard PostgreSQL full-text search using tsvector and tsquery.
-
-### Vector Similarity Search
-Semantic search using AI-generated embeddings and cosine similarity.
-
-### Hybrid Search
-Combines both traditional and vector search with configurable weights:
-- Results are scored using both relevance and similarity
-- Weights can be adjusted based on your content and use case
-- Provides the best of both worlds: exact matches and semantic understanding
-
-## Performance Tips
-
-1. **Use GIN Indexes**: Automatically created for tsvector columns
-2. **Vector Indexes**: HNSW or IVFFlat indexes for fast vector similarity
-3. **Optimize Batch Size**: Adjust based on your content size
-4. **Language Configuration**: Choose appropriate FTS configuration
-5. **Embedding Batching**: Configure appropriate batch sizes for API calls
-6. **Regular Maintenance**: Monitor index usage and performance
-
-## Migration from Insecure Configuration
-
-If you're upgrading from a version that stored credentials in plain text:
-
-1. **Create keys** for all your existing credentials
-2. **Update server configuration** to use the new key references
-3. **Validate** the new configuration using the provided Drush commands
-4. **Remove old plain text credentials** from any backups or configuration exports
-
-The module will automatically detect if credentials are not properly secured and provide clear error messages.
-
-## API Usage and Costs
-
-When using AI embeddings:
-- Monitor your Azure AI Services usage and costs
-- Consider implementing caching for frequently searched content
-- Use appropriate batch sizes to optimize API calls
-- Text is automatically chunked for long content
-
-## Development
-
-### Running Tests
-
+### Embedding Management
 ```bash
-# Unit tests
-./vendor/bin/phpunit modules/contrib/search_api_postgresql/tests/src/Unit/
+# Regenerate all embeddings for an index
+drush search-api-postgresql:regenerate-embeddings my_index
 
-# Kernel tests  
-./vendor/bin/phpunit modules/contrib/search_api_postgresql/tests/src/Kernel/
+# View embedding statistics
+drush search-api-postgresql:embedding-stats my_index
+
+# Queue bulk regeneration
+drush search-api-postgresql:queue-regenerate my_index --batch-size=100
 ```
 
-### Debugging
+### Queue Operations
+```bash
+# View queue status
+drush search-api-postgresql:queue-status
 
-Enable debug mode in the backend configuration to log:
-- Database queries
-- Embedding API calls
-- Vector similarity calculations
-- Key retrieval operations (without exposing actual key values)
+# Process queue with custom limits
+drush search-api-postgresql:queue-process --max-items=50 --time-limit=120
 
-## Troubleshooting
+# Enable/disable queue for a server
+drush search-api-postgresql:queue-server my_server enable
+drush search-api-postgresql:queue-server my_server disable
+
+# Clear queue
+drush search-api-postgresql:queue-clear
+```
+
+### Cache Management
+```bash
+# Show cache statistics
+drush search-api-postgresql:cache-stats my_server
+
+# Clear embedding cache
+drush search-api-postgresql:cache-clear my_server
+
+# Perform maintenance (cleanup expired entries)
+drush search-api-postgresql:cache-maintenance my_server
+
+# Warm up cache with popular content
+drush search-api-postgresql:cache-warmup my_index --limit=100
+```
+
+## 📈 Analytics & Monitoring
+
+Access detailed analytics at `/admin/config/search/search-api-postgresql/analytics`:
+
+- **Cost Tracking**: API usage and costs over time
+- **Performance Metrics**: Search latency, cache hit rates
+- **Usage Patterns**: Query volume, embedding generation trends
+- **Error Monitoring**: Degradation alerts and recovery actions
+
+## 🛡️ Error Handling & Resilience
+
+### Graceful Degradation
+
+The module automatically handles service failures:
+
+- **AI Service Down**: Falls back to traditional text search
+- **Rate Limits**: Implements circuit breaker pattern
+- **Partial Failures**: Continues with available results
+- **Network Issues**: Automatic retry with exponential backoff
+
+### Circuit Breaker
+
+Protects against cascading failures:
+- Automatically disables failing services
+- Gradual recovery when services return
+- Configurable failure thresholds
+- Admin notifications for critical issues
+
+## 🔍 Troubleshooting
 
 ### Common Issues
 
-1. **Key not found errors**:
-   - Verify the key exists in `/admin/config/system/keys`
-   - Check key permissions and provider configuration
-   - Use `drush search-api-postgresql:validate-keys` to diagnose
+**1. pgvector Extension Missing**
+```
+Error: pgvector extension is not available
+Solution: Install and enable pgvector in PostgreSQL
+```
 
-2. **pgvector extension not found**:
-   - Ensure pgvector is installed and enabled in PostgreSQL
-   - Check that your user has permissions to create extensions
+**2. Key Access Issues**
+```
+Error: Database password key 'my_key' not found
+Solution: Create key at /admin/config/system/keys/add
+```
 
-3. **Azure AI API errors**:
-   - Verify your endpoint URL and API key using the test connection feature
-   - Check your Azure AI Services quotas and limits
-   - Ensure your deployment name matches the model configuration
+**3. Azure API Connection Failures**
+```
+Error: HTTP 401 - Unauthorized
+Solution: Verify API key and endpoint configuration
+```
 
-### Security Issues
+**4. Memory Issues During Indexing**
+```
+Error: Allowed memory size exhausted
+Solution: Increase PHP memory_limit or enable queue processing
+```
 
-1. **Plain text credentials detected**:
-   - Module will refuse to start with plain text credentials
-   - Create appropriate keys and update configuration
-   - Use the validation commands to verify setup
+### Debug Mode
 
-2. **Key decryption failures**:
-   - Check key provider configuration
-   - Verify key permissions and access
-   - Review Drupal logs for detailed error messages
+Enable debug logging for detailed troubleshooting:
 
-## Contributing
+```yaml
+Debug Mode: ✓
+```
 
-Please follow Drupal coding standards and include tests for new functionality. When contributing security-related features, ensure they follow security best practices.
+This logs all database queries and API calls (without exposing credentials).
 
-## License
+### Health Checks
+
+```bash
+# Comprehensive server health check
+drush search-api-postgresql:health-check my_server
+
+# Test specific components
+drush search-api-postgresql:test-connection my_server
+drush search-api-postgresql:test-ai my_server
+```
+
+## 🚀 Production Deployment
+
+### Recommended Configuration
+
+**For High-Traffic Sites:**
+```yaml
+# Database
+SSL Mode: require
+Connection Pooling: ✓
+Max Connections: 10
+
+# AI Features
+Enable Queue Processing: ✓
+Batch Size: 20
+Cache TTL: 604800  # 7 days
+Enable Compression: ✓
+
+# Vector Index
+Method: HNSW
+HNSW M: 16
+HNSW ef_construction: 64
+```
+
+**For Cost-Conscious Deployments:**
+```yaml
+# AI Features
+Model: text-embedding-3-small  # Most cost-effective
+Batch Size: 50                # Larger batches
+Rate Limit Delay: 200ms       # Conservative API usage
+Cache TTL: 2592000            # 30 days (longer cache)
+```
+
+### Security Checklist
+
+- ✅ All credentials stored in Key module
+- ✅ SSL enabled for database connections
+- ✅ API keys rotated regularly
+- ✅ Network access restricted
+- ✅ Debug mode disabled in production
+- ✅ Error logging configured
+- ✅ Regular security updates applied
+
+## 🤝 Support & Contributing
+
+### Getting Help
+
+- **Issue Queue**: [Drupal.org project page](https://www.drupal.org/project/search_api_postgresql)
+- **Documentation**: [Module documentation](https://www.drupal.org/docs/contributed-modules/search-api-postgresql)
+- **Azure Support**: [Azure OpenAI documentation](https://learn.microsoft.com/azure/cognitive-services/openai/)
+
+### Contributing
+
+Contributions welcome! Please:
+
+1. Follow Drupal coding standards
+2. Include tests for new functionality
+3. Update documentation
+4. Consider security implications
+
+### Performance Testing
+
+When contributing performance features:
+
+1. Test with realistic data volumes (10K+ items)
+2. Monitor memory usage during operations
+3. Verify cache effectiveness
+4. Test graceful degradation scenarios
+
+## 📋 Migration Guide
+
+### From Other Search Backends
+
+1. **Export existing configuration**
+2. **Create new PostgreSQL server**
+3. **Re-index content** (embeddings generated automatically)
+4. **Test search functionality**
+5. **Update search forms** if needed
+
+## 📄 License
 
 GPL-2.0+
 
-## Support
+---
 
-- [Issue Queue](https://www.drupal.org/project/issues/search_api_postgresql)
-- [Documentation](https://www.drupal.org/docs/contributed-modules/search-api-postgresql)
-- [Azure AI Services Documentation](https://docs.microsoft.com/en-us/azure/cognitive-services/openai/)
-- [pgvector Documentation](https://github.com/pgvector/pgvector)
-- [Drupal Key Module](https://www.drupal.org/project/key)
+**Ready to supercharge your Drupal search with AI?** 🚀
+
+Start with traditional PostgreSQL search and add AI features when you're ready. The module grows with your needs while maintaining security and performance.
