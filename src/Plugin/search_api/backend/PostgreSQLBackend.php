@@ -109,10 +109,11 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
     $backend->setMessenger($container->get('messenger'));
     $backend->setModuleHandler($container->get('module_handler'));
     
-    // Set key repository if available.
-    if ($container->has('key.repository')) {
-      $backend->setKeyRepository($container->get('key.repository'));
+    // Key repository is now required
+    if (!$container->has('key.repository')) {
+      throw new SearchApiException('Key module is required for secure credential storage. Please install and enable the Key module.');
     }
+    $backend->setKeyRepository($container->get('key.repository'));
 
     return $backend;
   }
@@ -155,7 +156,7 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
         'port' => 5432,
         'database' => '',
         'username' => '',
-        'password' => '',
+        'password_key' => '', // Changed from 'password' to 'password_key'
         'ssl_mode' => 'require',
         'options' => [],
       ],
@@ -168,9 +169,7 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
         'hybrid_search' => TRUE,
         'azure_ai' => [
           'endpoint' => '',
-          'api_key_storage' => 'direct',
-          'api_key' => '',
-          'key_name' => '',
+          'api_key_name' => '', // Changed from 'api_key' to 'api_key_name' (Key entity ID)
           'model' => 'text-embedding-ada-002',
           'dimensions' => 1536,
           'batch_size' => 10,
@@ -180,6 +179,80 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
         'weight_fulltext' => 0.4,
       ],
     ];
+  }
+
+  /**
+   * Gets a secure key value from the Key module.
+   *
+   * @param string $key_id
+   *   The Key entity ID.
+   *
+   * @return string
+   *   The decrypted key value.
+   *
+   * @throws \Drupal\search_api\SearchApiException
+   *   If the key cannot be retrieved.
+   */
+  protected function getSecureKey($key_id) {
+    if (empty($key_id)) {
+      throw new SearchApiException('No key ID provided for secure key retrieval.');
+    }
+
+    if (!$this->keyRepository) {
+      throw new SearchApiException('Key repository service is not available.');
+    }
+
+    $key = $this->keyRepository->getKey($key_id);
+    if (!$key) {
+      throw new SearchApiException(sprintf('Key with ID "%s" not found.', $key_id));
+    }
+
+    $key_value = $key->getKeyValue();
+    if (empty($key_value)) {
+      throw new SearchApiException(sprintf('Key "%s" is empty or could not be decrypted.', $key_id));
+    }
+
+    return $key_value;
+  }
+
+  /**
+   * Gets the database password from secure storage.
+   *
+   * @return string
+   *   The database password.
+   *
+   * @throws \Drupal\search_api\SearchApiException
+   *   If the password cannot be retrieved.
+   */
+  protected function getDatabasePassword() {
+    $password_key = $this->configuration['connection']['password_key'] ?? '';
+    if (empty($password_key)) {
+      throw new SearchApiException('Database password key is not configured. Please configure a key for secure password storage.');
+    }
+
+    return $this->getSecureKey($password_key);
+  }
+
+  /**
+   * Gets the Azure AI API key from secure storage.
+   *
+   * @return string
+   *   The Azure AI API key.
+   *
+   * @throws \Drupal\search_api\SearchApiException
+   *   If the API key cannot be retrieved.
+   */
+  protected function getAzureApiKey() {
+    if (!($this->configuration['ai_embeddings']['enabled'] ?? FALSE)) {
+      return '';
+    }
+
+    $api_key_name = $this->configuration['ai_embeddings']['azure_ai']['api_key_name'] ?? '';
+    if (empty($api_key_name)) {
+      throw new SearchApiException('Azure AI API key is not configured. Please configure a key for secure API key storage.');
+    }
+
+    return $this->getSecureKey($api_key_name);
   }
 
   /**
@@ -231,7 +304,11 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
    */
   protected function connect() {
     if (!$this->connector) {
-      $this->connector = new PostgreSQLConnector($this->configuration['connection'], $this->logger);
+      // Get secure database password
+      $connection_config = $this->configuration['connection'];
+      $connection_config['password'] = $this->getDatabasePassword();
+
+      $this->connector = new PostgreSQLConnector($connection_config, $this->logger);
       $this->fieldMapper = new FieldMapper($this->configuration);
       $this->indexManager = new IndexManager($this->connector, $this->fieldMapper, $this->configuration);
       $this->queryBuilder = new QueryBuilder($this->connector, $this->fieldMapper, $this->configuration);
@@ -239,29 +316,29 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
       // Initialize embedding service if enabled.
       if ($this->configuration['ai_embeddings']['enabled']) {
         $azure_config = $this->configuration['ai_embeddings']['azure_ai'];
-        $api_key = $this->getApiKey($azure_config);
+        $api_key = $this->getAzureApiKey();
         $this->embeddingService = new EmbeddingService($azure_config, $api_key, $this->logger);
       }
     }
   }
 
   /**
-   * Gets the API key based on storage method.
-   */
-  protected function getApiKey(array $azure_config) {
-    if ($azure_config['api_key_storage'] === 'key_module' && !empty($azure_config['key_name'])) {
-      if ($this->keyRepository) {
-        $key = $this->keyRepository->getKey($azure_config['key_name']);
-        return $key ? $key->getKeyValue() : '';
-      }
-    }
-    return $azure_config['api_key'] ?? '';
-  }
-
-  /**
    * {@inheritdoc}
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
+    // Check if Key module is available
+    if (!$this->moduleHandler->moduleExists('key')) {
+      $form['key_module_error'] = [
+        '#type' => 'markup',
+        '#markup' => '<div class="messages messages--error">' . 
+          $this->t('The Key module is required for secure credential storage. Please install and enable the <a href="@url">Key module</a>.', [
+            '@url' => 'https://www.drupal.org/project/key',
+          ]) . 
+          '</div>',
+      ];
+      return $form;
+    }
+
     $form['connection'] = [
       '#type' => 'fieldset',
       '#title' => $this->t('Database Connection'),
@@ -300,10 +377,19 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
       '#required' => TRUE,
     ];
 
-    $form['connection']['password'] = [
-      '#type' => 'password',
-      '#title' => $this->t('Password'),
-      '#description' => $this->t('Leave empty to keep current password.'),
+    // Get available keys for database password
+    $key_options = $this->getAvailableKeys();
+    
+    $form['connection']['password_key'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Database Password Key'),
+      '#options' => $key_options,
+      '#empty_option' => $this->t('- Select a key -'),
+      '#default_value' => $this->configuration['connection']['password_key'],
+      '#required' => TRUE,
+      '#description' => $this->t('Select the key containing your database password. <a href="@url">Create a new key</a> if needed.', [
+        '@url' => '/admin/config/system/keys/add',
+      ]),
     ];
 
     $form['connection']['ssl_mode'] = [
@@ -412,75 +498,24 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
       ],
     ];
 
-    $form['ai_embeddings']['azure_ai']['api_key_storage'] = [
+    $form['ai_embeddings']['azure_ai']['api_key_name'] = [
       '#type' => 'select',
-      '#title' => $this->t('API Key Storage Method'),
-      '#options' => [
-        'direct' => $this->t('Store directly in configuration'),
-        'key_module' => $this->t('Use Key module for secure storage'),
-      ],
-      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['api_key_storage'],
-      '#description' => $this->t('Choose how to store the API key. Key module is recommended for production.'),
-    ];
-
-    $form['ai_embeddings']['azure_ai']['api_key'] = [
-      '#type' => 'password',
       '#title' => $this->t('Azure AI Services API Key'),
-      '#description' => $this->t('Your Azure AI Services API key. Leave empty to keep current key.'),
+      '#options' => $key_options,
+      '#empty_option' => $this->t('- Select a key -'),
+      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['api_key_name'],
+      '#description' => $this->t('Select the key containing your Azure AI Services API key. <a href="@url">Create a new key</a> if needed.', [
+        '@url' => '/admin/config/system/keys/add',
+      ]),
       '#states' => [
         'visible' => [
-          ':input[name="backend_config[ai_embeddings][azure_ai][api_key_storage]"]' => ['value' => 'direct'],
           ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
         ],
         'required' => [
-          ':input[name="backend_config[ai_embeddings][azure_ai][api_key_storage]"]' => ['value' => 'direct'],
           ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
         ],
       ],
     ];
-
-    // Key module integration
-    if ($this->moduleHandler->moduleExists('key')) {
-      $key_options = [];
-      if ($this->keyRepository) {
-        foreach ($this->keyRepository->getKeys() as $key_id => $key) {
-          $key_options[$key_id] = $key->label();
-        }
-      }
-
-      $form['ai_embeddings']['azure_ai']['key_name'] = [
-        '#type' => 'select',
-        '#title' => $this->t('Key'),
-        '#options' => $key_options,
-        '#empty_option' => $this->t('- Select a key -'),
-        '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['key_name'],
-        '#description' => $this->t('Select the key containing your Azure AI Services API key.'),
-        '#states' => [
-          'visible' => [
-            ':input[name="backend_config[ai_embeddings][azure_ai][api_key_storage]"]' => ['value' => 'key_module'],
-            ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
-          ],
-          'required' => [
-            ':input[name="backend_config[ai_embeddings][azure_ai][api_key_storage]"]' => ['value' => 'key_module'],
-            ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
-          ],
-        ],
-      ];
-    }
-    else {
-      $form['ai_embeddings']['azure_ai']['key_module_note'] = [
-        '#type' => 'item',
-        '#title' => $this->t('Key Module'),
-        '#description' => $this->t('Install and enable the <a href="@url">Key module</a> for secure API key storage.', [
-          '@url' => 'https://www.drupal.org/project/key',
-        ]),
-        '#states' => [
-          'visible' => [
-            ':input[name="backend_config[ai_embeddings][azure_ai][api_key_storage]"]' => ['value' => 'key_module'],
-          ],
-        ],
-      ];
-    }
 
     $form['ai_embeddings']['azure_ai']['model'] = [
       '#type' => 'select',
@@ -560,7 +595,7 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
       ],
     ];
 
-    // Test connection button.
+    // Test connection buttons
     $form['test_connection'] = [
       '#type' => 'button',
       '#value' => $this->t('Test Database Connection'),
@@ -570,7 +605,6 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
       ],
     ];
 
-    // Test Azure AI connection button.
     $form['test_azure_ai'] = [
       '#type' => 'button',
       '#value' => $this->t('Test Azure AI Connection'),
@@ -599,20 +633,46 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
   }
 
   /**
+   * Gets available keys for selection.
+   *
+   * @return array
+   *   Array of key options.
+   */
+  protected function getAvailableKeys() {
+    $key_options = [];
+    
+    if ($this->keyRepository) {
+      $keys = $this->keyRepository->getKeys();
+      foreach ($keys as $key_id => $key) {
+        $key_options[$key_id] = sprintf('%s (%s)', $key->label(), $key_id);
+      }
+    }
+
+    return $key_options;
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function validateConfigurationForm(array &$form, FormStateInterface $form_state) {
-    // Test database connection.
+    // Test database connection with secure password
     $connection_config = [
       'host' => $form_state->getValue(['connection', 'host']),
       'port' => $form_state->getValue(['connection', 'port']),
       'database' => $form_state->getValue(['connection', 'database']),
       'username' => $form_state->getValue(['connection', 'username']),
-      'password' => $form_state->getValue(['connection', 'password']) ?: $this->configuration['connection']['password'],
       'ssl_mode' => $form_state->getValue(['connection', 'ssl_mode']),
     ];
 
+    // Get password from selected key
+    $password_key = $form_state->getValue(['connection', 'password_key']);
+    if (empty($password_key)) {
+      $form_state->setErrorByName('connection][password_key', $this->t('Database password key is required.'));
+      return;
+    }
+
     try {
+      $connection_config['password'] = $this->getSecureKey($password_key);
       $test_connector = new PostgreSQLConnector($connection_config, $this->logger);
       $test_connector->testConnection();
     }
@@ -620,7 +680,7 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
       $form_state->setErrorByName('connection', $this->t('Database connection failed: @message', ['@message' => $e->getMessage()]));
     }
 
-    // Validate AI embeddings configuration if enabled.
+    // Validate AI embeddings configuration if enabled
     if ($form_state->getValue(['ai_embeddings', 'enabled'])) {
       $azure_config = $form_state->getValue(['ai_embeddings', 'azure_ai']);
       
@@ -628,16 +688,20 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
         $form_state->setErrorByName('ai_embeddings][azure_ai][endpoint', $this->t('Azure AI Services endpoint is required when embeddings are enabled.'));
       }
 
-      // Validate API key based on storage method.
-      if ($azure_config['api_key_storage'] === 'direct' && empty($azure_config['api_key']) && empty($this->configuration['ai_embeddings']['azure_ai']['api_key'])) {
-        $form_state->setErrorByName('ai_embeddings][azure_ai][api_key', $this->t('API key is required when using direct storage.'));
+      if (empty($azure_config['api_key_name'])) {
+        $form_state->setErrorByName('ai_embeddings][azure_ai][api_key_name', $this->t('Azure AI API key is required when embeddings are enabled.'));
       }
 
-      if ($azure_config['api_key_storage'] === 'key_module' && empty($azure_config['key_name'])) {
-        $form_state->setErrorByName('ai_embeddings][azure_ai][key_name', $this->t('Key selection is required when using Key module storage.'));
+      // Test Azure AI connection
+      try {
+        $api_key = $this->getSecureKey($azure_config['api_key_name']);
+        // Perform test connection here if needed
+      }
+      catch (\Exception $e) {
+        $form_state->setErrorByName('ai_embeddings][azure_ai][api_key_name', $this->t('Failed to retrieve Azure AI API key: @message', ['@message' => $e->getMessage()]));
       }
 
-      // Validate hybrid search weights sum to 1.
+      // Validate hybrid search weights sum to 1
       if ($form_state->getValue(['ai_embeddings', 'hybrid_search'])) {
         $vector_weight = $form_state->getValue(['ai_embeddings', 'weight_vector']);
         $fulltext_weight = $form_state->getValue(['ai_embeddings', 'weight_fulltext']);
@@ -653,39 +717,30 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
    * {@inheritdoc}
    */
   public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
-    // Save connection settings.
+    // Save connection settings (no plain text passwords)
     $this->configuration['connection']['host'] = $form_state->getValue(['connection', 'host']);
     $this->configuration['connection']['port'] = $form_state->getValue(['connection', 'port']);
     $this->configuration['connection']['database'] = $form_state->getValue(['connection', 'database']);
     $this->configuration['connection']['username'] = $form_state->getValue(['connection', 'username']);
-    
-    if ($password = $form_state->getValue(['connection', 'password'])) {
-      $this->configuration['connection']['password'] = $password;
-    }
-    
+    $this->configuration['connection']['password_key'] = $form_state->getValue(['connection', 'password_key']);
     $this->configuration['connection']['ssl_mode'] = $form_state->getValue(['connection', 'ssl_mode']);
+    
     $this->configuration['index_prefix'] = $form_state->getValue('index_prefix');
     $this->configuration['fts_configuration'] = $form_state->getValue('fts_configuration');
     $this->configuration['batch_size'] = $form_state->getValue('batch_size');
     $this->configuration['debug'] = $form_state->getValue('debug');
 
-    // Save AI embeddings settings.
+    // Save AI embeddings settings (no plain text API keys)
     $this->configuration['ai_embeddings']['enabled'] = $form_state->getValue(['ai_embeddings', 'enabled']);
     $this->configuration['ai_embeddings']['hybrid_search'] = $form_state->getValue(['ai_embeddings', 'hybrid_search']);
     
-    // Save Azure AI settings.
+    // Save Azure AI settings (only key references)
     $azure_ai = $form_state->getValue(['ai_embeddings', 'azure_ai']);
     $this->configuration['ai_embeddings']['azure_ai']['endpoint'] = $azure_ai['endpoint'];
-    $this->configuration['ai_embeddings']['azure_ai']['api_key_storage'] = $azure_ai['api_key_storage'];
-    $this->configuration['ai_embeddings']['azure_ai']['key_name'] = $azure_ai['key_name'] ?? '';
+    $this->configuration['ai_embeddings']['azure_ai']['api_key_name'] = $azure_ai['api_key_name'];
     $this->configuration['ai_embeddings']['azure_ai']['model'] = $azure_ai['model'];
     $this->configuration['ai_embeddings']['azure_ai']['dimensions'] = $azure_ai['dimensions'];
     $this->configuration['ai_embeddings']['azure_ai']['batch_size'] = $azure_ai['batch_size'];
-
-    // Only save API key if using direct storage and a new key was provided.
-    if ($azure_ai['api_key_storage'] === 'direct' && !empty($azure_ai['api_key'])) {
-      $this->configuration['ai_embeddings']['azure_ai']['api_key'] = $azure_ai['api_key'];
-    }
 
     $this->configuration['ai_embeddings']['similarity_threshold'] = $form_state->getValue(['ai_embeddings', 'similarity_threshold']);
     $this->configuration['ai_embeddings']['weight_vector'] = $form_state->getValue(['ai_embeddings', 'weight_vector']);
@@ -701,11 +756,13 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
       'port' => $form_state->getValue(['connection', 'port']),
       'database' => $form_state->getValue(['connection', 'database']),
       'username' => $form_state->getValue(['connection', 'username']),
-      'password' => $form_state->getValue(['connection', 'password']) ?: $this->configuration['connection']['password'],
       'ssl_mode' => $form_state->getValue(['connection', 'ssl_mode']),
     ];
 
     try {
+      $password_key = $form_state->getValue(['connection', 'password_key']);
+      $connection_config['password'] = $this->getSecureKey($password_key);
+      
       $test_connector = new PostgreSQLConnector($connection_config, $this->logger);
       $test_connector->testConnection();
       
@@ -725,23 +782,9 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
     $azure_config = $form_state->getValue(['ai_embeddings', 'azure_ai']);
     
     try {
-      // Get API key based on storage method.
-      $api_key = '';
-      if ($azure_config['api_key_storage'] === 'direct') {
-        $api_key = $azure_config['api_key'] ?: $this->configuration['ai_embeddings']['azure_ai']['api_key'];
-      }
-      elseif ($azure_config['api_key_storage'] === 'key_module' && !empty($azure_config['key_name'])) {
-        if ($this->keyRepository) {
-          $key = $this->keyRepository->getKey($azure_config['key_name']);
-          $api_key = $key ? $key->getKeyValue() : '';
-        }
-      }
+      $api_key = $this->getSecureKey($azure_config['api_key_name']);
 
-      if (empty($api_key)) {
-        throw new \Exception('API key is not configured.');
-      }
-
-      // Test the connection with a simple embedding request.
+      // Test the connection with a simple embedding request
       $test_service = new EmbeddingService($azure_config, $api_key, $this->logger);
       $test_embedding = $test_service->generateEmbeddings(['test text']);
       
@@ -754,5 +797,85 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
     return $form['azure_ai_test_result'];
   }
 
-  // ... (rest of the existing methods remain the same: addIndex, updateIndex, removeIndex, indexItems, deleteItems, etc.)
+  /**
+   * {@inheritdoc}
+   */
+  public function addIndex(IndexInterface $index) {
+    $this->connect();
+    return $this->indexManager->createIndex($index);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function updateIndex(IndexInterface $index) {
+    $this->connect();
+    return $this->indexManager->updateIndex($index);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function removeIndex($index) {
+    $this->connect();
+    return $this->indexManager->dropIndex($index);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function indexItems(IndexInterface $index, array $items) {
+    $this->connect();
+    return $this->indexManager->indexItems($index, $items);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteItems(IndexInterface $index, array $item_ids) {
+    $this->connect();
+    return $this->indexManager->deleteItems($index, $item_ids);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteAllIndexItems(IndexInterface $index, $datasource_id = NULL) {
+    $this->connect();
+    return $this->indexManager->deleteAllItems($index, $datasource_id);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function search(QueryInterface $query) {
+    $this->connect();
+    
+    // Build the search query
+    $query_info = $this->queryBuilder->buildSearchQuery($query);
+    
+    // Execute the query
+    $stmt = $this->connector->executeQuery($query_info['sql'], $query_info['params']);
+    
+    // Create result set
+    $results = new ResultSet($query);
+    $items = [];
+    
+    while ($row = $stmt->fetch()) {
+      $item = $this->fieldMapper->createResultItem($query->getIndex(), $row);
+      $items[] = $item;
+    }
+    
+    $results->setResultItems($items);
+    
+    // Get total count if needed
+    if ($query->getOption('skip result count') !== TRUE) {
+      $count_info = $this->queryBuilder->buildCountQuery($query);
+      $count_stmt = $this->connector->executeQuery($count_info['sql'], $count_info['params']);
+      $results->setResultCount($count_stmt->fetchColumn());
+    }
+    
+    return $results;
+  }
+
 }

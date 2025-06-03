@@ -31,31 +31,34 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
     }
 
     $backend = $server->getBackend();
-    if ($backend->getPluginId() !== 'postgresql') {
+    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure'])) {
       throw new \Exception("Server '{$server_id}' is not using PostgreSQL backend.");
     }
 
     $config = $backend->getConfiguration();
-    if (!($config['ai_embeddings']['enabled'] ?? FALSE)) {
+    if (!($config['ai_embeddings']['enabled'] ?? FALSE) && !($config['azure_embedding']['enabled'] ?? FALSE)) {
       throw new \Exception("AI embeddings are not enabled for server '{$server_id}'.");
     }
 
     try {
-      // Get API key based on storage method.
-      $azure_config = $config['ai_embeddings']['azure_ai'];
-      $api_key = '';
+      // Get API key based on storage method using the backend's secure key retrieval
+      $reflection = new \ReflectionClass($backend);
       
-      if ($azure_config['api_key_storage'] === 'direct') {
-        $api_key = $azure_config['api_key'];
-      }
-      elseif ($azure_config['api_key_storage'] === 'key_module' && !empty($azure_config['key_name'])) {
-        $key_repository = \Drupal::service('key.repository');
-        $key = $key_repository->getKey($azure_config['key_name']);
-        $api_key = $key ? $key->getKeyValue() : '';
+      // Check if it's Azure backend or regular backend
+      if ($backend->getPluginId() === 'postgresql_azure') {
+        $method = $reflection->getMethod('getAzureEmbeddingApiKey');
+        $method->setAccessible(TRUE);
+        $api_key = $method->invoke($backend);
+        $azure_config = $config['azure_embedding'];
+      } else {
+        $method = $reflection->getMethod('getAzureApiKey');
+        $method->setAccessible(TRUE);
+        $api_key = $method->invoke($backend);
+        $azure_config = $config['ai_embeddings']['azure_ai'];
       }
 
       if (empty($api_key)) {
-        throw new \Exception('API key is not configured.');
+        throw new \Exception('API key could not be retrieved from secure storage.');
       }
 
       // Test the connection.
@@ -93,12 +96,12 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
     $server = $index->getServerInstance();
     $backend = $server->getBackend();
     
-    if ($backend->getPluginId() !== 'postgresql') {
+    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure'])) {
       throw new \Exception("Index '{$index_id}' is not using PostgreSQL backend.");
     }
 
     $config = $backend->getConfiguration();
-    if (!($config['ai_embeddings']['enabled'] ?? FALSE)) {
+    if (!($config['ai_embeddings']['enabled'] ?? FALSE) && !($config['azure_embedding']['enabled'] ?? FALSE)) {
       throw new \Exception("AI embeddings are not enabled for this index.");
     }
 
@@ -146,7 +149,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
     }
 
     $backend = $server->getBackend();
-    if ($backend->getPluginId() !== 'postgresql') {
+    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure'])) {
       throw new \Exception("Server '{$server_id}' is not using PostgreSQL backend.");
     }
 
@@ -211,7 +214,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
     $server = $index->getServerInstance();
     $backend = $server->getBackend();
     
-    if ($backend->getPluginId() !== 'postgresql') {
+    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure'])) {
       throw new \Exception("Index '{$index_id}' is not using PostgreSQL backend.");
     }
 
@@ -244,12 +247,25 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
       $this->output()->writeln("Total items: {$total_items}");
 
       // Check if embeddings are enabled.
-      if ($config['ai_embeddings']['enabled'] ?? FALSE) {
-        // Get items with embeddings.
-        $embedded_sql = "SELECT COUNT(*) as embedded FROM {$table_name} WHERE embedding_vector IS NOT NULL";
-        $embedded_stmt = $connector->executeQuery($embedded_sql);
-        $embedded_result = $embedded_stmt->fetch();
-        $embedded_items = $embedded_result['embedded'];
+      $embeddings_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) || ($config['azure_embedding']['enabled'] ?? FALSE);
+      
+      if ($embeddings_enabled) {
+        // Try both embedding column names for compatibility
+        $embedding_columns = ['embedding_vector', 'content_embedding'];
+        $embedded_items = 0;
+        
+        foreach ($embedding_columns as $column) {
+          try {
+            $embedded_sql = "SELECT COUNT(*) as embedded FROM {$table_name} WHERE {$column} IS NOT NULL";
+            $embedded_stmt = $connector->executeQuery($embedded_sql);
+            $embedded_result = $embedded_stmt->fetch();
+            $embedded_items = max($embedded_items, $embedded_result['embedded']);
+            break; // Use the first column that works
+          } catch (\Exception $e) {
+            // Column might not exist, try the next one
+            continue;
+          }
+        }
 
         $percentage = $total_items > 0 ? round(($embedded_items / $total_items) * 100, 2) : 0;
 
@@ -258,14 +274,21 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
 
         if ($embedded_items > 0) {
           // Get sample embedding dimensions.
-          $sample_sql = "SELECT embedding_vector FROM {$table_name} WHERE embedding_vector IS NOT NULL LIMIT 1";
-          $sample_stmt = $connector->executeQuery($sample_sql);
-          $sample_result = $sample_stmt->fetch();
-          
-          if ($sample_result['embedding_vector']) {
-            $vector_string = trim($sample_result['embedding_vector'], '[]');
-            $dimensions = count(explode(',', $vector_string));
-            $this->output()->writeln("Vector dimensions: {$dimensions}");
+          foreach ($embedding_columns as $column) {
+            try {
+              $sample_sql = "SELECT {$column} FROM {$table_name} WHERE {$column} IS NOT NULL LIMIT 1";
+              $sample_stmt = $connector->executeQuery($sample_sql);
+              $sample_result = $sample_stmt->fetch();
+              
+              if ($sample_result[$column]) {
+                $vector_string = trim($sample_result[$column], '[]');
+                $dimensions = count(explode(',', $vector_string));
+                $this->output()->writeln("Vector dimensions: {$dimensions}");
+                break;
+              }
+            } catch (\Exception $e) {
+              continue;
+            }
           }
         }
       }
@@ -275,6 +298,123 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
     }
     catch (\Exception $e) {
       throw new \Exception("Failed to get embedding statistics: " . $e->getMessage());
+    }
+  }
+
+  /**
+   * Validates key configuration for a server.
+   *
+   * @param string $server_id
+   *   The Search API server ID.
+   *
+   * @command search-api-postgresql:validate-keys
+   * @aliases sapg-validate-keys
+   * @usage search-api-postgresql:validate-keys my_server
+   *   Validate that all required keys are properly configured.
+   */
+  public function validateKeys($server_id) {
+    $server = Server::load($server_id);
+    
+    if (!$server) {
+      throw new \Exception("Server '{$server_id}' not found.");
+    }
+
+    $backend = $server->getBackend();
+    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure'])) {
+      throw new \Exception("Server '{$server_id}' is not using PostgreSQL backend.");
+    }
+
+    $config = $backend->getConfiguration();
+    $key_repository = \Drupal::service('key.repository');
+    
+    $this->output()->writeln("Validating key configuration for server: {$server_id}");
+    
+    $errors = [];
+    $warnings = [];
+
+    // Check database password key
+    $password_key = $config['connection']['password_key'] ?? '';
+    if (empty($password_key)) {
+      $errors[] = 'Database password key is not configured';
+    } else {
+      $key = $key_repository->getKey($password_key);
+      if (!$key) {
+        $errors[] = "Database password key '{$password_key}' not found";
+      } else {
+        $key_value = $key->getKeyValue();
+        if (empty($key_value)) {
+          $errors[] = "Database password key '{$password_key}' is empty or could not be decrypted";
+        } else {
+          $this->output()->writeln("<info>✓ Database password key '{$password_key}' is valid</info>");
+        }
+      }
+    }
+
+    // Check AI embedding keys if enabled
+    $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) || ($config['azure_embedding']['enabled'] ?? FALSE);
+    
+    if ($ai_enabled) {
+      // Check for standard AI embeddings config
+      if ($config['ai_embeddings']['enabled'] ?? FALSE) {
+        $api_key_name = $config['ai_embeddings']['azure_ai']['api_key_name'] ?? '';
+        if (empty($api_key_name)) {
+          $errors[] = 'Azure AI API key is not configured';
+        } else {
+          $key = $key_repository->getKey($api_key_name);
+          if (!$key) {
+            $errors[] = "Azure AI API key '{$api_key_name}' not found";
+          } else {
+            $key_value = $key->getKeyValue();
+            if (empty($key_value)) {
+              $errors[] = "Azure AI API key '{$api_key_name}' is empty or could not be decrypted";
+            } else {
+              $this->output()->writeln("<info>✓ Azure AI API key '{$api_key_name}' is valid</info>");
+            }
+          }
+        }
+      }
+
+      // Check for Azure-specific embedding config
+      if ($config['azure_embedding']['enabled'] ?? FALSE) {
+        $api_key_name = $config['azure_embedding']['api_key_name'] ?? '';
+        if (empty($api_key_name)) {
+          $errors[] = 'Azure embedding API key is not configured';
+        } else {
+          $key = $key_repository->getKey($api_key_name);
+          if (!$key) {
+            $errors[] = "Azure embedding API key '{$api_key_name}' not found";
+          } else {
+            $key_value = $key->getKeyValue();
+            if (empty($key_value)) {
+              $errors[] = "Azure embedding API key '{$api_key_name}' is empty or could not be decrypted";
+            } else {
+              $this->output()->writeln("<info>✓ Azure embedding API key '{$api_key_name}' is valid</info>");
+            }
+          }
+        }
+      }
+    } else {
+      $this->output()->writeln('<comment>AI embeddings are not enabled</comment>');
+    }
+
+    // Report results
+    if (!empty($errors)) {
+      $this->output()->writeln('<error>Validation failed with errors:</error>');
+      foreach ($errors as $error) {
+        $this->output()->writeln("<error>✗ {$error}</error>");
+      }
+      throw new \Exception('Key validation failed');
+    }
+
+    if (!empty($warnings)) {
+      $this->output()->writeln('<comment>Validation completed with warnings:</comment>');
+      foreach ($warnings as $warning) {
+        $this->output()->writeln("<comment>⚠ {$warning}</comment>");
+      }
+    }
+
+    if (empty($errors) && empty($warnings)) {
+      $this->output()->writeln('<info>✓ All keys are properly configured</info>');
     }
   }
 

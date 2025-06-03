@@ -1,8 +1,8 @@
 {
   "name": "drupal/search_api_postgresql",
   "type": "drupal-module",
-  "description": "PostgreSQL backend for Search API using native full-text search capabilities with AI text embeddings support",
-  "keywords": ["drupal", "search", "postgresql", "full-text", "ai", "embeddings", "vector"],
+  "description": "PostgreSQL backend for Search API using native full-text search capabilities with AI text embeddings support and secure credential storage",
+  "keywords": ["drupal", "search", "postgresql", "full-text", "ai", "embeddings", "vector", "security"],
   "license": "GPL-2.0+",
   "homepage": "https://www.drupal.org/project/search_api_postgresql",
   "minimum-stability": "dev",
@@ -13,6 +13,7 @@
   "require": {
     "drupal/core": "^10.4 || ^11",
     "drupal/search_api": "^1.31",
+    "drupal/key": "^1.16",
     "ext-pdo_pgsql": "*",
     "guzzlehttp/guzzle": "^7.0"
   },
@@ -22,7 +23,6 @@
   "suggest": {
     "drupal/facets": "For faceted search functionality",
     "drupal/search_api_autocomplete": "For autocomplete functionality",
-    "drupal/key": "For secure API key storage (recommended for production)",
     "pgvector/pgvector": "PostgreSQL extension for vector similarity search (required for AI embeddings)"
   },
   "extra": {

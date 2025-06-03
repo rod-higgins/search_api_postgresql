@@ -18,9 +18,9 @@ search_api.backend.plugin.postgresql:
         username:
           type: string
           label: 'Username'
-        password:
+        password_key:
           type: string
-          label: 'Password'
+          label: 'Password key reference'
         ssl_mode:
           type: string
           label: 'SSL Mode'
@@ -58,15 +58,9 @@ search_api.backend.plugin.postgresql:
             endpoint:
               type: string
               label: 'Azure AI Services endpoint'
-            api_key_storage:
+            api_key_name:
               type: string
-              label: 'API key storage method'
-            api_key:
-              type: string
-              label: 'API key (for direct storage)'
-            key_name:
-              type: string
-              label: 'Key storage name'
+              label: 'API key reference (Key module)'
             model:
               type: string
               label: 'Embedding model'
@@ -85,3 +79,126 @@ search_api.backend.plugin.postgresql:
         weight_fulltext:
           type: float
           label: 'Full-text search weight in hybrid mode'
+
+search_api.backend.plugin.postgresql_azure:
+  type: mapping
+  label: 'Azure PostgreSQL backend configuration'
+  mapping:
+    connection:
+      type: mapping
+      label: 'Database connection settings'
+      mapping:
+        database:
+          type: string
+          label: 'Database name'
+        host:
+          type: string
+          label: 'Database host'
+        port:
+          type: integer
+          label: 'Database port'
+        username:
+          type: string
+          label: 'Username'
+        password_key:
+          type: string
+          label: 'Password key reference'
+        ssl_mode:
+          type: string
+          label: 'SSL Mode'
+        options:
+          type: sequence
+          label: 'Additional PDO options'
+          sequence:
+            type: string
+    index_prefix:
+      type: string
+      label: 'Index table prefix'
+    fts_configuration:
+      type: string
+      label: 'PostgreSQL FTS configuration'
+    debug:
+      type: boolean
+      label: 'Debug mode'
+    batch_size:
+      type: integer
+      label: 'Indexing batch size'
+    azure_embedding:
+      type: mapping
+      label: 'Azure AI Embedding Configuration'
+      mapping:
+        enabled:
+          type: boolean
+          label: 'Enable Azure AI vector search'
+        service_type:
+          type: string
+          label: 'Azure AI service type'
+        endpoint:
+          type: string
+          label: 'Azure endpoint'
+        api_key_name:
+          type: string
+          label: 'API key reference (Key module)'
+        deployment_name:
+          type: string
+          label: 'Azure deployment name'
+        api_version:
+          type: string
+          label: 'Azure API version'
+        dimension:
+          type: integer
+          label: 'Vector dimension'
+        model_type:
+          type: string
+          label: 'Embedding model type'
+    vector_index:
+      type: mapping
+      label: 'Vector index configuration'
+      mapping:
+        method:
+          type: string
+          label: 'Vector index method'
+        ivfflat_lists:
+          type: integer
+          label: 'IVFFlat lists parameter'
+        hnsw_m:
+          type: integer
+          label: 'HNSW m parameter'
+        hnsw_ef_construction:
+          type: integer
+          label: 'HNSW ef_construction parameter'
+    hybrid_search:
+      type: mapping
+      label: 'Hybrid search configuration'
+      mapping:
+        text_weight:
+          type: float
+          label: 'Text search weight'
+        vector_weight:
+          type: float
+          label: 'Vector search weight'
+        similarity_threshold:
+          type: float
+          label: 'Similarity threshold'
+        max_vector_results:
+          type: integer
+          label: 'Maximum vector results'
+    azure_optimization:
+      type: mapping
+      label: 'Azure optimization settings'
+      mapping:
+        batch_embedding:
+          type: boolean
+          label: 'Enable batch embedding'
+        batch_size:
+          type: integer
+          label: 'Batch size'
+        retry_attempts:
+          type: integer
+          label: 'Retry attempts'
+        timeout:
+          type: integer
+          label: 'Timeout in seconds'
+        rate_limit_delay:
+          type: integer
+          label: 'Rate limit delay in milliseconds'

@@ -2,6 +2,8 @@
 
 namespace Drupal\search_api_postgresql\Plugin\search_api\backend;
 
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\search_api\SearchApiException;
 use Drupal\search_api_postgresql\PostgreSQL\AzureVectorIndexManager;
 use Drupal\search_api_postgresql\PostgreSQL\AzureVectorQueryBuilder;
 use Drupal\search_api_postgresql\Service\AzureOpenAIEmbeddingService;
@@ -33,7 +35,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
         'enabled' => FALSE,
         'service_type' => 'azure_openai', // or 'azure_cognitive'
         'endpoint' => '',
-        'api_key' => '',
+        'api_key_name' => '', // Only store key reference, not actual key
         'deployment_name' => '',
         'api_version' => '2024-02-01',
         'dimension' => 1536,
@@ -59,6 +61,28 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
         'rate_limit_delay' => 100, // milliseconds
       ],
     ];
+  }
+
+  /**
+   * Gets the Azure AI API key from secure storage.
+   *
+   * @return string
+   *   The Azure AI API key.
+   *
+   * @throws \Drupal\search_api\SearchApiException
+   *   If the API key cannot be retrieved.
+   */
+  protected function getAzureEmbeddingApiKey() {
+    if (!($this->configuration['azure_embedding']['enabled'] ?? FALSE)) {
+      return '';
+    }
+
+    $api_key_name = $this->configuration['azure_embedding']['api_key_name'] ?? '';
+    if (empty($api_key_name)) {
+      throw new SearchApiException('Azure embedding API key is not configured. Please configure a key for secure API key storage.');
+    }
+
+    return $this->getSecureKey($api_key_name);
   }
 
   /**
@@ -98,10 +122,11 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     
     switch ($config['service_type']) {
       case 'azure_openai':
-        if ($config['endpoint'] && $config['api_key'] && $config['deployment_name']) {
+        if ($config['endpoint'] && $config['api_key_name'] && $config['deployment_name']) {
+          $api_key = $this->getAzureEmbeddingApiKey();
           $this->embeddingService = new AzureOpenAIEmbeddingService(
             $config['endpoint'],
-            $config['api_key'],
+            $api_key,
             $config['deployment_name'],
             $config['api_version'],
             $config['dimension']
@@ -112,7 +137,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       case 'azure_cognitive':
         // Note: Azure Cognitive Services doesn't yet offer direct text embeddings
         // This is here for future compatibility
-        if ($config['endpoint'] && $config['api_key']) {
+        if ($config['endpoint'] && $config['api_key_name']) {
           throw new \Exception('Azure Cognitive Services text embeddings are not yet available. Please use Azure OpenAI Service.');
         }
         break;
@@ -231,12 +256,23 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       ],
     ];
 
-    $form['azure_embedding']['api_key'] = [
-      '#type' => 'password',
-      '#title' => $this->t('Azure API Key'),
-      '#description' => $this->t('Your Azure OpenAI API key. Leave empty to keep current key.'),
+    // Get available keys for API key selection
+    $key_options = $this->getAvailableKeys();
+
+    $form['azure_embedding']['api_key_name'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Azure AI Services API Key'),
+      '#options' => $key_options,
+      '#empty_option' => $this->t('- Select a key -'),
+      '#default_value' => $this->configuration['azure_embedding']['api_key_name'],
+      '#description' => $this->t('Select the key containing your Azure AI Services API key. <a href="@url">Create a new key</a> if needed.', [
+        '@url' => '/admin/config/system/keys/add',
+      ]),
       '#states' => [
         'visible' => [
+          ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
+        ],
+        'required' => [
           ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
         ],
       ],
@@ -465,6 +501,12 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
           $form_state->setErrorByName('azure_embedding][deployment_name', 
             $this->t('Deployment name is required for Azure OpenAI.'));
         }
+
+        $api_key_name = $form_state->getValue(['azure_embedding', 'api_key_name']);
+        if (empty($api_key_name)) {
+          $form_state->setErrorByName('azure_embedding][api_key_name', 
+            $this->t('Azure AI API key is required.'));
+        }
       }
     }
   }
@@ -475,16 +517,13 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
   public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
     parent::submitConfigurationForm($form, $form_state);
 
-    // Azure embedding configuration
+    // Azure embedding configuration (only save key references)
     $this->configuration['azure_embedding']['enabled'] = $form_state->getValue(['azure_embedding', 'enabled']);
     $this->configuration['azure_embedding']['service_type'] = $form_state->getValue(['azure_embedding', 'service_type']);
     $this->configuration['azure_embedding']['endpoint'] = $form_state->getValue(['azure_embedding', 'endpoint']);
+    $this->configuration['azure_embedding']['api_key_name'] = $form_state->getValue(['azure_embedding', 'api_key_name']);
     $this->configuration['azure_embedding']['deployment_name'] = $form_state->getValue(['azure_embedding', 'deployment_name']);
     $this->configuration['azure_embedding']['model_type'] = $form_state->getValue(['azure_embedding', 'model_type']);
-
-    if ($api_key = $form_state->getValue(['azure_embedding', 'api_key'])) {
-      $this->configuration['azure_embedding']['api_key'] = $api_key;
-    }
 
     // Set dimension based on model
     $model_type = $form_state->getValue(['azure_embedding', 'model_type']);
@@ -517,16 +556,18 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     $config = [
       'service_type' => $form_state->getValue(['azure_embedding', 'service_type']),
       'endpoint' => $form_state->getValue(['azure_embedding', 'endpoint']),
-      'api_key' => $form_state->getValue(['azure_embedding', 'api_key']) ?: $this->configuration['azure_embedding']['api_key'],
+      'api_key_name' => $form_state->getValue(['azure_embedding', 'api_key_name']),
       'deployment_name' => $form_state->getValue(['azure_embedding', 'deployment_name']),
       'model_type' => $form_state->getValue(['azure_embedding', 'model_type']),
     ];
 
     try {
       if ($config['service_type'] === 'azure_openai') {
+        $api_key = $this->getSecureKey($config['api_key_name']);
+        
         $test_service = new AzureOpenAIEmbeddingService(
           $config['endpoint'],
-          $config['api_key'],
+          $api_key,
           $config['deployment_name']
         );
         
@@ -603,4 +644,19 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
 
     return $stats;
   }
+
+  /**
+   * Gets the table name for an index.
+   *
+   * @param \Drupal\search_api\IndexInterface|string $index
+   *   The search index or index ID.
+   *
+   * @return string
+   *   The table name.
+   */
+  protected function getIndexTableName($index) {
+    $index_id = is_string($index) ? $index : $index->id();
+    return $this->configuration['index_prefix'] . $index_id;
+  }
+
 }

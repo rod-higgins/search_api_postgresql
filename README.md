@@ -1,6 +1,6 @@
 # Search API PostgreSQL
 
-This module provides a PostgreSQL backend for the Search API module, leveraging PostgreSQL's native full-text search capabilities including tsvector and tsquery for optimal performance, with enhanced AI text embeddings support for semantic search.
+This module provides a PostgreSQL backend for the Search API module, leveraging PostgreSQL's native full-text search capabilities including tsvector and tsquery for optimal performance, with enhanced AI text embeddings support for semantic search and **secure credential storage**.
 
 ## Features
 
@@ -8,10 +8,10 @@ This module provides a PostgreSQL backend for the Search API module, leveraging 
 - **AI Text Embeddings**: Semantic search using Azure AI Services with vector similarity
 - **Hybrid Search**: Combines traditional full-text search with vector similarity search
 - **Azure Database Compatible**: Optimized for Azure Database for PostgreSQL
+- **Secure Credential Storage**: Uses Drupal Key module for secure API key and password storage
 - **Advanced Search Features**: Supports faceting, autocomplete, spell checking, and more
 - **Multi-language Support**: Configurable text search configurations for different languages
 - **Performance Optimized**: Efficient indexing and querying strategies
-- **Secure Key Storage**: Integration with Drupal Key module for API key management
 
 ## Requirements
 
@@ -19,8 +19,8 @@ This module provides a PostgreSQL backend for the Search API module, leveraging 
 - PostgreSQL 12+
 - PHP PDO PostgreSQL extension
 - Search API module
+- **Key module** (required for secure credential storage)
 - **For AI Embeddings**: pgvector extension for PostgreSQL
-- **For Secure Keys**: Key module (recommended)
 
 ## Installation
 
@@ -29,9 +29,9 @@ This module provides a PostgreSQL backend for the Search API module, leveraging 
    composer require drupal/search_api_postgresql
    ```
 
-2. Enable the module:
+2. Enable the module and its dependencies:
    ```bash
-   drush en search_api_postgresql
+   drush en search_api_postgresql key
    ```
 
 3. **For AI Embeddings** (optional), install pgvector extension:
@@ -39,38 +39,47 @@ This module provides a PostgreSQL backend for the Search API module, leveraging 
    CREATE EXTENSION vector;
    ```
 
-4. **For Secure Key Storage** (recommended):
-   ```bash
-   composer require drupal/key
-   drush en key
-   ```
+## Security-First Configuration
 
-## Configuration
+This module requires the Key module for secure credential storage. **All passwords and API keys are stored securely using the Key module** instead of plain text in configuration.
 
-### Basic Configuration
+### Step 1: Create Secure Keys
+
+Before configuring the backend, create keys for your credentials:
+
+1. **Database Password Key**:
+   - Go to `/admin/config/system/keys/add`
+   - Create a key named "PostgreSQL Database Password"
+   - Choose appropriate key type and provider (e.g., Configuration, Environment, File)
+   - Store your database password securely
+
+2. **Azure AI API Key** (if using AI embeddings):
+   - Create another key named "Azure AI API Key"
+   - Store your Azure AI Services API key securely
+
+### Step 2: Configure Search API Server
 
 1. **Create a Search API Server**:
    - Go to `/admin/config/search/search-api`
    - Add server
-   - Select "PostgreSQL" as the backend
-   - Configure your database connection
+   - Select "PostgreSQL" or "PostgreSQL with Azure AI Vector Search" as the backend
 
 2. **Database Connection Settings**:
    - **Host**: Your PostgreSQL server hostname
    - **Port**: Usually 5432
    - **Database**: Your database name
-   - **Username/Password**: Database credentials
+   - **Username**: Your database username
+   - **Database Password Key**: Select the key you created for the database password
    - **SSL Mode**: Recommended "require" for Azure Database
 
 ### AI Embeddings Configuration
 
 1. **Enable AI Text Embeddings**:
    - Check "Enable AI Text Embeddings" in the backend configuration
-   - Configure Azure AI Services connection details
 
 2. **Azure AI Services Setup**:
    - **Endpoint**: Your Azure AI Services endpoint (e.g., `https://yourservice.openai.azure.com/`)
-   - **API Key Storage**: Choose between direct storage or Key module
+   - **Azure AI Services API Key**: Select the key you created for the API key
    - **Model**: Select embedding model (text-embedding-ada-002, text-embedding-3-small, etc.)
    - **Dimensions**: Vector dimensions (1536 for ada-002, configurable for newer models)
 
@@ -79,15 +88,38 @@ This module provides a PostgreSQL backend for the Search API module, leveraging 
    - **Full-text Weight**: Weight for traditional search in hybrid search (0-1)
    - **Similarity Threshold**: Minimum similarity score for vector results
 
-### Secure API Key Storage
+## Security Best Practices
 
-For production environments, use the Key module for secure API key storage:
+### Key Storage Recommendations
 
-1. Install and enable the Key module
-2. Create a new key at `/admin/config/system/keys`
-3. In the PostgreSQL backend configuration:
-   - Set "API Key Storage Method" to "Use Key module"
-   - Select your created key
+1. **Production Environment**:
+   - Use external key providers (Environment variables, HashiCorp Vault, etc.)
+   - Never store credentials in configuration or database in plain text
+   - Regularly rotate API keys and passwords
+
+2. **Development Environment**:
+   - Use Configuration key provider for development
+   - Keep development keys separate from production
+
+3. **Azure Security**:
+   - Use Azure Managed Identity when possible
+   - Configure network security groups to restrict database access
+   - Enable SSL/TLS for all connections
+
+### Key Management Commands
+
+Use the provided Drush commands to validate your key configuration:
+
+```bash
+# Validate all keys for a server
+drush search-api-postgresql:validate-keys my_server
+
+# Test Azure AI connection using secure keys
+drush search-api-postgresql:test-ai my_server
+
+# Check vector support
+drush search-api-postgresql:check-vector-support my_server
+```
 
 ## Azure Database for PostgreSQL Setup
 
@@ -128,6 +160,12 @@ Username: myuser@myserver
 - ✅ Configurable similarity thresholds
 - ✅ Support for multiple embedding models
 
+### Security Features
+- ✅ Secure credential storage using Key module
+- ✅ No plain text passwords or API keys in configuration
+- ✅ Support for multiple key storage providers
+- ✅ Credential validation and testing tools
+
 ## Field Types
 
 | Search API Type | PostgreSQL Type | Description |
@@ -164,6 +202,17 @@ Combines both traditional and vector search with configurable weights:
 5. **Embedding Batching**: Configure appropriate batch sizes for API calls
 6. **Regular Maintenance**: Monitor index usage and performance
 
+## Migration from Insecure Configuration
+
+If you're upgrading from a version that stored credentials in plain text:
+
+1. **Create keys** for all your existing credentials
+2. **Update server configuration** to use the new key references
+3. **Validate** the new configuration using the provided Drush commands
+4. **Remove old plain text credentials** from any backups or configuration exports
+
+The module will automatically detect if credentials are not properly secured and provide clear error messages.
+
 ## API Usage and Costs
 
 When using AI embeddings:
@@ -190,47 +239,41 @@ Enable debug mode in the backend configuration to log:
 - Database queries
 - Embedding API calls
 - Vector similarity calculations
-
-### Custom Embedding Fields
-
-You can create custom vector fields in your Search API index:
-1. Add a field with "Vector" data type
-2. Populate it with your own embeddings
-3. The backend will automatically create appropriate indexes
+- Key retrieval operations (without exposing actual key values)
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **pgvector extension not found**:
+1. **Key not found errors**:
+   - Verify the key exists in `/admin/config/system/keys`
+   - Check key permissions and provider configuration
+   - Use `drush search-api-postgresql:validate-keys` to diagnose
+
+2. **pgvector extension not found**:
    - Ensure pgvector is installed and enabled in PostgreSQL
    - Check that your user has permissions to create extensions
 
-2. **Azure AI API errors**:
-   - Verify your endpoint URL and API key
+3. **Azure AI API errors**:
+   - Verify your endpoint URL and API key using the test connection feature
    - Check your Azure AI Services quotas and limits
    - Ensure your deployment name matches the model configuration
 
-3. **Vector index creation fails**:
-   - Check PostgreSQL version (requires 12+)
-   - Verify pgvector extension is properly installed
-   - Check database permissions
+### Security Issues
 
-### Performance Issues
+1. **Plain text credentials detected**:
+   - Module will refuse to start with plain text credentials
+   - Create appropriate keys and update configuration
+   - Use the validation commands to verify setup
 
-1. **Slow vector searches**:
-   - Ensure vector indexes are created (HNSW recommended)
-   - Consider adjusting similarity thresholds
-   - Monitor PostgreSQL query performance
-
-2. **High API costs**:
-   - Implement result caching
-   - Optimize embedding batch sizes
-   - Consider re-embedding frequency
+2. **Key decryption failures**:
+   - Check key provider configuration
+   - Verify key permissions and access
+   - Review Drupal logs for detailed error messages
 
 ## Contributing
 
-Please follow Drupal coding standards and include tests for new functionality.
+Please follow Drupal coding standards and include tests for new functionality. When contributing security-related features, ensure they follow security best practices.
 
 ## License
 
@@ -242,3 +285,4 @@ GPL-2.0+
 - [Documentation](https://www.drupal.org/docs/contributed-modules/search-api-postgresql)
 - [Azure AI Services Documentation](https://docs.microsoft.com/en-us/azure/cognitive-services/openai/)
 - [pgvector Documentation](https://github.com/pgvector/pgvector)
+- [Drupal Key Module](https://www.drupal.org/project/key)
