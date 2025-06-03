@@ -8,7 +8,7 @@ use Drupal\search_api\Query\ConditionInterface;
 use Drupal\search_api\Query\ConditionGroupInterface;
 
 /**
- * Builds PostgreSQL queries for Search API.
+ * Builds PostgreSQL queries for Search API with SQL injection prevention.
  */
 class QueryBuilder {
 
@@ -32,6 +32,31 @@ class QueryBuilder {
    * @var array
    */
   protected $config;
+
+  /**
+   * Valid system field names that are always safe.
+   *
+   * @var array
+   */
+  protected static $systemFields = [
+    'search_api_id',
+    'search_api_datasource',
+    'search_api_language',
+    'search_api_relevance',
+    'search_api_random',
+  ];
+
+  /**
+   * Valid comparison operators.
+   *
+   * @var array
+   */
+  protected static $validOperators = [
+    '=', '<>', '!=', '<', '<=', '>', '>=',
+    'IN', 'NOT IN', 'BETWEEN', 'NOT BETWEEN',
+    'CONTAINS', 'STARTS_WITH', 'ENDS_WITH',
+    'IS NULL', 'IS NOT NULL',
+  ];
 
   /**
    * Constructs a QueryBuilder object.
@@ -111,18 +136,25 @@ class QueryBuilder {
    *   The SELECT clause.
    */
   protected function buildSelectClause(QueryInterface $query) {
-    $fields = ['search_api_id', 'search_api_datasource', 'search_api_language'];
+    $fields = [];
     
-    // Add requested fields.
+    // Add system fields (always safe)
+    $fields[] = $this->connector->validateFieldName('search_api_id');
+    $fields[] = $this->connector->validateFieldName('search_api_datasource');
+    $fields[] = $this->connector->validateFieldName('search_api_language');
+    
+    // Add requested fields from the index
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
-      $fields[] = $field_id;
+      $safe_field = $this->validateIndexField($query->getIndex(), $field_id);
+      $fields[] = $safe_field;
     }
 
-    // Add relevance score if there's a full-text search.
+    // Add relevance score if there's a full-text search
     if ($query->getKeys()) {
-      $ts_query = $this->buildTsQuery($query->getKeys());
-      $fts_config = $this->config['fts_configuration'];
-      $fields[] = "ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query)) AS search_api_relevance";
+      $fts_config = $this->validateFtsConfiguration();
+      $fields[] = "ts_rank(" . $this->connector->validateFieldName('search_vector') . 
+                 ", to_tsquery('{$fts_config}', :ts_query)) AS " . 
+                 $this->connector->validateFieldName('search_api_relevance');
     }
 
     return implode(', ', $fields);
@@ -140,28 +172,30 @@ class QueryBuilder {
   protected function buildWhereClause(QueryInterface $query) {
     $conditions = ['1=1']; // Always true base condition
 
-    // Handle full-text search.
+    // Handle full-text search
     if ($keys = $query->getKeys()) {
-      $fts_config = $this->config['fts_configuration'];
-      $conditions[] = "search_vector @@ to_tsquery('{$fts_config}', :ts_query)";
+      $fts_config = $this->validateFtsConfiguration();
+      $search_vector_field = $this->connector->validateFieldName('search_vector');
+      $conditions[] = "{$search_vector_field} @@ to_tsquery('{$fts_config}', :ts_query)";
     }
 
-    // Handle filters.
+    // Handle filters
     if ($condition_group = $query->getConditionGroup()) {
-      $condition_sql = $this->buildConditionGroup($condition_group);
+      $condition_sql = $this->buildConditionGroup($condition_group, $query->getIndex());
       if (!empty($condition_sql)) {
         $conditions[] = $condition_sql;
       }
     }
 
-    // Handle language filtering.
+    // Handle language filtering
     if ($languages = $query->getLanguages()) {
       if ($languages !== [NULL]) {
         $language_placeholders = [];
         foreach ($languages as $i => $language) {
           $language_placeholders[] = ":language_{$i}";
         }
-        $conditions[] = 'search_api_language IN (' . implode(', ', $language_placeholders) . ')';
+        $language_field = $this->connector->validateFieldName('search_api_language');
+        $conditions[] = $language_field . ' IN (' . implode(', ', $language_placeholders) . ')';
       }
     }
 
@@ -173,23 +207,30 @@ class QueryBuilder {
    *
    * @param \Drupal\search_api\Query\ConditionGroupInterface $condition_group
    *   The condition group.
+   * @param \Drupal\search_api\IndexInterface $index
+   *   The search index.
    *
    * @return string
    *   The condition SQL.
    */
-  protected function buildConditionGroup(ConditionGroupInterface $condition_group) {
+  protected function buildConditionGroup(ConditionGroupInterface $condition_group, IndexInterface $index) {
     $conditions = [];
-    $conjunction = $condition_group->getConjunction() === 'OR' ? 'OR' : 'AND';
+    $conjunction = $condition_group->getConjunction();
+    
+    // Validate conjunction
+    if (!in_array($conjunction, ['AND', 'OR'])) {
+      $conjunction = 'AND';
+    }
 
     foreach ($condition_group->getConditions() as $condition) {
       if ($condition instanceof ConditionGroupInterface) {
-        $nested_condition = $this->buildConditionGroup($condition);
+        $nested_condition = $this->buildConditionGroup($condition, $index);
         if (!empty($nested_condition)) {
           $conditions[] = "({$nested_condition})";
         }
       }
       elseif ($condition instanceof ConditionInterface) {
-        $condition_sql = $this->buildCondition($condition);
+        $condition_sql = $this->buildCondition($condition, $index);
         if (!empty($condition_sql)) {
           $conditions[] = $condition_sql;
         }
@@ -204,47 +245,51 @@ class QueryBuilder {
    *
    * @param \Drupal\search_api\Query\ConditionInterface $condition
    *   The condition.
+   * @param \Drupal\search_api\IndexInterface $index
+   *   The search index.
    *
    * @return string
    *   The condition SQL.
    */
-  protected function buildCondition(ConditionInterface $condition) {
+  protected function buildCondition(ConditionInterface $condition, IndexInterface $index) {
     $field = $condition->getField();
     $value = $condition->getValue();
     $operator = $condition->getOperator();
 
-    // Handle special fields.
-    if ($field === 'search_api_id') {
-      $field = 'search_api_id';
-    }
-    elseif ($field === 'search_api_datasource') {
-      $field = 'search_api_datasource';
-    }
-    elseif ($field === 'search_api_language') {
-      $field = 'search_api_language';
+    // Validate operator
+    if (!in_array($operator, self::$validOperators)) {
+      throw new \InvalidArgumentException("Invalid operator: {$operator}");
     }
 
+    // Validate and get safe field name
+    $safe_field = $this->validateConditionField($index, $field);
     $placeholder = $this->getConditionPlaceholder($field, $value);
 
     switch ($operator) {
       case '=':
-        return "{$field} = {$placeholder}";
+        return "{$safe_field} = {$placeholder}";
 
       case '<>':
       case '!=':
-        return "{$field} <> {$placeholder}";
+        return "{$safe_field} <> {$placeholder}";
 
       case '<':
-        return "{$field} < {$placeholder}";
+        return "{$safe_field} < {$placeholder}";
 
       case '<=':
-        return "{$field} <= {$placeholder}";
+        return "{$safe_field} <= {$placeholder}";
 
       case '>':
-        return "{$field} > {$placeholder}";
+        return "{$safe_field} > {$placeholder}";
 
       case '>=':
-        return "{$field} >= {$placeholder}";
+        return "{$safe_field} >= {$placeholder}";
+
+      case 'IS NULL':
+        return "{$safe_field} IS NULL";
+
+      case 'IS NOT NULL':
+        return "{$safe_field} IS NOT NULL";
 
       case 'IN':
         if (is_array($value)) {
@@ -252,9 +297,9 @@ class QueryBuilder {
           foreach ($value as $i => $val) {
             $placeholders[] = ":{$field}_in_{$i}";
           }
-          return "{$field} IN (" . implode(', ', $placeholders) . ")";
+          return "{$safe_field} IN (" . implode(', ', $placeholders) . ")";
         }
-        return "{$field} = {$placeholder}";
+        return "{$safe_field} = {$placeholder}";
 
       case 'NOT IN':
         if (is_array($value)) {
@@ -262,33 +307,33 @@ class QueryBuilder {
           foreach ($value as $i => $val) {
             $placeholders[] = ":{$field}_not_in_{$i}";
           }
-          return "{$field} NOT IN (" . implode(', ', $placeholders) . ")";
+          return "{$safe_field} NOT IN (" . implode(', ', $placeholders) . ")";
         }
-        return "{$field} <> {$placeholder}";
+        return "{$safe_field} <> {$placeholder}";
 
       case 'BETWEEN':
         if (is_array($value) && count($value) === 2) {
-          return "{$field} BETWEEN :{$field}_between_start AND :{$field}_between_end";
+          return "{$safe_field} BETWEEN :{$field}_between_start AND :{$field}_between_end";
         }
         break;
 
       case 'NOT BETWEEN':
         if (is_array($value) && count($value) === 2) {
-          return "{$field} NOT BETWEEN :{$field}_not_between_start AND :{$field}_not_between_end";
+          return "{$safe_field} NOT BETWEEN :{$field}_not_between_start AND :{$field}_not_between_end";
         }
         break;
 
       case 'CONTAINS':
-        return "{$field} ILIKE :{$field}_contains";
+        return "{$safe_field} ILIKE :{$field}_contains";
 
       case 'STARTS_WITH':
-        return "{$field} ILIKE :{$field}_starts_with";
+        return "{$safe_field} ILIKE :{$field}_starts_with";
 
       case 'ENDS_WITH':
-        return "{$field} ILIKE :{$field}_ends_with";
+        return "{$safe_field} ILIKE :{$field}_ends_with";
 
       default:
-        return "{$field} = {$placeholder}";
+        return "{$safe_field} = {$placeholder}";
     }
 
     return '';
@@ -307,29 +352,37 @@ class QueryBuilder {
     $sorts = $query->getSorts();
     
     if (empty($sorts)) {
-      // Default sort by relevance if there's a search, otherwise by ID.
+      // Default sort by relevance if there's a search, otherwise by ID
       if ($query->getKeys()) {
-        return 'ORDER BY search_api_relevance DESC';
+        $relevance_field = $this->connector->validateFieldName('search_api_relevance');
+        return "ORDER BY {$relevance_field} DESC";
       }
-      return 'ORDER BY search_api_id ASC';
+      $id_field = $this->connector->validateFieldName('search_api_id');
+      return "ORDER BY {$id_field} ASC";
     }
 
     $order_parts = [];
     foreach ($sorts as $field => $direction) {
-      $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
+      // Validate direction
+      $safe_direction = $this->connector->validateSortDirection($direction);
       
+      // Validate field and get safe name
       if ($field === 'search_api_relevance') {
-        $order_parts[] = "search_api_relevance {$direction}";
+        $safe_field = $this->connector->validateFieldName('search_api_relevance');
       }
       elseif ($field === 'search_api_id') {
-        $order_parts[] = "search_api_id {$direction}";
+        $safe_field = $this->connector->validateFieldName('search_api_id');
       }
       elseif ($field === 'search_api_random') {
+        // Special case for random sorting
         $order_parts[] = "RANDOM()";
+        continue;
       }
       else {
-        $order_parts[] = "{$field} {$direction}";
+        $safe_field = $this->validateIndexField($query->getIndex(), $field);
       }
+      
+      $order_parts[] = "{$safe_field} {$safe_direction}";
     }
 
     return 'ORDER BY ' . implode(', ', $order_parts);
@@ -351,8 +404,16 @@ class QueryBuilder {
       return '';
     }
 
-    $offset = $limit[0] ?? 0;
-    $length = $limit[1] ?? 50;
+    $offset = (int) ($limit[0] ?? 0);
+    $length = (int) ($limit[1] ?? 50);
+
+    // Ensure non-negative values
+    if ($offset < 0) {
+      $offset = 0;
+    }
+    if ($length < 0) {
+      $length = 50;
+    }
 
     if ($offset > 0) {
       return "LIMIT {$length} OFFSET {$offset}";
@@ -372,12 +433,12 @@ class QueryBuilder {
    */
   protected function buildTsQuery($keys) {
     if (is_string($keys)) {
-      // Simple keyword search - escape and sanitize.
+      // Simple keyword search - escape and sanitize
       return $this->sanitizeSearchTerms($keys);
     }
 
     if (is_array($keys)) {
-      // Complex query with operators.
+      // Complex query with operators
       return $this->buildComplexTsQuery($keys);
     }
 
@@ -396,6 +457,11 @@ class QueryBuilder {
   protected function buildComplexTsQuery(array $keys) {
     $conjunction = $keys['#conjunction'] ?? 'AND';
     $terms = [];
+
+    // Validate conjunction
+    if (!in_array($conjunction, ['AND', 'OR'])) {
+      $conjunction = 'AND';
+    }
 
     foreach ($keys as $key => $value) {
       if ($key === '#conjunction') {
@@ -430,16 +496,16 @@ class QueryBuilder {
    *   The sanitized terms.
    */
   protected function sanitizeSearchTerms($terms) {
-    // Remove special characters that could break tsquery.
+    // Remove special characters that could break tsquery
     $terms = preg_replace('/[^a-zA-Z0-9\s\-_]/', ' ', $terms);
     
-    // Split into words and filter.
+    // Split into words and filter
     $words = preg_split('/\s+/', trim($terms));
     $words = array_filter($words, function($word) {
       return strlen($word) > 1; // Filter out single characters
     });
 
-    // Join with AND operator.
+    // Join with AND operator
     return implode(' & ', array_map(function($word) {
       return $word . ':*'; // Add prefix matching
     }, $words));
@@ -491,20 +557,26 @@ class QueryBuilder {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
     
-    // Base WHERE clause from main query (excluding this facet's conditions).
+    // Validate facet field
+    $safe_facet_field = $this->validateIndexField($index, $facet_id);
+    
+    // Base WHERE clause from main query (excluding this facet's conditions)
     $where_clause = $this->buildWhereClause($query);
     
+    $limit = (int) ($facet_info['limit'] ?? 50);
+    if ($limit < 1 || $limit > 1000) {
+      $limit = 50;
+    }
+    
     $sql = "
-      SELECT {$facet_id} as value, COUNT(*) as count
+      SELECT {$safe_facet_field} as value, COUNT(*) as count
       FROM {$table_name}
       WHERE {$where_clause}
-        AND {$facet_id} IS NOT NULL
-      GROUP BY {$facet_id}
+        AND {$safe_facet_field} IS NOT NULL
+      GROUP BY {$safe_facet_field}
       ORDER BY count DESC, value ASC
+      LIMIT {$limit}
     ";
-
-    $limit = $facet_info['limit'] ?? 50;
-    $sql .= " LIMIT {$limit}";
 
     $params = $this->getQueryParameters($query);
 
@@ -526,10 +598,12 @@ class QueryBuilder {
    */
   public function getAutocompleteSuggestions(QueryInterface $query, $incomplete_key, $user_input) {
     $table_name = $this->getIndexTableName($query->getIndex());
-    $fts_config = $this->config['fts_configuration'];
+    $fts_config = $this->validateFtsConfiguration();
 
-    // Build a simple prefix search query.
+    // Build a simple prefix search query
     $search_term = $this->sanitizeSearchTerms($incomplete_key);
+    
+    $search_vector_field = $this->connector->validateFieldName('search_vector');
     
     $sql = "
       SELECT DISTINCT 
@@ -538,9 +612,9 @@ class QueryBuilder {
           to_tsquery('{$fts_config}', :search_term),
           'MaxWords=3, MinWords=1, MaxFragments=1'
         ) as suggestion,
-        ts_rank(search_vector, to_tsquery('{$fts_config}', :search_term)) as rank
+        ts_rank({$search_vector_field}, to_tsquery('{$fts_config}', :search_term)) as rank
       FROM {$table_name}
-      WHERE search_vector @@ to_tsquery('{$fts_config}', :search_term)
+      WHERE {$search_vector_field} @@ to_tsquery('{$fts_config}', :search_term)
       ORDER BY rank DESC
       LIMIT 10
     ";
@@ -550,7 +624,7 @@ class QueryBuilder {
 
     $suggestions = [];
     while ($row = $results->fetch()) {
-      // Extract meaningful suggestions from headlines.
+      // Extract meaningful suggestions from headlines
       $suggestion = strip_tags($row['suggestion']);
       $suggestion = trim($suggestion);
       
@@ -605,17 +679,17 @@ class QueryBuilder {
   protected function getQueryParameters(QueryInterface $query) {
     $params = [];
 
-    // Add full-text search parameter.
+    // Add full-text search parameter
     if ($keys = $query->getKeys()) {
       $params[':ts_query'] = $this->buildTsQuery($keys);
     }
 
-    // Add condition parameters.
+    // Add condition parameters
     if ($condition_group = $query->getConditionGroup()) {
       $this->addConditionParameters($condition_group, $params);
     }
 
-    // Add language parameters.
+    // Add language parameters
     if ($languages = $query->getLanguages()) {
       if ($languages !== [NULL]) {
         foreach ($languages as $i => $language) {
@@ -658,6 +732,9 @@ class QueryBuilder {
     $field = $condition->getField();
     $value = $condition->getValue();
     $operator = $condition->getOperator();
+
+    // Validate field name for parameter generation
+    $this->connector->validateIdentifier($field, 'field name');
 
     switch ($operator) {
       case 'IN':
@@ -708,6 +785,11 @@ class QueryBuilder {
         $params[":{$field}_ends_with"] = '%' . $value;
         break;
 
+      case 'IS NULL':
+      case 'IS NOT NULL':
+        // No parameters needed for NULL checks
+        break;
+
       default:
         $params[":{$field}"] = $value;
         break;
@@ -726,6 +808,8 @@ class QueryBuilder {
    *   The placeholder.
    */
   protected function getConditionPlaceholder($field, $value) {
+    // Validate field name for placeholder generation
+    $this->connector->validateIdentifier($field, 'field name');
     return ":{$field}";
   }
 
@@ -736,10 +820,84 @@ class QueryBuilder {
    *   The search index.
    *
    * @return string
-   *   The table name.
+   *   The safely quoted table name.
    */
   protected function getIndexTableName(IndexInterface $index) {
-    return $this->config['index_prefix'] . $index->id();
+    $index_id = $index->id();
+    
+    // Validate index ID
+    if (!preg_match('/^[a-z][a-z0-9_]*$/', $index_id)) {
+      throw new \InvalidArgumentException("Invalid index ID: {$index_id}");
+    }
+    
+    $table_name = ($this->config['index_prefix'] ?? 'search_api_') . $index_id;
+    return $this->connector->validateTableName($table_name);
+  }
+
+  /**
+   * Validates that a field exists in the index and returns safe field name.
+   *
+   * @param \Drupal\search_api\IndexInterface $index
+   *   The search index.
+   * @param string $field_id
+   *   The field ID to validate.
+   *
+   * @return string
+   *   The safely quoted field name.
+   *
+   * @throws \InvalidArgumentException
+   *   If the field is not valid for the index.
+   */
+  protected function validateIndexField(IndexInterface $index, $field_id) {
+    // System fields are always allowed
+    if (in_array($field_id, self::$systemFields)) {
+      return $this->connector->validateFieldName($field_id);
+    }
+
+    // Check if field exists in the index
+    if (!$index->getField($field_id)) {
+      throw new \InvalidArgumentException("Field '{$field_id}' does not exist in index '{$index->id()}'");
+    }
+
+    return $this->connector->validateFieldName($field_id);
+  }
+
+  /**
+   * Validates a field for use in conditions.
+   *
+   * @param \Drupal\search_api\IndexInterface $index
+   *   The search index.
+   * @param string $field_id
+   *   The field ID to validate.
+   *
+   * @return string
+   *   The safely quoted field name.
+   */
+  protected function validateConditionField(IndexInterface $index, $field_id) {
+    return $this->validateIndexField($index, $field_id);
+  }
+
+  /**
+   * Validates the FTS configuration.
+   *
+   * @return string
+   *   The validated FTS configuration.
+   */
+  protected function validateFtsConfiguration() {
+    $fts_config = $this->config['fts_configuration'] ?? 'english';
+    
+    // Allowed PostgreSQL text search configurations
+    $allowed_configs = [
+      'simple', 'english', 'french', 'german', 'spanish', 'portuguese',
+      'italian', 'dutch', 'russian', 'norwegian', 'swedish', 'danish',
+      'finnish', 'hungarian', 'romanian', 'turkish'
+    ];
+    
+    if (!in_array($fts_config, $allowed_configs)) {
+      throw new \InvalidArgumentException("Invalid FTS configuration: {$fts_config}");
+    }
+    
+    return $fts_config;
   }
 
 }

@@ -1,0 +1,11 @@
+# Schema for custom Search API data types
+
+search_api.data_type.plugin.postgresql_fulltext:
+  type: mapping
+  label: 'PostgreSQL Full-text data type'
+  mapping: {}
+
+search_api.data_type.plugin.vector:
+  type: mapping
+  label: 'Vector data type for AI embeddings'
+  mapping: {}
