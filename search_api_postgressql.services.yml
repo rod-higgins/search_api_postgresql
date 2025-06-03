@@ -43,6 +43,49 @@ services:
       - '@logger.channel.search_api_postgresql'
       - '@config.factory'
 
+  # Queue Services
+  search_api_postgresql.embedding_queue_manager:
+    class: Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
+    arguments:
+      - '@queue'
+      - '@logger.channel.search_api_postgresql'
+      - '@config.factory'
+    public: true
+    tags:
+      - { name: 'search_api_postgresql.queue_manager' }
+
+  # Queue-aware embedding service wrapper
+  search_api_postgresql.queued_embedding_service:
+    class: Drupal\search_api_postgresql\Service\QueuedEmbeddingService
+    arguments:
+      - '@search_api_postgresql.embedding_queue_manager'
+      - '@logger.channel.search_api_postgresql'
+      - '@config.factory'
+    tags:
+      - { name: 'search_api_postgresql.embedding_service' }
+
+  # Connection pool service for better performance
+  search_api_postgresql.connection_pool:
+    class: Drupal\search_api_postgresql\Database\ConnectionPool
+    arguments:
+      - '@logger.channel.search_api_postgresql'
+      - '%search_api_postgresql.connection_pool.config%'
+
+  # Performance monitoring service
+  search_api_postgresql.performance_monitor:
+    class: Drupal\search_api_postgresql\Performance\PerformanceMonitor
+    arguments:
+      - '@logger.channel.search_api_postgresql'
+      - '@config.factory'
+      - '@cache.default'
+
+  # Security validator service
+  search_api_postgresql.security_validator:
+    class: Drupal\search_api_postgresql\Security\SecurityValidator
+    arguments:
+      - '@key.repository'
+      - '@logger.channel.search_api_postgresql'
+
 parameters:
   # Default embedding cache configuration
   search_api_postgresql.embedding_cache.config:
@@ -51,3 +94,19 @@ parameters:
     cleanup_probability: 0.01  # 1% chance of cleanup on write
     enable_compression: true
     table_name: 'search_api_postgresql_embedding_cache'
+
+  # Connection pool configuration
+  search_api_postgresql.connection_pool.config:
+    max_connections: 5
+    connection_timeout: 30
+    idle_timeout: 300
+    validation_query: 'SELECT 1'
+    retry_attempts: 3
+
+  # Performance monitoring configuration
+  search_api_postgresql.performance_monitor.config:
+    enabled: true
+    slow_query_threshold: 2.0  # seconds
+    memory_usage_threshold: 128  # MB
+    cache_hit_rate_threshold: 0.8  # 80%
+    sample_rate: 0.1  # 10% of operations
