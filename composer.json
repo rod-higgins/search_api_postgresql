@@ -14,8 +14,7 @@
     "drupal/core": "^10.4 || ^11",
     "drupal/search_api": "^1.31",
     "drupal/key": "^1.16",
-    "ext-pdo_pgsql": "*",
-    "guzzlehttp/guzzle": "^7.0"
+    "ext-pdo_pgsql": "*"
   },
   "require-dev": {
     "drupal/core-dev": "^10.4 || ^11"
