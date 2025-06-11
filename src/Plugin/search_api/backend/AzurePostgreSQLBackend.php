@@ -14,7 +14,7 @@ use Drupal\search_api_postgresql\Service\HuggingFaceEmbeddingService;
  * Azure PostgreSQL backend with vector search support.
  *
  * @SearchApiBackend(
- *   id = "azure_postgresql_vector",  // ✓ Unique plugin ID
+ *   id = "postgresql_azure",
  *   label = @Translation("Azure PostgreSQL with Vector Search"),
  *   description = @Translation("Azure PostgreSQL backend with hybrid text and semantic vector search capabilities")
  * )
@@ -41,7 +41,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
         'dimension' => 1536,
       ],
       'vector_index' => [
-        'method' => 'ivfflat', // or 'hnsw'
+        'method' => 'ivfflat',
         'ivfflat_lists' => 100,
         'hnsw_m' => 16,
         'hnsw_ef_construction' => 64,
@@ -84,7 +84,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
   }
 
   /**
-   * Initializes the embedding service.
+   * Initializes the embedding service based on configuration.
    */
   protected function initializeEmbeddingService() {
     $provider = $this->configuration['vector_search']['provider'];
@@ -99,9 +99,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
         }
         break;
         
-      // Add other providers as needed
       case 'huggingface':
-        // Implementation for Hugging Face embeddings
         $api_key = $this->configuration['vector_search']['huggingface_api_key'] ?? '';
         $model = $this->configuration['vector_search']['huggingface_model'] ?? 'sentence-transformers/all-MiniLM-L6-v2';
         
@@ -111,7 +109,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
         break;
         
       case 'local':
-        // Implementation for local embedding models
+        // Implementation for local embedding models would go here
         break;
     }
   }
@@ -123,9 +121,10 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     $features = parent::getSupportedFeatures();
     
     if ($this->configuration['vector_search']['enabled']) {
-      $features[] = 'search_api_vector_search';
+      $features[] = 'search_api_azure_vector_search';
       $features[] = 'search_api_semantic_search';
       $features[] = 'search_api_hybrid_search';
+      $features[] = 'search_api_azure_ai';
     }
     
     return $features;
@@ -142,7 +141,10 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
   }
 
   /**
-   * Checks if pgvector extension is available.
+   * Checks if pgvector extension is available and creates it if possible.
+   *
+   * @throws \Drupal\search_api\SearchApiException
+   *   If pgvector is required but not available.
    */
   protected function checkPgVectorExtension() {
     if (!$this->configuration['vector_search']['enabled']) {
@@ -203,7 +205,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     $form['vector_search']['api_key'] = [
       '#type' => 'password',
       '#title' => $this->t('API Key'),
-      '#default_value' => '', // Don't show existing key
+      '#default_value' => '',
       '#description' => $this->t('API key for the embedding service. Leave empty to keep current key.'),
       '#states' => [
         'visible' => [
@@ -286,13 +288,13 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#title' => $this->t('IVFFlat Lists'),
       '#default_value' => $this->configuration['vector_index']['ivfflat_lists'],
       '#min' => 1,
-      '#max' => 32768,
-      '#description' => $this->t('Number of lists for IVFFlat index. More lists = better recall but slower search.'),
+      '#max' => 1000,
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_index][method]"]' => ['value' => 'ivfflat'],
         ],
       ],
+      '#description' => $this->t('Number of lists for IVFFlat index. More lists = better recall but slower build.'),
     ];
 
     $form['vector_index']['hnsw_m'] = [
@@ -301,26 +303,26 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#default_value' => $this->configuration['vector_index']['hnsw_m'],
       '#min' => 2,
       '#max' => 100,
-      '#description' => $this->t('Number of bi-directional links for HNSW. Higher values = better recall but more memory.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_index][method]"]' => ['value' => 'hnsw'],
         ],
       ],
+      '#description' => $this->t('Number of bi-directional links for HNSW. Higher = better recall but more memory.'),
     ];
 
     $form['vector_index']['hnsw_ef_construction'] = [
       '#type' => 'number',
-      '#title' => $this->t('HNSW EF Construction'),
+      '#title' => $this->t('HNSW ef_construction'),
       '#default_value' => $this->configuration['vector_index']['hnsw_ef_construction'],
-      '#min' => 1,
+      '#min' => 4,
       '#max' => 1000,
-      '#description' => $this->t('Size of dynamic candidate list for HNSW construction. Higher = better quality but slower build.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_index][method]"]' => ['value' => 'hnsw'],
         ],
       ],
+      '#description' => $this->t('Size of the dynamic candidate list. Higher = better index quality but slower build.'),
     ];
 
     // Hybrid search configuration
@@ -328,7 +330,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#type' => 'fieldset',
       '#title' => $this->t('Hybrid Search Configuration'),
       '#collapsible' => TRUE,
-      '#collapsed' => TRUE,
+      '#collapsed' => FALSE,
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
@@ -343,7 +345,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#min' => 0,
       '#max' => 1,
       '#step' => 0.1,
-      '#description' => $this->t('Weight for traditional full-text search scores in hybrid mode.'),
+      '#description' => $this->t('Weight for traditional text search (0-1). Must sum to 1.0 with vector weight.'),
     ];
 
     $form['hybrid_search']['vector_weight'] = [
@@ -353,7 +355,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#min' => 0,
       '#max' => 1,
       '#step' => 0.1,
-      '#description' => $this->t('Weight for vector similarity scores in hybrid mode.'),
+      '#description' => $this->t('Weight for vector similarity search (0-1). Must sum to 1.0 with text weight.'),
     ];
 
     $form['hybrid_search']['similarity_threshold'] = [
@@ -437,22 +439,28 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
   }
 
   /**
-   * Gets vector search statistics for an index.
+   * Gets Azure-specific vector search statistics for an index.
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    *
    * @return array
-   *   Vector search statistics.
+   *   Azure vector search statistics.
    */
-  public function getVectorStats(IndexInterface $index) {
+  public function getAzureVectorStats(IndexInterface $index) {
+    $stats = [
+      'azure_service' => 'azure_openai',
+      'embedding_model' => $this->configuration['vector_search']['model'] ?? 'text-embedding-ada-002',
+      'vector_dimension' => $this->configuration['vector_search']['dimension'] ?? 1536,
+      'index_method' => $this->configuration['vector_index']['method'] ?? 'ivfflat',
+    ];
+    
     if (!$this->configuration['vector_search']['enabled']) {
-      return [];
+      $stats['status'] = 'disabled';
+      return $stats;
     }
 
     $table_name = $this->getIndexTableName($index);
-    
-    $stats = [];
     
     // Count items with embeddings
     $sql = "SELECT COUNT(*) FROM {$table_name} WHERE content_embedding IS NOT NULL";
@@ -466,6 +474,8 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     
     $stats['embedding_coverage'] = $stats['total_items'] > 0 ? 
       ($stats['items_with_embeddings'] / $stats['total_items']) * 100 : 0;
+    
+    $stats['status'] = 'active';
 
     return $stats;
   }
@@ -482,5 +492,4 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
   protected function getIndexTableName(IndexInterface $index) {
     return $this->configuration['index_prefix'] . $index->id();
   }
-
 }
