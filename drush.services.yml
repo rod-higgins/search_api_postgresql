@@ -1,0 +1,5 @@
+services:
+  search_api_postgresql.commands:
+    class: \Drupal\search_api_postgresql\Commands\SearchApiPostgreSQLCommands
+    tags:
+      - { name: drush.command }

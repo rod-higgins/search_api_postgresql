@@ -1,0 +1,327 @@
+{#
+/**
+ * @file
+ * Default theme implementation for the Search API PostgreSQL embedding dashboard.
+ *
+ * Available variables:
+ * - attributes: HTML attributes for the dashboard container.
+ * - title: Dashboard title.
+ * - description: Dashboard description.
+ * - overview_stats: Array of overview statistics.
+ * - servers: Array of server data.
+ * - indexes: Array of index data.
+ * - health_checks: Array of health check results.
+ * - quick_actions: Array of quick action links.
+ *
+ * @see template_preprocess_embedding_dashboard()
+ */
+#}
+
+<div{{ attributes.addClass('search-api-postgresql-dashboard') }}>
+  
+  {# Dashboard Header #}
+  <div class="search-api-postgresql-header">
+    <h1 class="page-title">{{ title|default('Search API PostgreSQL Administration') }}</h1>
+    <p class="page-description">{{ description|default('Manage PostgreSQL search servers with AI embeddings and vector search capabilities.') }}</p>
+  </div>
+
+  {# Overview Statistics Cards #}
+  {% if overview_stats %}
+    <section class="overview-section">
+      <h2 class="section-title visually-hidden">{{ 'Overview Statistics'|t }}</h2>
+      <div class="overview-cards">
+        {% for stat in overview_stats %}
+          <div class="stat-card color-{{ stat.color|default('blue') }}" data-stat="{{ stat.key }}">
+            <div class="stat-card-header">
+              <h3 class="stat-card-title">{{ stat.title }}</h3>
+              {% if stat.icon %}
+                <div class="stat-card-icon">
+                  {{ stat.icon }}
+                </div>
+              {% endif %}
+            </div>
+            <div class="stat-card-value">{{ stat.value }}</div>
+            {% if stat.subtitle %}
+              <div class="stat-card-subtitle">{{ stat.subtitle }}</div>
+            {% endif %}
+            {% if stat.trend %}
+              <div class="stat-card-trend trend-{{ stat.trend > 0 ? 'up' : (stat.trend < 0 ? 'down' : 'neutral') }}">
+                {{ stat.trend > 0 ? '↗' : (stat.trend < 0 ? '↘' : '→') }}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {# Server Status Section #}
+  {% if servers %}
+    <section class="server-status-section">
+      <details class="server-status-details" open>
+        <summary>
+          <h2>{{ 'Server Status'|t }}</h2>
+        </summary>
+        
+        <div class="server-status-content">
+          {% if servers|length > 0 %}
+            <table class="server-status-table">
+              <thead>
+                <tr>
+                  <th>{{ 'Server'|t }}</th>
+                  <th>{{ 'Backend'|t }}</th>
+                  <th>{{ 'Status'|t }}</th>
+                  <th>{{ 'AI Embeddings'|t }}</th>
+                  <th>{{ 'Health'|t }}</th>
+                  <th>{{ 'Indexes'|t }}</th>
+                  <th>{{ 'Actions'|t }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for server in servers %}
+                  <tr class="server-row server-{{ server.status ? 'enabled' : 'disabled' }}">
+                    <td class="server-name">
+                      <a href="{{ server.url }}">{{ server.name }}</a>
+                    </td>
+                    <td class="server-backend">{{ server.backend }}</td>
+                    <td class="server-status">
+                      <span class="status-indicator status-{{ server.status ? 'enabled' : 'disabled' }}">
+                        {{ server.status ? 'Enabled'|t : 'Disabled'|t }}
+                      </span>
+                    </td>
+                    <td class="server-ai">
+                      <span class="ai-indicator ai-{{ server.ai_enabled ? 'enabled' : 'disabled' }}">
+                        {{ server.ai_enabled ? 'Yes'|t : 'No'|t }}
+                      </span>
+                    </td>
+                    <td class="server-health">
+                      <span class="health-indicator health-{{ server.health ? 'good' : 'error' }}">
+                        {{ server.health ? '✓' : '✗' }}
+                      </span>
+                    </td>
+                    <td class="server-indexes">{{ server.index_count }}</td>
+                    <td class="server-actions">
+                      <a href="{{ server.url }}" class="button button--small">{{ 'View'|t }}</a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="empty-state">
+              <p>{{ 'No PostgreSQL servers configured.'|t }}</p>
+              <a href="{{ add_server_url }}" class="button button--primary">{{ 'Add Server'|t }}</a>
+            </div>
+          {% endif %}
+        </div>
+      </details>
+    </section>
+  {% endif %}
+
+  {# Index Status Section #}
+  {% if indexes %}
+    <section class="index-status-section">
+      <details class="index-status-details" open>
+        <summary>
+          <h2>{{ 'Index Status'|t }}</h2>
+        </summary>
+        
+        <div class="index-status-content">
+          {% if indexes|length > 0 %}
+            <table class="index-status-table">
+              <thead>
+                <tr>
+                  <th>{{ 'Index'|t }}</th>
+                  <th>{{ 'Server'|t }}</th>
+                  <th>{{ 'Status'|t }}</th>
+                  <th>{{ 'Total Items'|t }}</th>
+                  <th>{{ 'With Embeddings'|t }}</th>
+                  <th>{{ 'Coverage'|t }}</th>
+                  <th>{{ 'Actions'|t }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for index in indexes %}
+                  <tr class="index-row index-{{ index.status ? 'enabled' : 'disabled' }}">
+                    <td class="index-name">
+                      <a href="{{ index.url }}">{{ index.name }}</a>
+                    </td>
+                    <td class="index-server">
+                      <a href="{{ index.server_url }}">{{ index.server_name }}</a>
+                    </td>
+                    <td class="index-status">
+                      <span class="status-indicator status-{{ index.status ? 'enabled' : 'disabled' }}">
+                        {{ index.status ? 'Enabled'|t : 'Disabled'|t }}
+                      </span>
+                    </td>
+                    <td class="index-total-items">{{ index.total_items|number_format }}</td>
+                    <td class="index-embedded-items">{{ index.embedded_items|number_format }}</td>
+                    <td class="index-coverage">
+                      <div class="coverage-indicator">
+                        <div class="coverage-bar">
+                          <div class="coverage-fill" style="width: {{ index.coverage }}%"></div>
+                        </div>
+                        <span class="coverage-text">{{ index.coverage|number_format(1) }}%</span>
+                      </div>
+                    </td>
+                    <td class="index-actions">
+                      <a href="{{ index.url }}" class="button button--small">{{ 'Manage'|t }}</a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <div class="empty-state">
+              <p>{{ 'No indexes found on PostgreSQL servers.'|t }}</p>
+            </div>
+          {% endif %}
+        </div>
+      </details>
+    </section>
+  {% endif %}
+
+  {# System Health Section #}
+  {% if health_checks %}
+    <section class="system-health-section">
+      <details class="system-health-details">
+        <summary>
+          <h2>{{ 'System Health'|t }}</h2>
+        </summary>
+        
+        <div class="health-checks">
+          {% for check in health_checks %}
+            <div class="health-check health-{{ check.status ? 'success' : 'error' }}">
+              <div class="health-check-header">
+                <span class="health-check-icon">{{ check.status ? '✓' : '✗' }}</span>
+                <span class="health-check-name">{{ check.name }}</span>
+              </div>
+              <div class="health-check-message">{{ check.message }}</div>
+              {% if check.details %}
+                <div class="health-check-details">{{ check.details }}</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </details>
+    </section>
+  {% endif %}
+
+  {# Quick Actions Section #}
+  {% if quick_actions %}
+    <section class="quick-actions-section">
+      <details class="quick-actions-details">
+        <summary>
+          <h2>{{ 'Quick Actions'|t }}</h2>
+        </summary>
+        
+        <div class="quick-actions">
+          {% for action in quick_actions %}
+            <a href="{{ action.url }}" class="quick-action-link">
+              {% if action.icon %}
+                <div class="quick-action-icon">{{ action.icon }}</div>
+              {% endif %}
+              <div class="quick-action-title">{{ action.title }}</div>
+              {% if action.description %}
+                <div class="quick-action-description">{{ action.description }}</div>
+              {% endif %}
+            </a>
+          {% endfor %}
+        </div>
+      </details>
+    </section>
+  {% endif %}
+
+  {# Real-time Update Container #}
+  <div class="real-time-updates" data-auto-refresh="{{ auto_refresh|default(true) ? 'true' : 'false' }}">
+    <div class="last-updated">
+      {{ 'Last updated:'|t }} <span class="timestamp">{{ 'now'|date('Y-m-d H:i:s') }}</span>
+    </div>
+  </div>
+
+</div>
+
+{# Additional CSS for coverage indicators #}
+<style>
+.coverage-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.coverage-bar {
+  width: 60px;
+  height: 8px;
+  background-color: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.coverage-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
+  transition: width 0.3s ease;
+}
+
+.coverage-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-width: 40px;
+}
+
+.ai-indicator.ai-enabled {
+  color: #28a745;
+  font-weight: 600;
+}
+
+.ai-indicator.ai-disabled {
+  color: #6c757d;
+}
+
+.health-indicator.health-good {
+  color: #28a745;
+  font-size: 1.2rem;
+}
+
+.health-indicator.health-error {
+  color: #dc3545;
+  font-size: 1.2rem;
+}
+
+.real-time-updates {
+  margin-top: 2rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e1e5e9;
+  text-align: center;
+}
+
+.last-updated {
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.timestamp {
+  font-weight: 600;
+  color: #495057;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #6c757d;
+}
+
+.empty-state p {
+  margin-bottom: 1rem;
+}
+
+.section-title.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(1px, 1px, 1px, 1px) !important;
+}
+</style>

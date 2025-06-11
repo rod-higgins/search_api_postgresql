@@ -1,0 +1,90 @@
+parameters:
+  search_api_postgresql.embedding_cache:
+    table_name: 'search_api_postgresql_embedding_cache'
+    default_ttl: 3600
+    max_entries: 10000
+    cleanup_probability: 0.01
+    cleanup_threshold: 0.9
+    enable_compression: true
+
+services:
+
+  search_api_postgresql.analytics:
+    class: Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService
+    arguments: ['@database', '@logger.channel.search_api_postgresql', '@config.factory']
+
+  search_api_postgresql.configuration_validator:
+    class: Drupal\search_api_postgresql\Service\ConfigurationValidationService
+    arguments: ['@logger.channel.search_api_postgresql', '@module_handler']
+
+  # Azure OpenAI Embedding Service
+  search_api_postgresql.azure_openai_embedding:
+    class: Drupal\search_api_postgresql\Service\AzureOpenAIEmbeddingService
+    # This service is instantiated manually in the backend with actual config values
+    
+  # Vector Index Manager
+  search_api_postgresql.vector_index_manager:
+    class: Drupal\search_api_postgresql\PostgreSQL\VectorIndexManager
+    # Arguments provided at runtime by the backend
+    
+  # Vector Query Builder
+  search_api_postgresql.vector_query_builder:
+    class: Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder
+    # Arguments provided at runtime by the backend
+
+  # Embedding Cache Services
+  search_api_postgresql.embedding_cache.database:
+    class: Drupal\search_api_postgresql\Cache\DatabaseEmbeddingCache
+    arguments: 
+      - '@database'
+      - '@logger.channel.search_api_postgresql'
+      - '%search_api_postgresql.embedding_cache%'
+    tags:
+      - { name: 'search_api_postgresql.embedding_cache' }
+
+  search_api_postgresql.embedding_cache.memory:
+    class: Drupal\search_api_postgresql\Cache\MemoryEmbeddingCache
+    arguments: 
+      - '@logger.channel.search_api_postgresql'
+      - '%search_api_postgresql.embedding_cache%'
+    tags:
+      - { name: 'search_api_postgresql.embedding_cache' }
+
+  # Default embedding cache service (alias to database cache)
+  search_api_postgresql.embedding_cache:
+    alias: search_api_postgresql.embedding_cache.database
+    public: true
+
+  # Cache manager service for advanced cache operations
+  search_api_postgresql.cache_manager:
+    class: Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
+    arguments:
+      - '@search_api_postgresql.embedding_cache'
+      - '@logger.channel.search_api_postgresql'
+      - '@config.factory'
+
+  # Queue Services
+  search_api_postgresql.embedding_queue_manager:
+    class: Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
+    arguments:
+      - '@queue'
+      - '@logger.channel.search_api_postgresql'
+      - '@config.factory'
+    public: true
+    tags:
+      - { name: 'search_api_postgresql.queue_manager' }
+
+  # Queue-aware embedding service wrapper
+  search_api_postgresql.queued_embedding_service:
+    class: Drupal\search_api_postgresql\Service\QueuedEmbeddingService
+    arguments:
+      - '@search_api_postgresql.embedding_queue_manager'
+      - '@logger.channel.search_api_postgresql'
+      - '@config.factory'
+    tags:
+      - { name: 'search_api_postgresql.embedding_service' }
+
+  # Logger channel
+  logger.channel.search_api_postgresql:
+    parent: logger.channel_base
+    arguments: ['search_api_postgresql']
