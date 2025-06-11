@@ -12,6 +12,8 @@ use Drupal\search_api_postgresql\PostgreSQL\IndexManager;
 use Drupal\search_api_postgresql\PostgreSQL\QueryBuilder;
 use Drupal\search_api_postgresql\PostgreSQL\FieldMapper;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\Core\Plugin\PluginFormInterface;
+use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 
 /**
  * PostgreSQL search backend.
@@ -22,7 +24,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *   description = @Translation("Index items using PostgreSQL full-text search with optional AI embeddings.")
  * )
  */
-class PostgreSQLBackend extends BackendPluginBase {
+class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface, ContainerFactoryPluginInterface {
 
   use SecureKeyManagementTrait;
 
@@ -58,8 +60,14 @@ class PostgreSQLBackend extends BackendPluginBase {
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+    /** @var static $instance */
     $instance = parent::create($container, $configuration, $plugin_id, $plugin_definition);
-    $instance->setKeyRepository($container->get('key.repository'));
+    
+    // Only set key repository if Key module is enabled
+    if ($container->has('key.repository')) {
+      $instance->keyRepository = $container->get('key.repository');
+    }
+    
     return $instance;
   }
 
@@ -111,11 +119,19 @@ class PostgreSQLBackend extends BackendPluginBase {
       $config = $this->configuration['connection'];
       
       // Use Key module for password if configured
-      if (!empty($config['password_key'])) {
-        $config['password'] = $this->getDatabasePassword();
+      if (!empty($config['password_key']) && !empty($this->keyRepository)) {
+        try {
+          $config['password'] = $this->getDatabasePassword();
+        }
+        catch (\Exception $e) {
+          // If key retrieval fails, try to use direct password
+          if (empty($config['password'])) {
+            throw $e;
+          }
+        }
       }
       
-      $this->connector = new PostgreSQLConnector($config, $this->logger);
+      $this->connector = new PostgreSQLConnector($config, $this->getLogger());
       $this->fieldMapper = new FieldMapper();
       $this->indexManager = new IndexManager($this->connector, $this->fieldMapper, $this->configuration);
       $this->queryBuilder = new QueryBuilder($this->connector, $this->fieldMapper, $this->configuration);
@@ -186,24 +202,57 @@ class PostgreSQLBackend extends BackendPluginBase {
    * {@inheritdoc}
    */
   public function addIndex(IndexInterface $index) {
-    $this->connect();
-    $this->indexManager->createIndexTable($index);
+    try {
+      $this->connect();
+      $this->indexManager->createIndexTable($index);
+    }
+    catch (\Exception $e) {
+      $this->getLogger()->error('Failed to add index @index: @message', [
+        '@index' => $index->id(),
+        '@message' => $e->getMessage(),
+      ]);
+      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
+    }
   }
 
   /**
    * {@inheritdoc}
    */
   public function updateIndex(IndexInterface $index) {
-    $this->connect();
-    $this->indexManager->updateIndexTable($index);
+    try {
+      $this->connect();
+      $this->indexManager->updateIndexTable($index);
+    }
+    catch (\Exception $e) {
+      $this->getLogger()->error('Failed to update index @index: @message', [
+        '@index' => $index->id(),
+        '@message' => $e->getMessage(),
+      ]);
+      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
+    }
   }
 
   /**
    * {@inheritdoc}
    */
   public function removeIndex($index) {
-    $this->connect();
-    $this->indexManager->dropIndexTable($index);
+    try {
+      $this->connect();
+      // Handle both IndexInterface objects and index IDs
+      if ($index instanceof IndexInterface) {
+        $this->indexManager->dropIndexTable($index);
+      }
+      else {
+        // If it's just an ID, we need to handle it differently
+        $this->indexManager->dropIndexTableById($index);
+      }
+    }
+    catch (\Exception $e) {
+      $this->getLogger()->error('Failed to remove index: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
+    }
   }
 
   /**
@@ -219,7 +268,7 @@ class PostgreSQLBackend extends BackendPluginBase {
         $indexed[] = $item->getId();
       }
       catch (\Exception $e) {
-        $this->logger->error('Failed to index item @id: @message', [
+        $this->getLogger()->error('Failed to index item @id: @message', [
           '@id' => $item->getId(),
           '@message' => $e->getMessage(),
         ]);
@@ -233,24 +282,48 @@ class PostgreSQLBackend extends BackendPluginBase {
    * {@inheritdoc}
    */
   public function deleteItems(IndexInterface $index, array $item_ids) {
-    $this->connect();
-    $this->indexManager->deleteItems($index, $item_ids);
+    try {
+      $this->connect();
+      $this->indexManager->deleteItems($index, $item_ids);
+    }
+    catch (\Exception $e) {
+      $this->getLogger()->error('Failed to delete items: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
+    }
   }
 
   /**
    * {@inheritdoc}
    */
   public function deleteAllIndexItems(IndexInterface $index, $datasource_id = NULL) {
-    $this->connect();
-    $this->indexManager->clearIndex($index, $datasource_id);
+    try {
+      $this->connect();
+      $this->indexManager->clearIndex($index, $datasource_id);
+    }
+    catch (\Exception $e) {
+      $this->getLogger()->error('Failed to clear index: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
+    }
   }
 
   /**
    * {@inheritdoc}
    */
   public function search(QueryInterface $query) {
-    $this->connect();
-    return $this->queryBuilder->search($query);
+    try {
+      $this->connect();
+      return $this->queryBuilder->search($query);
+    }
+    catch (\Exception $e) {
+      $this->getLogger()->error('Search failed: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
+    }
   }
 
   /**
@@ -294,8 +367,18 @@ class PostgreSQLBackend extends BackendPluginBase {
       '#required' => TRUE,
     ];
 
-    // Add key module fields for secure password storage
-    $this->addKeyFieldsToForm($form);
+    // Add key module fields for secure password storage if available
+    if (!empty($this->keyRepository)) {
+      $this->addKeyFieldsToForm($form);
+    }
+    else {
+      // Fallback to direct password field
+      $form['connection']['password'] = [
+        '#type' => 'password',
+        '#title' => $this->t('Password'),
+        '#description' => $this->t('The password will not be shown. Leave empty to keep current password.'),
+      ];
+    }
 
     $form['connection']['ssl_mode'] = [
       '#type' => 'select',
@@ -393,20 +476,29 @@ class PostgreSQLBackend extends BackendPluginBase {
       '#description' => $this->t('Your Azure OpenAI endpoint (e.g., https://myresource.openai.azure.com/)'),
     ];
 
-    // Add secure API key field
-    $keys = [];
-    foreach ($this->getKeyRepository()->getKeys() as $key) {
-      $keys[$key->id()] = $key->label();
-    }
+    // Add secure API key field if key repository available
+    if (!empty($this->keyRepository)) {
+      $keys = [];
+      foreach ($this->getKeyRepository()->getKeys() as $key) {
+        $keys[$key->id()] = $key->label();
+      }
 
-    $form['ai_embeddings']['azure_ai']['api_key_name'] = [
-      '#type' => 'select',
-      '#title' => $this->t('API Key'),
-      '#options' => $keys,
-      '#empty_option' => $this->t('- Select a key -'),
-      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['api_key_name'],
-      '#description' => $this->t('Select a key containing your Azure AI API key.'),
-    ];
+      $form['ai_embeddings']['azure_ai']['api_key_name'] = [
+        '#type' => 'select',
+        '#title' => $this->t('API Key'),
+        '#options' => $keys,
+        '#empty_option' => $this->t('- Select a key -'),
+        '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['api_key_name'],
+        '#description' => $this->t('Select a key containing your Azure AI API key.'),
+      ];
+    }
+    else {
+      $form['ai_embeddings']['azure_ai']['api_key'] = [
+        '#type' => 'password',
+        '#title' => $this->t('API Key'),
+        '#description' => $this->t('Your Azure AI API key. Leave empty to keep current key.'),
+      ];
+    }
 
     $form['ai_embeddings']['azure_ai']['deployment_name'] = [
       '#type' => 'textfield',
@@ -452,9 +544,12 @@ class PostgreSQLBackend extends BackendPluginBase {
     $config = $values['connection'];
     
     // Get password from key if configured
-    if (!empty($config['password_key'])) {
+    if (!empty($config['password_key']) && !empty($this->keyRepository)) {
       try {
-        $config['password'] = $this->getDatabasePassword();
+        $key = $this->getKeyRepository()->getKey($config['password_key']);
+        if ($key) {
+          $config['password'] = $key->getKeyValue();
+        }
       }
       catch (\Exception $e) {
         $form_state->setErrorByName('connection][password_key', $e->getMessage());
@@ -462,14 +557,17 @@ class PostgreSQLBackend extends BackendPluginBase {
       }
     }
     
-    try {
-      $test_connector = new PostgreSQLConnector($config, $this->logger);
-      $test_connector->testConnection();
-    }
-    catch (\Exception $e) {
-      $form_state->setErrorByName('connection', $this->t('Database connection failed: @message', [
-        '@message' => $e->getMessage(),
-      ]));
+    // Only test connection if we have a password
+    if (!empty($config['password'])) {
+      try {
+        $test_connector = new PostgreSQLConnector($config, $this->getLogger());
+        $test_connector->testConnection();
+      }
+      catch (\Exception $e) {
+        $form_state->setErrorByName('connection', $this->t('Database connection failed: @message', [
+          '@message' => $e->getMessage(),
+        ]));
+      }
     }
   }
 
@@ -480,7 +578,16 @@ class PostgreSQLBackend extends BackendPluginBase {
     $values = $form_state->getValues();
     
     // Save all configuration
-    $this->configuration = $values + $this->configuration;
+    foreach ($values as $key => $value) {
+      if (isset($this->configuration[$key])) {
+        $this->configuration[$key] = $value;
+      }
+    }
+    
+    // Handle password separately
+    if (!empty($values['connection']['password'])) {
+      $this->configuration['connection']['password'] = $values['connection']['password'];
+    }
     
     // Clear connection to force reconnect with new settings
     $this->connector = NULL;
