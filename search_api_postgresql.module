@@ -2,10 +2,11 @@
 
 /**
  * @file
- * Search API PostgreSQL module.
+ * Contains search_api_postgresql.module.
  */
 
 use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\search_api\ServerInterface;
 
 /**
  * Implements hook_help().
@@ -15,15 +16,148 @@ function search_api_postgresql_help($route_name, RouteMatchInterface $route_matc
     case 'help.page.search_api_postgresql':
       $output = '';
       $output .= '<h3>' . t('About') . '</h3>';
-      $output .= '<p>' . t('The Search API PostgreSQL module provides a backend for Search API that uses PostgreSQL native full-text search capabilities. It is optimized for Azure Database for PostgreSQL but works with any PostgreSQL 12+ installation.') . '</p>';
+      $output .= '<p>' . t('The Search API PostgreSQL module provides a PostgreSQL backend for the Search API module with native full-text search and AI-powered vector search capabilities.') . '</p>';
       $output .= '<h3>' . t('Features') . '</h3>';
       $output .= '<ul>';
-      $output .= '<li>' . t('Native PostgreSQL full-text search using tsvector and tsquery') . '</li>';
-      $output .= '<li>' . t('Support for faceted search, autocomplete, and spell checking') . '</li>';
-      $output .= '<li>' . t('Optimized for Azure Database for PostgreSQL') . '</li>';
-      $output .= '<li>' . t('Multiple language configurations') . '</li>';
-      $output .= '<li>' . t('Advanced ranking and relevance scoring') . '</li>';
+      $output .= '<li>' . t('Native PostgreSQL full-text search using tsvector') . '</li>';
+      $output .= '<li>' . t('AI-powered semantic search using OpenAI embeddings') . '</li>';
+      $output .= '<li>' . t('Hybrid search combining traditional and vector search') . '</li>';
+      $output .= '<li>' . t('Secure credential storage using Key module') . '</li>';
+      $output .= '<li>' . t('Queue-based embedding generation') . '</li>';
+      $output .= '<li>' . t('Comprehensive analytics and monitoring') . '</li>';
       $output .= '</ul>';
       return $output;
   }
+}
+
+/**
+ * Implements hook_requirements().
+ */
+function search_api_postgresql_requirements($phase) {
+  $requirements = [];
+
+  if ($phase == 'runtime') {
+    // Check PDO PostgreSQL extension
+    $requirements['search_api_postgresql_pdo'] = [
+      'title' => t('PDO PostgreSQL'),
+      'value' => extension_loaded('pdo_pgsql') ? t('Enabled') : t('Not found'),
+      'severity' => extension_loaded('pdo_pgsql') ? REQUIREMENT_OK : REQUIREMENT_ERROR,
+      'description' => extension_loaded('pdo_pgsql') ? '' : t('The PDO PostgreSQL extension is required.'),
+    ];
+
+    // Check for pgvector extension on configured servers
+    $servers = \Drupal::entityTypeManager()
+      ->getStorage('search_api_server')
+      ->loadMultiple();
+    
+    $pgvector_status = [];
+    foreach ($servers as $server) {
+      $backend = $server->getBackend();
+      if (in_array($backend->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
+        $config = $backend->getConfiguration();
+        if (!empty($config['ai_embeddings']['enabled']) || !empty($config['vector_search']['enabled'])) {
+          // Check pgvector availability
+          try {
+            $backend->checkVectorSupport();
+            $pgvector_status[$server->id()] = TRUE;
+          }
+          catch (\Exception $e) {
+            $pgvector_status[$server->id()] = FALSE;
+          }
+        }
+      }
+    }
+
+    if (!empty($pgvector_status)) {
+      $failed = array_filter($pgvector_status, function($status) { return !$status; });
+      $requirements['search_api_postgresql_pgvector'] = [
+        'title' => t('PostgreSQL pgvector extension'),
+        'value' => empty($failed) ? t('Available') : t('Missing on some servers'),
+        'severity' => empty($failed) ? REQUIREMENT_OK : REQUIREMENT_WARNING,
+        'description' => empty($failed) ? '' : t('The pgvector extension is required for AI features on servers: @servers', [
+          '@servers' => implode(', ', array_keys($failed)),
+        ]),
+      ];
+    }
+
+    // Check Key module
+    if (\Drupal::moduleHandler()->moduleExists('key')) {
+      $requirements['search_api_postgresql_key'] = [
+        'title' => t('Key module'),
+        'value' => t('Enabled'),
+        'severity' => REQUIREMENT_OK,
+      ];
+    }
+    else {
+      $requirements['search_api_postgresql_key'] = [
+        'title' => t('Key module'),
+        'value' => t('Not found'),
+        'severity' => REQUIREMENT_ERROR,
+        'description' => t('The Key module is required for secure credential storage.'),
+      ];
+    }
+  }
+
+  return $requirements;
+}
+
+/**
+ * Implements hook_cron().
+ */
+function search_api_postgresql_cron() {
+  // Process embedding queue
+  $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
+  $queue_manager->processQueue(['max_items' => 50, 'max_time' => 30]);
+
+  // Clean up old cache entries
+  $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
+  $cache_manager->performMaintenance();
+
+  // Update analytics aggregates
+  $analytics = \Drupal::service('search_api_postgresql.analytics');
+  $analytics->aggregateDailyStats();
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function search_api_postgresql_search_api_server_delete(ServerInterface $server) {
+  // Clean up server-specific data
+  $backend = $server->getBackend();
+  if (in_array($backend->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
+    // Clear analytics data for this server
+    \Drupal::database()->delete('search_api_postgresql_analytics')
+      ->condition('server_id', $server->id())
+      ->execute();
+    
+    // Clear cache entries for this server
+    \Drupal::database()->delete('search_api_postgresql_embedding_cache')
+      ->condition('server_id', $server->id())
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function search_api_postgresql_theme() {
+  return [
+    'search_api_postgresql_stat_card' => [
+      'variables' => [
+        'title' => '',
+        'value' => '',
+        'subtitle' => '',
+        'icon' => '',
+        'color' => 'blue',
+      ],
+    ],
+    'search_api_postgresql_metric_chart' => [
+      'variables' => [
+        'title' => '',
+        'data' => [],
+        'type' => 'line',
+        'unit' => '',
+      ],
+    ],
+  ];
 }

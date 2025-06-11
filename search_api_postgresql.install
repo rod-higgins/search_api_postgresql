@@ -5,209 +5,303 @@
  * Install, update and uninstall functions for the Search API PostgreSQL module.
  */
 
-use Drupal\Core\Utility\UpdateException;
-
 /**
- * Implements hook_requirements().
+ * Implements hook_schema().
  */
-function search_api_postgresql_requirements($phase) {
-  $requirements = [];
+function search_api_postgresql_schema() {
+  $schema = [];
 
-  if ($phase == 'runtime') {
-    // Check if PDO PostgreSQL is available.
-    if (!extension_loaded('pdo_pgsql')) {
-      $requirements['search_api_postgresql_pdo'] = [
-        'title' => t('Search API PostgreSQL'),
-        'value' => t('PDO PostgreSQL extension not found'),
-        'description' => t('The Search API PostgreSQL module requires the PDO PostgreSQL extension to be installed.'),
-        'severity' => REQUIREMENT_ERROR,
-      ];
-    }
-    else {
-      $requirements['search_api_postgresql_pdo'] = [
-        'title' => t('Search API PostgreSQL'),
-        'value' => t('PDO PostgreSQL extension found'),
-        'severity' => REQUIREMENT_OK,
-      ];
-    }
+  // Embedding cache table
+  $schema['search_api_postgresql_embedding_cache'] = [
+    'description' => 'Cache table for AI embeddings.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary key.',
+      ],
+      'server_id' => [
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => TRUE,
+        'description' => 'The server ID.',
+      ],
+      'text_hash' => [
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+        'description' => 'SHA256 hash of the text.',
+      ],
+      'embedding' => [
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => TRUE,
+        'description' => 'Compressed embedding vector.',
+      ],
+      'dimension' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'Vector dimension.',
+      ],
+      'model' => [
+        'type' => 'varchar',
+        'length' => 100,
+        'not null' => TRUE,
+        'description' => 'Model used to generate embedding.',
+      ],
+      'created' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'Timestamp when created.',
+      ],
+      'accessed' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'Timestamp when last accessed.',
+      ],
+      'hits' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of cache hits.',
+      ],
+    ],
+    'primary key' => ['id'],
+    'unique keys' => [
+      'server_text' => ['server_id', 'text_hash'],
+    ],
+    'indexes' => [
+      'created' => ['created'],
+      'accessed' => ['accessed'],
+      'server_model' => ['server_id', 'model'],
+    ],
+  ];
 
-    // Check if Key module is available (required for secure storage).
-    if (!\Drupal::moduleHandler()->moduleExists('key')) {
-      $requirements['search_api_postgresql_key'] = [
-        'title' => t('Search API PostgreSQL - Key Module'),
-        'value' => t('Key module not found'),
-        'description' => t('The Search API PostgreSQL module requires the Key module for secure credential storage. Please install and enable the <a href="@url">Key module</a>.', [
-          '@url' => 'https://www.drupal.org/project/key',
-        ]),
-        'severity' => REQUIREMENT_ERROR,
-      ];
-    }
-    else {
-      $requirements['search_api_postgresql_key'] = [
-        'title' => t('Search API PostgreSQL - Key Module'),
-        'value' => t('Key module found'),
-        'severity' => REQUIREMENT_OK,
-      ];
-    }
+  // Analytics table
+  $schema['search_api_postgresql_analytics'] = [
+    'description' => 'Analytics data for embedding operations.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary key.',
+      ],
+      'server_id' => [
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => TRUE,
+        'description' => 'The server ID.',
+      ],
+      'operation' => [
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => TRUE,
+        'description' => 'Operation type.',
+      ],
+      'timestamp' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'When the operation occurred.',
+      ],
+      'duration_ms' => [
+        'type' => 'int',
+        'description' => 'Duration in milliseconds.',
+      ],
+      'token_count' => [
+        'type' => 'int',
+        'description' => 'Number of tokens processed.',
+      ],
+      'cost' => [
+        'type' => 'numeric',
+        'precision' => 10,
+        'scale' => 6,
+        'description' => 'Cost in USD.',
+      ],
+      'success' => [
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 1,
+        'description' => 'Whether operation succeeded.',
+      ],
+      'error_type' => [
+        'type' => 'varchar',
+        'length' => 100,
+        'description' => 'Error type if failed.',
+      ],
+      'metadata' => [
+        'type' => 'text',
+        'serialize' => TRUE,
+        'description' => 'Additional metadata.',
+      ],
+    ],
+    'primary key' => ['id'],
+    'indexes' => [
+      'server_timestamp' => ['server_id', 'timestamp'],
+      'operation' => ['operation'],
+      'timestamp' => ['timestamp'],
+    ],
+  ];
 
-    // Check for insecure configuration.
-    $insecure_servers = search_api_postgresql_check_insecure_configuration();
-    if (!empty($insecure_servers)) {
-      $requirements['search_api_postgresql_security'] = [
-        'title' => t('Search API PostgreSQL - Security'),
-        'value' => t('Insecure configuration detected'),
-        'description' => t('The following servers have insecure credential storage: @servers. Please update your configuration to use the Key module for secure credential storage.', [
-          '@servers' => implode(', ', $insecure_servers),
-        ]),
-        'severity' => REQUIREMENT_ERROR,
-      ];
-    }
-    else {
-      $requirements['search_api_postgresql_security'] = [
-        'title' => t('Search API PostgreSQL - Security'),
-        'value' => t('Secure configuration'),
-        'description' => t('All credentials are stored securely using the Key module.'),
-        'severity' => REQUIREMENT_OK,
-      ];
-    }
-  }
+  // Cost tracking table
+  $schema['search_api_postgresql_costs'] = [
+    'description' => 'Daily cost aggregates.',
+    'fields' => [
+      'server_id' => [
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => TRUE,
+        'description' => 'The server ID.',
+      ],
+      'date' => [
+        'type' => 'varchar',
+        'length' => 10,
+        'not null' => TRUE,
+        'description' => 'Date in YYYY-MM-DD format.',
+      ],
+      'model' => [
+        'type' => 'varchar',
+        'length' => 100,
+        'not null' => TRUE,
+        'description' => 'Model name.',
+      ],
+      'operation_count' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of operations.',
+      ],
+      'token_count' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Total tokens.',
+      ],
+      'total_cost' => [
+        'type' => 'numeric',
+        'precision' => 10,
+        'scale' => 6,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Total cost in USD.',
+      ],
+    ],
+    'primary key' => ['server_id', 'date', 'model'],
+    'indexes' => [
+      'date' => ['date'],
+    ],
+  ];
 
-  return $requirements;
-}
+  // Performance metrics table
+  $schema['search_api_postgresql_metrics'] = [
+    'description' => 'Performance metrics.',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary key.',
+      ],
+      'server_id' => [
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => TRUE,
+        'description' => 'The server ID.',
+      ],
+      'metric_type' => [
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => TRUE,
+        'description' => 'Type of metric.',
+      ],
+      'timestamp' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'When measured.',
+      ],
+      'value' => [
+        'type' => 'numeric',
+        'precision' => 20,
+        'scale' => 6,
+        'not null' => TRUE,
+        'description' => 'Metric value.',
+      ],
+      'metadata' => [
+        'type' => 'text',
+        'serialize' => TRUE,
+        'description' => 'Additional context.',
+      ],
+    ],
+    'primary key' => ['id'],
+    'indexes' => [
+      'server_metric_time' => ['server_id', 'metric_type', 'timestamp'],
+      'timestamp' => ['timestamp'],
+    ],
+  ];
 
-/**
- * Check for servers with insecure configuration.
- *
- * @return array
- *   Array of server IDs with insecure configuration.
- */
-function search_api_postgresql_check_insecure_configuration() {
-  $insecure_servers = [];
-  
-  /** @var \Drupal\search_api\ServerInterface[] $servers */
-  $servers = \Drupal::entityTypeManager()
-    ->getStorage('search_api_server')
-    ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure']]);
-
-  foreach ($servers as $server) {
-    $config = $server->getBackendConfig();
-    
-    // Check for plain text password
-    if (!empty($config['connection']['password']) && empty($config['connection']['password_key'])) {
-      $insecure_servers[] = $server->id();
-      continue;
-    }
-    
-    // Check for plain text API keys
-    if (!empty($config['ai_embeddings']['azure_ai']['api_key']) && empty($config['ai_embeddings']['azure_ai']['api_key_name'])) {
-      $insecure_servers[] = $server->id();
-      continue;
-    }
-    
-    if (!empty($config['azure_embedding']['api_key']) && empty($config['azure_embedding']['api_key_name'])) {
-      $insecure_servers[] = $server->id();
-      continue;
-    }
-  }
-
-  return $insecure_servers;
-}
-
-/**
- * Update 8001: Migrate to secure key storage.
- */
-function search_api_postgresql_update_8001(&$sandbox) {
-  $messenger = \Drupal::messenger();
-  
-  // Check if Key module is installed
-  if (!\Drupal::moduleHandler()->moduleExists('key')) {
-    throw new UpdateException('The Key module must be installed before running this update. Please install the Key module first.');
-  }
-
-  $servers = \Drupal::entityTypeManager()
-    ->getStorage('search_api_server')
-    ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure']]);
-
-  if (empty($servers)) {
-    return t('No PostgreSQL servers found to update.');
-  }
-
-  $updated_servers = [];
-  $manual_migration_needed = [];
-
-  foreach ($servers as $server) {
-    $config = $server->getBackendConfig();
-    $needs_update = FALSE;
-    
-    // Check for plain text credentials that need migration
-    if (!empty($config['connection']['password']) && empty($config['connection']['password_key'])) {
-      $manual_migration_needed[] = $server->id() . ' (database password)';
-    }
-    
-    if (!empty($config['ai_embeddings']['azure_ai']['api_key']) && empty($config['ai_embeddings']['azure_ai']['api_key_name'])) {
-      $manual_migration_needed[] = $server->id() . ' (Azure AI API key)';
-    }
-    
-    if (!empty($config['azure_embedding']['api_key']) && empty($config['azure_embedding']['api_key_name'])) {
-      $manual_migration_needed[] = $server->id() . ' (Azure embedding API key)';
-    }
-
-    // Update configuration structure (remove old plain text fields)
-    if (isset($config['connection']['password'])) {
-      unset($config['connection']['password']);
-      $needs_update = TRUE;
-    }
-    
-    if (isset($config['ai_embeddings']['azure_ai']['api_key'])) {
-      unset($config['ai_embeddings']['azure_ai']['api_key']);
-      $needs_update = TRUE;
-    }
-    
-    if (isset($config['azure_embedding']['api_key'])) {
-      unset($config['azure_embedding']['api_key']);
-      $needs_update = TRUE;
-    }
-
-    if ($needs_update) {
-      $server->setBackendConfig($config);
-      $server->save();
-      $updated_servers[] = $server->id();
-    }
-  }
-
-  $message = '';
-  if (!empty($updated_servers)) {
-    $message .= t('Updated configuration for servers: @servers. ', [
-      '@servers' => implode(', ', $updated_servers),
-    ]);
-  }
-
-  if (!empty($manual_migration_needed)) {
-    $message .= t('MANUAL ACTION REQUIRED: The following servers have plain text credentials that must be migrated to the Key module: @servers. Please create appropriate keys and update the server configuration manually.', [
-      '@servers' => implode(', ', $manual_migration_needed),
-    ]);
-    $messenger->addError($message);
-  }
-  else {
-    $message .= t('All servers are using secure key storage.');
-    $messenger->addStatus($message);
-  }
-
-  return $message;
+  return $schema;
 }
 
 /**
  * Implements hook_install().
  */
 function search_api_postgresql_install() {
-  $messenger = \Drupal::messenger();
+  // Set default configuration values
+  \Drupal::configFactory()->getEditable('search_api_postgresql.settings')
+    ->set('embedding_cache.default_ttl', 604800) // 7 days
+    ->set('embedding_cache.max_entries', 100000)
+    ->set('embedding_cache.compression', TRUE)
+    ->set('queue.batch_size', 10)
+    ->set('queue.max_retries', 3)
+    ->set('analytics.retention_days', 90)
+    ->save();
+
+  // Create initial queue for embedding generation
+  $queue_factory = \Drupal::service('queue');
+  $queue_factory->get('search_api_postgresql_embedding');
   
-  if (!\Drupal::moduleHandler()->moduleExists('key')) {
-    $messenger->addWarning(t('The Key module is required for secure credential storage. Please install and enable the <a href="@url">Key module</a> before configuring PostgreSQL servers.', [
-      '@url' => 'https://www.drupal.org/project/key',
-    ]));
+  \Drupal::messenger()->addStatus(t('Search API PostgreSQL module installed successfully.'));
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function search_api_postgresql_uninstall() {
+  // Remove configuration
+  \Drupal::configFactory()->getEditable('search_api_postgresql.settings')->delete();
+  
+  // Delete queues
+  $queue_factory = \Drupal::service('queue');
+  $queue_factory->get('search_api_postgresql_embedding')->deleteQueue();
+  
+  // Note: Schema tables will be removed automatically
+}
+
+/**
+ * Add analytics and cache tables.
+ */
+function search_api_postgresql_update_8001() {
+  $schema = search_api_postgresql_schema();
+  
+  if (!db_table_exists('search_api_postgresql_embedding_cache')) {
+    db_create_table('search_api_postgresql_embedding_cache', $schema['search_api_postgresql_embedding_cache']);
   }
-  else {
-    $messenger->addStatus(t('Search API PostgreSQL installed successfully. All credentials will be stored securely using the Key module.'));
+  
+  if (!db_table_exists('search_api_postgresql_analytics')) {
+    db_create_table('search_api_postgresql_analytics', $schema['search_api_postgresql_analytics']);
+  }
+}
+
+/**
+ * Add cost tracking and metrics tables.
+ */
+function search_api_postgresql_update_8002() {
+  $schema = search_api_postgresql_schema();
+  
+  if (!db_table_exists('search_api_postgresql_costs')) {
+    db_create_table('search_api_postgresql_costs', $schema['search_api_postgresql_costs']);
+  }
+  
+  if (!db_table_exists('search_api_postgresql_metrics')) {
+    db_create_table('search_api_postgresql_metrics', $schema['search_api_postgresql_metrics']);
   }
 }

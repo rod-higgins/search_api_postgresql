@@ -1,36 +1,29 @@
 parameters:
   search_api_postgresql.embedding_cache:
     table_name: 'search_api_postgresql_embedding_cache'
-    default_ttl: 3600
-    max_entries: 10000
+    default_ttl: 604800  # 7 days
+    max_entries: 100000
     cleanup_probability: 0.01
     cleanup_threshold: 0.9
     enable_compression: true
 
 services:
-
+  # Analytics service
   search_api_postgresql.analytics:
     class: Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService
-    arguments: ['@database', '@logger.channel.search_api_postgresql', '@config.factory']
+    arguments: 
+      - '@database'
+      - '@entity_type.manager'
+      - '@config.factory'
+      - '@logger.channel.search_api_postgresql'
 
+  # Configuration validation service
   search_api_postgresql.configuration_validator:
     class: Drupal\search_api_postgresql\Service\ConfigurationValidationService
-    arguments: ['@logger.channel.search_api_postgresql', '@module_handler']
-
-  # Azure OpenAI Embedding Service
-  search_api_postgresql.azure_openai_embedding:
-    class: Drupal\search_api_postgresql\Service\AzureOpenAIEmbeddingService
-    # This service is instantiated manually in the backend with actual config values
-    
-  # Vector Index Manager
-  search_api_postgresql.vector_index_manager:
-    class: Drupal\search_api_postgresql\PostgreSQL\VectorIndexManager
-    # Arguments provided at runtime by the backend
-    
-  # Vector Query Builder
-  search_api_postgresql.vector_query_builder:
-    class: Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder
-    # Arguments provided at runtime by the backend
+    arguments: 
+      - '@entity_type.manager'
+      - '@key.repository'
+      - '@logger.channel.search_api_postgresql'
 
   # Embedding Cache Services
   search_api_postgresql.embedding_cache.database:
@@ -84,7 +77,49 @@ services:
     tags:
       - { name: 'search_api_postgresql.embedding_service' }
 
+  # Circuit breaker service
+  search_api_postgresql.circuit_breaker:
+    class: Drupal\search_api_postgresql\Service\CircuitBreakerService
+    arguments:
+      - '@state'
+      - '@logger.channel.search_api_postgresql'
+      - '@config.factory'
+
+  # Error recovery service
+  search_api_postgresql.error_recovery:
+    class: Drupal\search_api_postgresql\Service\ErrorRecoveryService
+    arguments:
+      - '@search_api_postgresql.circuit_breaker'
+      - '@queue'
+      - '@logger.channel.search_api_postgresql'
+      - '@config.factory'
+
+  # Error classification service
+  search_api_postgresql.error_classification:
+    class: Drupal\search_api_postgresql\Service\ErrorClassificationService
+    arguments:
+      - '@logger.channel.search_api_postgresql'
+
+  # Degradation message service
+  search_api_postgresql.degradation_messages:
+    class: Drupal\search_api_postgresql\Service\EnhancedDegradationMessageService
+    arguments:
+      - '@string_translation'
+      - '@config.factory'
+
   # Logger channel
   logger.channel.search_api_postgresql:
     parent: logger.channel_base
     arguments: ['search_api_postgresql']
+
+  # drush commands
+  search_api_postgresql.commands:
+    class: Drupal\search_api_postgresql\Commands\SearchApiPostgreSQLCommands
+    arguments:
+      - '@entity_type.manager'
+      - '@search_api_postgresql.analytics'
+      - '@search_api_postgresql.configuration_validator'
+      - '@search_api_postgresql.cache_manager'
+      - '@search_api_postgresql.embedding_queue_manager'
+    tags:
+      - { name: drush.command }
