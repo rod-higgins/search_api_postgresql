@@ -3,16 +3,18 @@
 namespace Drupal\search_api_postgresql\Commands;
 
 use Drush\Commands\DrushCommands;
+use Drupal\Core\DependencyInjection\ContainerInjectionInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\search_api_postgresql\Queue\EmbeddingQueueManager;
 use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
 use Drupal\search_api_postgresql\Service\ConfigurationValidationService;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Drush commands for Search API PostgreSQL.
  */
-class SearchApiPostgreSQLCommands extends DrushCommands {
+class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInjectionInterface {
 
   /**
    * The entity type manager.
@@ -24,21 +26,21 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
   /**
    * The queue manager.
    *
-   * @var \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
+   * @var \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager|null
    */
   protected $queueManager;
 
   /**
    * The cache manager.
    *
-   * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
+   * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager|null
    */
   protected $cacheManager;
 
   /**
    * The validation service.
    *
-   * @var \Drupal\search_api_postgresql\Service\ConfigurationValidationService
+   * @var \Drupal\search_api_postgresql\Service\ConfigurationValidationService|null
    */
   protected $validationService;
 
@@ -54,17 +56,31 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
    */
   public function __construct(
     EntityTypeManagerInterface $entity_type_manager,
-    EmbeddingQueueManager $queue_manager,
-    EmbeddingCacheManager $cache_manager,
-    ConfigurationValidationService $validation_service,
-    LoggerInterface $logger
+    ?EmbeddingQueueManager $queue_manager = NULL,
+    ?EmbeddingCacheManager $cache_manager = NULL,
+    ?ConfigurationValidationService $validation_service = NULL,
+    ?LoggerInterface $logger = NULL
   ) {
     parent::__construct();
     $this->entityTypeManager = $entity_type_manager;
     $this->queueManager = $queue_manager;
     $this->cacheManager = $cache_manager;
     $this->validationService = $validation_service;
-    $this->searchApiLogger = $logger;
+    $this->searchApiLogger = $logger ?: \Drupal::logger('search_api_postgresql');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container) {
+    // Use NULL if services don't exist (e.g., during uninstall)
+    return new static(
+      $container->get('entity_type.manager'),
+      $container->has('search_api_postgresql.embedding_queue_manager') ? $container->get('search_api_postgresql.embedding_queue_manager') : NULL,
+      $container->has('search_api_postgresql.cache_manager') ? $container->get('search_api_postgresql.cache_manager') : NULL,
+      $container->has('search_api_postgresql.configuration_validator') ? $container->get('search_api_postgresql.configuration_validator') : NULL,
+      $container->has('logger.channel.search_api_postgresql') ? $container->get('logger.channel.search_api_postgresql') : NULL
+    );
   }
 
   /**
@@ -77,6 +93,10 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
    *   Tests AI service for the specified server.
    */
   public function testAi($server_id) {
+    if (!$this->validationService) {
+      throw new \Exception(dt('Validation service not available. Please ensure the module is properly installed.'));
+    }
+
     $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
     
     if (!$server) {

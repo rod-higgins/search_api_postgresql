@@ -1,5 +1,11 @@
 services:
   search_api_postgresql.commands:
     class: \Drupal\search_api_postgresql\Commands\SearchApiPostgreSQLCommands
+    arguments:
+      - '@entity_type.manager'
+      - '@search_api_postgresql.embedding_queue_manager'
+      - '@search_api_postgresql.cache_manager'
+      - '@search_api_postgresql.configuration_validator'
+      - '@logger.channel.search_api_postgresql'
     tags:
       - { name: drush.command }
