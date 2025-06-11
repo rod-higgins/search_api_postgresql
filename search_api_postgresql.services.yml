@@ -1,54 +1,37 @@
 services:
-  # Core Services
+  # Logger channel
   logger.channel.search_api_postgresql:
     parent: logger.channel_base
     arguments: ['search_api_postgresql']
 
-  # PostgreSQL Connector Factory
-  search_api_postgresql.connector_factory:
-    class: Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnectorFactory
+  # Core Services
+  search_api_postgresql.connector:
+    class: Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector
     arguments:
       - '@logger.channel.search_api_postgresql'
 
-  # Field Mapper Service
   search_api_postgresql.field_mapper:
     class: Drupal\search_api_postgresql\PostgreSQL\FieldMapper
     arguments:
       - '@logger.channel.search_api_postgresql'
 
   # Embedding Services
-  search_api_postgresql.embedding_service.azure:
+  search_api_postgresql.embedding_service.azure_openai:
     class: Drupal\search_api_postgresql\Service\AzureOpenAIEmbeddingService
     arguments:
-      - '@config.factory'
-      - '@key.repository'
-      - '@logger.channel.search_api_postgresql'
+      - '' # endpoint - set dynamically
+      - '' # api_key - set dynamically
+      - '' # deployment_name - set dynamically
+      - [] # config - set dynamically
       - '@http_client'
-    tags:
-      - { name: search_api_postgresql_embedding_service, id: azure_openai }
+      - '@logger.channel.search_api_postgresql'
 
   search_api_postgresql.embedding_service.openai:
     class: Drupal\search_api_postgresql\Service\OpenAIEmbeddingService
     arguments:
-      - '@config.factory'
-      - '@key.repository'
-      - '@logger.channel.search_api_postgresql'
+      - '' # api_key - set dynamically
+      - 'text-embedding-ada-002' # model
       - '@http_client'
-    tags:
-      - { name: search_api_postgresql_embedding_service, id: openai }
-
-  # Embedding Cache Services
-  search_api_postgresql.embedding_cache:
-    class: Drupal\search_api_postgresql\Cache\DatabaseEmbeddingCache
-    arguments:
-      - '@database'
-      - '@logger.channel.search_api_postgresql'
-      - '@config.factory'
-
-  search_api_postgresql.cache_manager:
-    class: Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
-    arguments:
-      - '@search_api_postgresql.embedding_cache'
       - '@logger.channel.search_api_postgresql'
 
   # Queue Management
@@ -56,29 +39,51 @@ services:
     class: Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
     arguments:
       - '@queue'
-      - '@state'
+      - '@entity_type.manager'
       - '@logger.channel.search_api_postgresql'
       - '@config.factory'
 
-  # Circuit Breaker Service
-  search_api_postgresql.circuit_breaker:
-    class: Drupal\search_api_postgresql\CircuitBreaker\CircuitBreaker
+  search_api_postgresql.queued_embedding_service:
+    class: Drupal\search_api_postgresql\Service\QueuedEmbeddingService
     arguments:
-      - 'search_api_postgresql'
-      - '@state'
-      - '@cache.default'
+      - '@search_api_postgresql.embedding_queue_manager'
       - '@logger.channel.search_api_postgresql'
+
+  # Cache Management
+  search_api_postgresql.cache_manager:
+    class: Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
+    arguments:
+      - '@database'
+      - '@cache.default'
+      - '@config.factory'
+      - '@logger.channel.search_api_postgresql'
+
+  search_api_postgresql.database_cache:
+    class: Drupal\search_api_postgresql\Cache\DatabaseEmbeddingCache
+    arguments:
+      - '@database'
+      - '@logger.channel.search_api_postgresql'
+      - [] # config - set dynamically
+
+  search_api_postgresql.memory_cache:
+    class: Drupal\search_api_postgresql\Cache\MemoryEmbeddingCache
+    arguments:
+      - [] # config - set dynamically
 
   # Analytics and Monitoring
   search_api_postgresql.analytics:
     class: Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService
     arguments:
       - '@database'
-      - '@state'
       - '@datetime.time'
       - '@logger.channel.search_api_postgresql'
 
-  # Configuration Validation
+  search_api_postgresql.cost_calculator:
+    class: Drupal\search_api_postgresql\Service\CostCalculatorService
+    arguments:
+      - '@config.factory'
+
+  # Configuration and Validation
   search_api_postgresql.configuration_validator:
     class: Drupal\search_api_postgresql\Service\ConfigurationValidationService
     arguments:
@@ -86,10 +91,39 @@ services:
       - '@key.repository'
       - '@logger.channel.search_api_postgresql'
 
-  # Form Services
+  # Error Handling
+  search_api_postgresql.error_recovery:
+    class: Drupal\search_api_postgresql\Service\ErrorRecoveryService
+    arguments:
+      - '@logger.channel.search_api_postgresql'
+      - '@state'
+      - '@datetime.time'
+
+  search_api_postgresql.error_classification:
+    class: Drupal\search_api_postgresql\Service\ErrorClassificationService
+
+  search_api_postgresql.degradation_message:
+    class: Drupal\search_api_postgresql\Service\EnhancedDegradationMessageService
+    arguments:
+      - '@logger.channel.search_api_postgresql'
+
+  search_api_postgresql.circuit_breaker:
+    class: Drupal\search_api_postgresql\Service\CircuitBreakerService
+    arguments:
+      - '@state'
+      - '@datetime.time'
+      - '@logger.channel.search_api_postgresql'
+
+  # Queue Workers
+  plugin.manager.queue_worker:
+    class: Drupal\Core\Queue\QueueWorkerManager
+    parent: default_plugin_manager
+
+  # Forms
   search_api_postgresql.form.embedding_management:
     class: Drupal\search_api_postgresql\Form\EmbeddingManagementForm
     arguments:
+      - '@config.factory'
       - '@entity_type.manager'
       - '@search_api_postgresql.embedding_queue_manager'
       - '@search_api_postgresql.analytics'
@@ -113,6 +147,17 @@ services:
     arguments:
       - '@search_api_postgresql.embedding_queue_manager'
       - '@search_api_postgresql.analytics'
+  
+  search_api_postgresql.commands:
+    class: \Drupal\search_api_postgresql\Commands\SearchApiPostgreSQLCommands
+    arguments:
+      - '@entity_type.manager'
+      - '@search_api_postgresql.embedding_queue_manager'
+      - '@search_api_postgresql.cache_manager'
+      - '@search_api_postgresql.configuration_validator'
+      - '@logger.channel.search_api_postgresql'
+    tags:
+      - { name: drush.command }
 
   # Admin Controller
   search_api_postgresql.admin_controller:
@@ -123,18 +168,6 @@ services:
       - '@search_api_postgresql.configuration_validator'
       - '@search_api_postgresql.cache_manager'
       - '@search_api_postgresql.embedding_queue_manager'
-
-  # Drush Commands
-  search_api_postgresql.commands:
-    class: Drupal\search_api_postgresql\Commands\SearchApiPostgreSQLCommands
-    arguments:
-      - '@entity_type.manager'
-      - '@search_api_postgresql.embedding_queue_manager'
-      - '@search_api_postgresql.cache_manager'
-      - '@search_api_postgresql.configuration_validator'
-      - '@logger.channel.search_api_postgresql'
-    tags:
-      - { name: drush.command }
 
 parameters:
   search_api_postgresql.default_batch_size: 50

@@ -2,32 +2,46 @@
 
 namespace Drupal\search_api_postgresql\Plugin\QueueWorker;
 
-use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Queue\QueueWorkerBase;
-use Drupal\Core\Queue\SuspendQueueException;
-use Drupal\search_api\IndexInterface;
-use Drupal\search_api_postgresql\Queue\EmbeddingQueueManager;
-use Drupal\search_api_postgresql\Service\EmbeddingServiceInterface;
-use Psr\Log\LoggerInterface;
+use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\search_api_postgresql\Service\EmbeddingServiceInterface;
+use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
+use Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService;
+use Psr\Log\LoggerInterface;
 
 /**
  * Processes embedding generation queue items.
  *
  * @QueueWorker(
  *   id = "search_api_postgresql_embedding",
- *   title = @Translation("Search API PostgreSQL Embedding Generator"),
+ *   title = @Translation("Search API PostgreSQL Embedding Worker"),
  *   cron = {"time" = 60}
  * )
  */
 class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginInterface {
 
   /**
-   * The embedding queue manager.
+   * The entity type manager.
    *
-   * @var \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
-  protected $queueManager;
+  protected $entityTypeManager;
+
+  /**
+   * The cache manager.
+   *
+   * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
+   */
+  protected $cacheManager;
+
+  /**
+   * The analytics service.
+   *
+   * @var \Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService
+   */
+  protected $analyticsService;
 
   /**
    * The logger.
@@ -37,18 +51,23 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
   protected $logger;
 
   /**
-   * Maximum processing time per queue run (seconds).
-   *
-   * @var int
+   * Constructs an EmbeddingWorker object.
    */
-  protected $maxProcessingTime = 50;
-
-  /**
-   * Start time of current processing.
-   *
-   * @var float
-   */
-  protected $startTime;
+  public function __construct(
+    array $configuration,
+    $plugin_id,
+    $plugin_definition,
+    EntityTypeManagerInterface $entity_type_manager,
+    EmbeddingCacheManager $cache_manager,
+    EmbeddingAnalyticsService $analytics_service,
+    LoggerInterface $logger
+  ) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition);
+    $this->entityTypeManager = $entity_type_manager;
+    $this->cacheManager = $cache_manager;
+    $this->analyticsService = $analytics_service;
+    $this->logger = $logger;
+  }
 
   /**
    * {@inheritdoc}
@@ -58,30 +77,11 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
       $configuration,
       $plugin_id,
       $plugin_definition,
-      $container->get('search_api_postgresql.embedding_queue_manager'),
+      $container->get('entity_type.manager'),
+      $container->get('search_api_postgresql.cache_manager'),
+      $container->get('search_api_postgresql.analytics'),
       $container->get('logger.channel.search_api_postgresql')
     );
-  }
-
-  /**
-   * Constructs an EmbeddingWorker object.
-   *
-   * @param array $configuration
-   *   A configuration array containing information about the plugin instance.
-   * @param string $plugin_id
-   *   The plugin_id for the plugin instance.
-   * @param mixed $plugin_definition
-   *   The plugin implementation definition.
-   * @param \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager $queue_manager
-   *   The embedding queue manager.
-   * @param \Psr\Log\LoggerInterface $logger
-   *   The logger.
-   */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, EmbeddingQueueManager $queue_manager, LoggerInterface $logger) {
-    parent::__construct($configuration, $plugin_id, $plugin_definition);
-    $this->queueManager = $queue_manager;
-    $this->logger = $logger;
-    $this->startTime = microtime(TRUE);
   }
 
   /**

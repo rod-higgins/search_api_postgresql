@@ -4,11 +4,10 @@ namespace Drupal\search_api_postgresql\Commands;
 
 use Drush\Commands\DrushCommands;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
-use Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService;
-use Drupal\search_api_postgresql\Service\ConfigurationValidationService;
-use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
 use Drupal\search_api_postgresql\Queue\EmbeddingQueueManager;
-use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
+use Drupal\search_api_postgresql\Service\ConfigurationValidationService;
+use Psr\Log\LoggerInterface;
 
 /**
  * Drush commands for Search API PostgreSQL.
@@ -23,18 +22,11 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
   protected $entityTypeManager;
 
   /**
-   * The analytics service.
+   * The queue manager.
    *
-   * @var \Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService
+   * @var \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
    */
-  protected $analyticsService;
-
-  /**
-   * The validation service.
-   *
-   * @var \Drupal\search_api_postgresql\Service\ConfigurationValidationService
-   */
-  protected $validationService;
+  protected $queueManager;
 
   /**
    * The cache manager.
@@ -44,41 +36,35 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
   protected $cacheManager;
 
   /**
-   * The queue manager.
+   * The validation service.
    *
-   * @var \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
+   * @var \Drupal\search_api_postgresql\Service\ConfigurationValidationService
    */
-  protected $queueManager;
+  protected $validationService;
+
+  /**
+   * The logger.
+   *
+   * @var \Psr\Log\LoggerInterface
+   */
+  protected $searchApiLogger;
 
   /**
    * Constructs a SearchApiPostgreSQLCommands object.
    */
   public function __construct(
     EntityTypeManagerInterface $entity_type_manager,
-    EmbeddingAnalyticsService $analytics_service,
-    ConfigurationValidationService $validation_service,
+    EmbeddingQueueManager $queue_manager,
     EmbeddingCacheManager $cache_manager,
-    EmbeddingQueueManager $queue_manager
+    ConfigurationValidationService $validation_service,
+    LoggerInterface $logger
   ) {
     parent::__construct();
     $this->entityTypeManager = $entity_type_manager;
-    $this->analyticsService = $analytics_service;
-    $this->validationService = $validation_service;
-    $this->cacheManager = $cache_manager;
     $this->queueManager = $queue_manager;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public static function create(ContainerInterface $container) {
-    return new static(
-      $container->get('entity_type.manager'),
-      $container->get('search_api_postgresql.analytics'),
-      $container->get('search_api_postgresql.configuration_validator'),
-      $container->get('search_api_postgresql.cache_manager'),
-      $container->get('search_api_postgresql.embedding_queue_manager')
-    );
+    $this->cacheManager = $cache_manager;
+    $this->validationService = $validation_service;
+    $this->searchApiLogger = $logger;
   }
 
   /**
@@ -97,35 +83,55 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
       throw new \Exception(dt('Server @server not found.', ['@server' => $server_id]));
     }
 
-    $backend = $server->getBackend();
-    if (!method_exists($backend, 'testEmbeddingService')) {
-      throw new \Exception(dt('Server @server does not support AI embeddings.', ['@server' => $server_id]));
-    }
+    $this->io()->title(dt('Testing AI Service for @server', ['@server' => $server->label()]));
 
-    $this->io()->title(dt('Testing AI service for server: @server', ['@server' => $server->label()]));
-
-    try {
-      $result = $backend->testEmbeddingService();
-      
-      if ($result['success']) {
-        $this->io()->success($result['message']);
-        
-        if (!empty($result['details'])) {
-          $this->io()->section('Details');
-          $this->io()->listing($result['details']);
-        }
+    $result = $this->validationService->testAiService($server);
+    
+    if ($result['success']) {
+      $this->io()->success($result['message']);
+      if (!empty($result['details'])) {
+        $this->io()->text($result['details']);
       }
-      else {
-        $this->io()->error($result['message']);
-        
-        if (!empty($result['error'])) {
-          $this->io()->warning(dt('Error: @error', ['@error' => $result['error']]));
-        }
+    } else {
+      $this->io()->error($result['message']);
+      if (!empty($result['details'])) {
+        $this->io()->text($result['details']);
       }
     }
-    catch (\Exception $e) {
-      $this->io()->error(dt('Test failed: @message', ['@message' => $e->getMessage()]));
+  }
+
+  /**
+   * Regenerates embeddings for an index.
+   *
+   * @command search-api-postgresql:regenerate-embeddings
+   * @param string $index_id The index ID.
+   * @option batch-size Number of items per batch
+   * @option force Force regeneration of existing embeddings
+   * @aliases sap-regen
+   * @usage search-api-postgresql:regenerate-embeddings my_index --batch-size=50
+   *   Regenerates embeddings for the specified index.
+   */
+  public function regenerateEmbeddings($index_id, $options = ['batch-size' => 10, 'force' => FALSE]) {
+    $index = $this->entityTypeManager->getStorage('search_api_index')->load($index_id);
+    
+    if (!$index) {
+      throw new \Exception(dt('Index @index not found.', ['@index' => $index_id]));
     }
+
+    $server = $index->getServerInstance();
+    if (!$server) {
+      throw new \Exception(dt('No server configured for index @index.', ['@index' => $index_id]));
+    }
+
+    $this->io()->title(dt('Regenerating embeddings for @index', ['@index' => $index->label()]));
+
+    // Queue items for regeneration
+    $items_queued = $this->queueManager->queueIndexRegeneration($index_id, [
+      'batch_size' => $options['batch-size'],
+      'force' => $options['force'],
+    ]);
+
+    $this->io()->success(dt('@count items queued for embedding regeneration.', ['@count' => $items_queued]));
   }
 
   /**
@@ -144,79 +150,21 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
       throw new \Exception(dt('Index @index not found.', ['@index' => $index_id]));
     }
 
-    $server = $index->getServerInstance();
-    $backend = $server->getBackend();
-    
-    if (!method_exists($backend, 'getEmbeddingStatistics')) {
-      throw new \Exception(dt('Server does not support embedding statistics.'));
-    }
-
-    $stats = $backend->getEmbeddingStatistics($index);
-    
     $this->io()->title(dt('Embedding Statistics for @index', ['@index' => $index->label()]));
-    
-    $rows = [
-      [dt('Total Items'), number_format($stats['total_items'])],
-      [dt('Items with Embeddings'), number_format($stats['items_with_embeddings'])],
-      [dt('Coverage'), round($stats['coverage'] * 100, 2) . '%'],
-      [dt('Pending in Queue'), number_format($stats['pending_items'])],
-      [dt('Vector Dimensions'), $stats['vector_dimensions']],
-      [dt('Average Generation Time'), round($stats['avg_generation_time'], 2) . 's'],
-      [dt('Cache Hit Rate'), round($stats['cache_hit_rate'] * 100, 2) . '%'],
-    ];
-    
-    $this->io()->table(['Metric', 'Value'], $rows);
 
-    if (!empty($stats['recent_errors'])) {
-      $this->io()->section('Recent Errors');
-      foreach ($stats['recent_errors'] as $error) {
-        $this->io()->error(dt('@time: @message', [
-          '@time' => date('Y-m-d H:i:s', $error['timestamp']),
-          '@message' => $error['message'],
-        ]));
-      }
-    }
-  }
-
-  /**
-   * Processes the embedding queue.
-   *
-   * @command search-api-postgresql:queue-process
-   * @option max-items Maximum number of items to process.
-   * @option max-time Maximum time in seconds.
-   * @aliases sap-queue
-   * @usage search-api-postgresql:queue-process --max-items=100
-   *   Processes up to 100 items from the queue.
-   */
-  public function queueProcess($options = ['max-items' => 50, 'max-time' => 300]) {
-    $this->io()->title('Processing Embedding Queue');
-    
-    $start_time = time();
-    $result = $this->queueManager->processQueue([
-      'max_items' => $options['max-items'],
-      'max_time' => $options['max-time'],
-    ]);
-    
-    $duration = time() - $start_time;
-    
-    $this->io()->success(dt('Processed @processed items in @duration seconds.', [
-      '@processed' => $result['processed'],
-      '@duration' => $duration,
-    ]));
-    
-    if ($result['failed'] > 0) {
-      $this->io()->warning(dt('@failed items failed and will be retried.', [
-        '@failed' => $result['failed'],
-      ]));
-    }
-    
-    $this->io()->section('Queue Status');
-    $rows = [
-      [dt('Remaining Items'), number_format($result['remaining'])],
-      [dt('Success Rate'), round($result['success_rate'] * 100, 2) . '%'],
-      [dt('Average Processing Time'), round($result['avg_processing_time'], 2) . 's'],
+    // This would need to be implemented based on your analytics service
+    $stats = [
+      'total_items' => $index->getTrackerInstance()->getTotalItemsCount(),
+      'indexed_items' => $index->getTrackerInstance()->getIndexedItemsCount(),
+      'embeddings_generated' => 0, // Would come from analytics
+      'cache_hit_rate' => 0, // Would come from analytics
     ];
-    
+
+    $rows = [];
+    foreach ($stats as $label => $value) {
+      $rows[] = [str_replace('_', ' ', ucfirst($label)), $value];
+    }
+
     $this->io()->table(['Metric', 'Value'], $rows);
   }
 
@@ -224,184 +172,169 @@ class SearchApiPostgreSQLCommands extends DrushCommands {
    * Shows queue status.
    *
    * @command search-api-postgresql:queue-status
-   * @aliases sap-queue-status
+   * @aliases sap-queue
    * @usage search-api-postgresql:queue-status
    *   Shows the current queue status.
    */
   public function queueStatus() {
-    $status = $this->queueManager->getQueueStatus();
-    
     $this->io()->title('Embedding Queue Status');
-    
-    $rows = [
-      [dt('Total Items'), number_format($status['total_items'])],
-      [dt('Ready Items'), number_format($status['ready_items'])],
-      [dt('Failed Items'), number_format($status['failed_items'])],
-      [dt('Processing Items'), number_format($status['processing_items'])],
-      [dt('Average Wait Time'), $this->formatDuration($status['avg_wait_time'])],
-      [dt('Oldest Item Age'), $this->formatDuration($status['oldest_item_age'])],
-    ];
-    
-    $this->io()->table(['Metric', 'Value'], $rows);
 
-    if (!empty($status['by_index'])) {
-      $this->io()->section('Items by Index');
-      $index_rows = [];
-      foreach ($status['by_index'] as $index_id => $count) {
-        $index = $this->entityTypeManager->getStorage('search_api_index')->load($index_id);
-        $index_rows[] = [$index ? $index->label() : $index_id, number_format($count)];
+    $stats = $this->queueManager->getQueueStats();
+    
+    if (!empty($stats['error'])) {
+      $this->io()->error($stats['error']);
+      return;
+    }
+
+    $rows = [
+      ['Queue Name', $stats['queue_name']],
+      ['Pending Items', $stats['items_pending']],
+      ['Enabled', $stats['config']['enabled'] ? 'Yes' : 'No'],
+      ['Batch Size', $stats['config']['batch_size'] ?? 'Not set'],
+    ];
+
+    $this->io()->table(['Property', 'Value'], $rows);
+
+    if (!empty($stats['operation_distribution'])) {
+      $this->io()->section('Operation Distribution');
+      $rows = [];
+      foreach ($stats['operation_distribution'] as $op => $count) {
+        $rows[] = [$op, $count];
       }
-      $this->io()->table(['Index', 'Items'], $index_rows);
+      $this->io()->table(['Operation', 'Count'], $rows);
     }
   }
 
   /**
-   * Clears the embedding cache.
+   * Processes queue items.
    *
-   * @command search-api-postgresql:cache-clear
-   * @param string $server_id The server ID (optional).
-   * @aliases sap-cache-clear
-   * @usage search-api-postgresql:cache-clear my_server
-   *   Clears cache for the specified server.
+   * @command search-api-postgresql:queue-process
+   * @option max-items Maximum items to process
+   * @option time-limit Time limit in seconds
+   * @aliases sap-process
+   * @usage search-api-postgresql:queue-process --max-items=50
+   *   Processes up to 50 queue items.
    */
-  public function cacheClear($server_id = NULL) {
-    if ($server_id) {
-      $this->io()->title(dt('Clearing cache for server: @server', ['@server' => $server_id]));
-      $this->cacheManager->clearByServer($server_id);
-    }
-    else {
-      if (!$this->io()->confirm(dt('Clear ALL embedding caches? This cannot be undone.'))) {
-        return;
+  public function queueProcess($options = ['max-items' => 50, 'time-limit' => 60]) {
+    $this->io()->title('Processing Embedding Queue');
+
+    $result = $this->queueManager->processQueue([
+      'max_items' => $options['max-items'],
+      'max_time' => $options['time-limit'],
+    ]);
+
+    $this->io()->success(dt('Processed @processed items, @failed failed.', [
+      '@processed' => $result['processed'],
+      '@failed' => $result['failed'],
+    ]));
+
+    if (!empty($result['errors'])) {
+      $this->io()->warning('Some items failed:');
+      foreach ($result['errors'] as $error) {
+        $this->io()->text('- ' . $error);
       }
-      $this->io()->title('Clearing all embedding caches');
-      $this->cacheManager->clearAll();
     }
-    
-    $this->io()->success('Cache cleared successfully.');
   }
 
   /**
    * Shows cache statistics.
    *
    * @command search-api-postgresql:cache-stats
-   * @param string $server_id The server ID (optional).
-   * @aliases sap-cache-stats
-   * @usage search-api-postgresql:cache-stats
-   *   Shows cache statistics.
-   */
-  public function cacheStats($server_id = NULL) {
-    $stats = $this->cacheManager->getStatistics($server_id);
-    
-    $this->io()->title($server_id ? 
-      dt('Cache Statistics for @server', ['@server' => $server_id]) : 
-      'Cache Statistics (All Servers)'
-    );
-    
-    $rows = [
-      [dt('Total Entries'), number_format($stats['total_entries'])],
-      [dt('Total Size'), $this->formatBytes($stats['total_size'])],
-      [dt('Hit Rate'), round($stats['hit_rate'] * 100, 2) . '%'],
-      [dt('Hits'), number_format($stats['hits'])],
-      [dt('Misses'), number_format($stats['misses'])],
-      [dt('Average Entry Size'), $this->formatBytes($stats['avg_entry_size'])],
-      [dt('Oldest Entry'), date('Y-m-d H:i:s', $stats['oldest_entry'])],
-      [dt('Newest Entry'), date('Y-m-d H:i:s', $stats['newest_entry'])],
-    ];
-    
-    $this->io()->table(['Metric', 'Value'], $rows);
-
-    if (!empty($stats['by_model'])) {
-      $this->io()->section('Entries by Model');
-      $model_rows = [];
-      foreach ($stats['by_model'] as $model => $count) {
-        $model_rows[] = [$model, number_format($count)];
-      }
-      $this->io()->table(['Model', 'Entries'], $model_rows);
-    }
-  }
-
-  /**
-   * Performs a comprehensive health check.
-   *
-   * @command search-api-postgresql:health-check
    * @param string $server_id The server ID.
-   * @aliases sap-health
-   * @usage search-api-postgresql:health-check my_server
-   *   Runs health check for the specified server.
+   * @aliases sap-cache
+   * @usage search-api-postgresql:cache-stats my_server
+   *   Shows cache statistics for the server.
    */
-  public function healthCheck($server_id) {
+  public function cacheStats($server_id) {
     $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
     
     if (!$server) {
       throw new \Exception(dt('Server @server not found.', ['@server' => $server_id]));
     }
 
-    $this->io()->title(dt('Health Check for @server', ['@server' => $server->label()]));
+    $this->io()->title(dt('Cache Statistics for @server', ['@server' => $server->label()]));
 
-    $health = $this->validationService->checkServerHealth($server);
+    $stats = $this->cacheManager->getStatistics($server_id);
+
+    $rows = [
+      ['Total Entries', $stats['total_entries']],
+      ['Total Size', format_size($stats['total_size'])],
+      ['Hit Rate', sprintf('%.2f%%', $stats['hit_rate'] * 100)],
+      ['Avg Entry Size', format_size($stats['avg_entry_size'])],
+      ['Oldest Entry', $stats['oldest_entry'] ? date('Y-m-d H:i:s', $stats['oldest_entry']) : 'N/A'],
+    ];
+
+    $this->io()->table(['Metric', 'Value'], $rows);
+  }
+
+  /**
+   * Clears the embedding cache.
+   *
+   * @command search-api-postgresql:cache-clear
+   * @param string $server_id The server ID.
+   * @option confirm Skip confirmation
+   * @aliases sap-cache-clear
+   * @usage search-api-postgresql:cache-clear my_server
+   *   Clears the cache for the specified server.
+   */
+  public function cacheClear($server_id, $options = ['confirm' => FALSE]) {
+    $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
     
-    // Overall status
-    $status_icon = $health['overall']['healthy'] ? '✓' : '✗';
-    $status_text = $health['overall']['healthy'] ? 'HEALTHY' : 'UNHEALTHY';
-    $status_style = $health['overall']['healthy'] ? 'success' : 'error';
-    
-    $this->io()->section('Overall Status');
-    $this->io()->writeln("<$status_style>$status_icon $status_text</$status_style>");
-    
-    // Individual checks
-    $this->io()->section('Component Status');
-    $rows = [];
-    foreach ($health['checks'] as $check => $result) {
-      $icon = $result['success'] ? '✓' : '✗';
-      $rows[] = [
-        $icon,
-        $result['title'],
-        $result['success'] ? 'OK' : 'FAILED',
-        $result['message'],
-      ];
+    if (!$server) {
+      throw new \Exception(dt('Server @server not found.', ['@server' => $server_id]));
     }
-    
-    $this->io()->table(['', 'Component', 'Status', 'Details'], $rows);
 
-    // Recommendations
-    if (!empty($health['recommendations'])) {
-      $this->io()->section('Recommendations');
-      foreach ($health['recommendations'] as $recommendation) {
-        $this->io()->warning($recommendation);
+    if (!$options['confirm']) {
+      $confirm = $this->io()->confirm(dt('Are you sure you want to clear the cache for @server?', [
+        '@server' => $server->label(),
+      ]));
+      
+      if (!$confirm) {
+        $this->io()->text('Operation cancelled.');
+        return;
       }
     }
+
+    $count = $this->cacheManager->clear($server_id);
+    $this->io()->success(dt('Cleared @count cache entries.', ['@count' => $count]));
   }
 
   /**
-   * Formats bytes to human readable format.
+   * Validates server configuration.
+   *
+   * @command search-api-postgresql:validate
+   * @param string $server_id The server ID.
+   * @aliases sap-validate
+   * @usage search-api-postgresql:validate my_server
+   *   Validates the server configuration.
    */
-  protected function formatBytes($bytes, $precision = 2) {
-    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  public function validate($server_id) {
+    $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
     
-    $bytes = max($bytes, 0);
-    $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
-    $pow = min($pow, count($units) - 1);
-    
-    $bytes /= pow(1024, $pow);
-    
-    return round($bytes, $precision) . ' ' . $units[$pow];
-  }
+    if (!$server) {
+      throw new \Exception(dt('Server @server not found.', ['@server' => $server_id]));
+    }
 
-  /**
-   * Formats duration to human readable format.
-   */
-  protected function formatDuration($seconds) {
-    if ($seconds < 60) {
-      return $seconds . 's';
+    $this->io()->title(dt('Validating @server', ['@server' => $server->label()]));
+
+    $health_check = $this->validationService->performHealthCheck($server);
+
+    foreach ($health_check['tests'] as $test_name => $result) {
+      if ($result['success']) {
+        $this->io()->success($test_name . ': ' . $result['message']);
+      } else {
+        $this->io()->error($test_name . ': ' . $result['message']);
+      }
+      
+      if (!empty($result['details'])) {
+        $this->io()->text('  ' . $result['details']);
+      }
     }
-    elseif ($seconds < 3600) {
-      return round($seconds / 60, 1) . 'm';
-    }
-    elseif ($seconds < 86400) {
-      return round($seconds / 3600, 1) . 'h';
-    }
-    else {
-      return round($seconds / 86400, 1) . 'd';
+
+    if ($health_check['overall_health']) {
+      $this->io()->success('Overall: Server configuration is valid.');
+    } else {
+      $this->io()->error('Overall: Server configuration has issues.');
     }
   }
 }
