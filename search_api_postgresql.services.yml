@@ -34,20 +34,21 @@ services:
       - '@http_client'
       - '@logger.channel.search_api_postgresql'
 
-  # Queue Management
+  # Queue Management - FIXED
   search_api_postgresql.embedding_queue_manager:
     class: Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
     arguments:
       - '@queue'
-      - '@entity_type.manager'
-      - '@logger.channel.search_api_postgresql'
+      - '@logger.channel.search_api_postgresql' 
       - '@config.factory'
 
+  # Queued Embedding Service
   search_api_postgresql.queued_embedding_service:
     class: Drupal\search_api_postgresql\Service\QueuedEmbeddingService
     arguments:
       - '@search_api_postgresql.embedding_queue_manager'
       - '@logger.channel.search_api_postgresql'
+      - '@config.factory'
 
   # Cache Management
   search_api_postgresql.cache_manager:
@@ -114,11 +115,6 @@ services:
       - '@datetime.time'
       - '@logger.channel.search_api_postgresql'
 
-  # Queue Workers
-  plugin.manager.queue_worker:
-    class: Drupal\Core\Queue\QueueWorkerManager
-    parent: default_plugin_manager
-
   # Forms
   search_api_postgresql.form.embedding_management:
     class: Drupal\search_api_postgresql\Form\EmbeddingManagementForm
@@ -148,6 +144,7 @@ services:
       - '@search_api_postgresql.embedding_queue_manager'
       - '@search_api_postgresql.analytics'
   
+  # Drush Commands
   search_api_postgresql.commands:
     class: \Drupal\search_api_postgresql\Commands\SearchApiPostgreSQLCommands
     arguments:
