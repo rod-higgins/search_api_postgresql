@@ -3,221 +3,419 @@
 namespace Drupal\search_api_postgresql\Plugin\search_api\backend;
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\search_api\Backend\BackendPluginBase;
 use Drupal\search_api\IndexInterface;
-use Drupal\search_api\SearchApiException;
-use Drupal\search_api_postgresql\PostgreSQL\VectorIndexManager;
-use Drupal\search_api_postgresql\Service\OpenAIEmbeddingService;
+use Drupal\search_api\Query\QueryInterface;
+use Drupal\search_api\Item\ItemInterface;
+use Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector;
+use Drupal\search_api_postgresql\PostgreSQL\IndexManager;
+use Drupal\search_api_postgresql\PostgreSQL\QueryBuilder;
+use Drupal\search_api_postgresql\PostgreSQL\FieldMapper;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Enhanced PostgreSQL backend with vector search support.
+ * PostgreSQL search backend.
  *
  * @SearchApiBackend(
- *   id = "postgresql_vector",
- *   label = @Translation("PostgreSQL with Vector Search"),
- *   description = @Translation("PostgreSQL backend with hybrid text and semantic vector search capabilities")
+ *   id = "postgresql",
+ *   label = @Translation("PostgreSQL"),
+ *   description = @Translation("Index items using PostgreSQL full-text search with optional AI embeddings.")
  * )
  */
-class PostgreSQLVectorBackend extends PostgreSQLBackend {
+class PostgreSQLBackend extends BackendPluginBase {
+
+  use SecureKeyManagementTrait;
 
   /**
-   * The embedding service.
+   * The database connector.
    *
-   * @var \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface
+   * @var \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector
    */
-  protected $embeddingService;
+  protected $connector;
+
+  /**
+   * The index manager.
+   *
+   * @var \Drupal\search_api_postgresql\PostgreSQL\IndexManager
+   */
+  protected $indexManager;
+
+  /**
+   * The query builder.
+   *
+   * @var \Drupal\search_api_postgresql\PostgreSQL\QueryBuilder
+   */
+  protected $queryBuilder;
+
+  /**
+   * The field mapper.
+   *
+   * @var \Drupal\search_api_postgresql\PostgreSQL\FieldMapper
+   */
+  protected $fieldMapper;
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+    $instance = parent::create($container, $configuration, $plugin_id, $plugin_definition);
+    $instance->setKeyRepository($container->get('key.repository'));
+    return $instance;
+  }
 
   /**
    * {@inheritdoc}
    */
   public function defaultConfiguration() {
-    return parent::defaultConfiguration() + [
-      'vector_search' => [
+    return [
+      'connection' => [
+        'host' => 'localhost',
+        'port' => 5432,
+        'database' => '',
+        'username' => '',
+        'password' => '',
+        'password_key' => '',
+        'ssl_mode' => 'prefer',
+        'options' => [],
+      ],
+      'index_prefix' => 'search_api_',
+      'fts_configuration' => 'english',
+      'debug' => FALSE,
+      'batch_size' => 50,
+      'ai_embeddings' => [
         'enabled' => FALSE,
-        'provider' => 'openai',
-        'api_key' => '',
-        'model' => 'text-embedding-ada-002',
-        'dimension' => 1536,
-      ],
-      'vector_index' => [
-        'method' => 'ivfflat', // or 'hnsw'
-        'ivfflat_lists' => 100,
-        'hnsw_m' => 16,
-        'hnsw_ef_construction' => 64,
-      ],
-      'hybrid_search' => [
-        'text_weight' => 0.7,
-        'vector_weight' => 0.3,
-        'similarity_threshold' => 0.1,
+        'azure_ai' => [
+          'endpoint' => '',
+          'api_key' => '',
+          'api_key_name' => '',
+          'deployment_name' => '',
+          'api_version' => '2024-02-01',
+          'model' => 'text-embedding-ada-002',
+          'dimensions' => 1536,
+          'batch_size' => 16,
+          'timeout' => 30,
+          'retry_attempts' => 3,
+          'retry_delay' => 1000,
+        ],
       ],
     ];
   }
 
   /**
-   * {@inheritdoc}
+   * Establishes database connection.
+   *
+   * @throws \Drupal\search_api\SearchApiException
    */
   protected function connect() {
     if (!$this->connector) {
-      parent::connect();
+      $config = $this->configuration['connection'];
       
-      // Initialize embedding service if enabled
-      if ($this->configuration['vector_search']['enabled']) {
-        $this->initializeEmbeddingService();
+      // Use Key module for password if configured
+      if (!empty($config['password_key'])) {
+        $config['password'] = $this->getDatabasePassword();
       }
       
-      // FIXED: Use vector-enhanced managers with correct constructor parameters
-      $this->indexManager = new VectorIndexManager(
-        $this->connector, 
-        $this->fieldMapper, 
-        $this->configuration,  // Pass $this->configuration to match constructor
-        $this->embeddingService
-      );
-      
-      // VectorQueryBuilder is defined in the same file as VectorIndexManager
-      $vector_query_builder_class = '\Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder';
-      if (class_exists($vector_query_builder_class)) {
-        $this->queryBuilder = new $vector_query_builder_class(
-          $this->connector, 
-          $this->fieldMapper, 
-          $this->configuration,  // Pass $this->configuration to match constructor
-          $this->embeddingService
-        );
-      } else {
-        // Fallback to regular QueryBuilder if VectorQueryBuilder doesn't exist
-        $this->queryBuilder = new \Drupal\search_api_postgresql\PostgreSQL\QueryBuilder(
-          $this->connector, 
-          $this->fieldMapper, 
-          $this->configuration
-        );
-      }
+      $this->connector = new PostgreSQLConnector($config, $this->logger);
+      $this->fieldMapper = new FieldMapper();
+      $this->indexManager = new IndexManager($this->connector, $this->fieldMapper, $this->configuration);
+      $this->queryBuilder = new QueryBuilder($this->connector, $this->fieldMapper, $this->configuration);
     }
   }
 
   /**
-   * Initializes the embedding service.
+   * {@inheritdoc}
    */
-  protected function initializeEmbeddingService() {
-    $provider = $this->configuration['vector_search']['provider'];
-    
-    switch ($provider) {
-      case 'openai':
-        $api_key = $this->configuration['vector_search']['api_key'];
-        $model = $this->configuration['vector_search']['model'];
-        
-        if ($api_key && class_exists('\Drupal\search_api_postgresql\Service\OpenAIEmbeddingService')) {
-          $this->embeddingService = new OpenAIEmbeddingService($api_key, $model);
-        }
-        break;
-        
-      // Add other providers as needed
-      case 'huggingface':
-        // Implementation for Hugging Face embeddings
-        break;
-        
-      case 'local':
-        // Implementation for local embedding models
-        break;
+  public function viewSettings() {
+    $info = [];
+
+    $info[] = [
+      'label' => $this->t('Host'),
+      'info' => $this->configuration['connection']['host'],
+    ];
+
+    $info[] = [
+      'label' => $this->t('Database'),
+      'info' => $this->configuration['connection']['database'],
+    ];
+
+    $info[] = [
+      'label' => $this->t('FTS Configuration'),
+      'info' => $this->configuration['fts_configuration'],
+    ];
+
+    if ($this->configuration['ai_embeddings']['enabled']) {
+      $info[] = [
+        'label' => $this->t('AI Embeddings'),
+        'info' => $this->t('Enabled (Azure AI)'),
+      ];
     }
+
+    return $info;
   }
 
   /**
    * {@inheritdoc}
    */
   public function getSupportedFeatures() {
-    $features = parent::getSupportedFeatures();
-    
-    if ($this->configuration['vector_search']['enabled']) {
-      $features[] = 'search_api_vector_search';
-      $features[] = 'search_api_semantic_search';
-      $features[] = 'search_api_hybrid_search';
-    }
-    
-    return $features;
+    return [
+      'search_api_facets',
+      'search_api_autocomplete',
+      'search_api_spellcheck',
+      'search_api_mlt',
+      'search_api_random_sort',
+      'search_api_grouping',
+    ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function supportsDataType($type) {
+    return in_array($type, [
+      'text',
+      'string',
+      'integer',
+      'decimal',
+      'date',
+      'boolean',
+      'postgresql_fulltext',
+    ]);
   }
 
   /**
    * {@inheritdoc}
    */
   public function addIndex(IndexInterface $index) {
-    // Check if pgvector extension is installed
-    $this->checkPgVectorExtension();
-    
-    parent::addIndex($index);
+    $this->connect();
+    $this->indexManager->createIndexTable($index);
   }
 
   /**
-   * Checks if pgvector extension is available.
+   * {@inheritdoc}
    */
-  protected function checkPgVectorExtension() {
-    if (!$this->configuration['vector_search']['enabled']) {
-      return;
-    }
+  public function updateIndex(IndexInterface $index) {
+    $this->connect();
+    $this->indexManager->updateIndexTable($index);
+  }
 
-    try {
-      $this->connect();
-      $sql = "SELECT 1 FROM pg_extension WHERE extname = 'vector'";
-      $result = $this->connector->executeQuery($sql);
-      
-      if (!$result->fetchColumn()) {
-        // Try to create the extension
-        $this->connector->executeQuery("CREATE EXTENSION IF NOT EXISTS vector");
+  /**
+   * {@inheritdoc}
+   */
+  public function removeIndex($index) {
+    $this->connect();
+    $this->indexManager->dropIndexTable($index);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function indexItems(IndexInterface $index, array $items) {
+    $this->connect();
+    $indexed = [];
+
+    foreach ($items as $item) {
+      try {
+        $this->indexManager->indexItem($item, $index);
+        $indexed[] = $item->getId();
+      }
+      catch (\Exception $e) {
+        $this->logger->error('Failed to index item @id: @message', [
+          '@id' => $item->getId(),
+          '@message' => $e->getMessage(),
+        ]);
       }
     }
-    catch (\Exception $e) {
-      throw new SearchApiException('pgvector extension is required for vector search: ' . $e->getMessage());
-    }
+
+    return $indexed;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteItems(IndexInterface $index, array $item_ids) {
+    $this->connect();
+    $this->indexManager->deleteItems($index, $item_ids);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteAllIndexItems(IndexInterface $index, $datasource_id = NULL) {
+    $this->connect();
+    $this->indexManager->clearIndex($index, $datasource_id);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function search(QueryInterface $query) {
+    $this->connect();
+    return $this->queryBuilder->search($query);
   }
 
   /**
    * {@inheritdoc}
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
-    $form = parent::buildConfigurationForm($form, $form_state);
-
-    // Vector search configuration
-    $form['vector_search'] = [
-      '#type' => 'fieldset',
-      '#title' => $this->t('Vector Search Configuration'),
-      '#collapsible' => TRUE,
-      '#collapsed' => !$this->configuration['vector_search']['enabled'],
+    // Connection settings
+    $form['connection'] = [
+      '#type' => 'details',
+      '#title' => $this->t('PostgreSQL Connection'),
+      '#open' => TRUE,
     ];
 
-    $form['vector_search']['enabled'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Enable Vector Search'),
-      '#default_value' => $this->configuration['vector_search']['enabled'],
-      '#description' => $this->t('Enable semantic vector search capabilities. Requires pgvector extension.'),
+    $form['connection']['host'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Host'),
+      '#default_value' => $this->configuration['connection']['host'],
+      '#required' => TRUE,
     ];
 
-    $form['vector_search']['provider'] = [
+    $form['connection']['port'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Port'),
+      '#default_value' => $this->configuration['connection']['port'],
+      '#min' => 1,
+      '#max' => 65535,
+      '#required' => TRUE,
+    ];
+
+    $form['connection']['database'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Database'),
+      '#default_value' => $this->configuration['connection']['database'],
+      '#required' => TRUE,
+    ];
+
+    $form['connection']['username'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Username'),
+      '#default_value' => $this->configuration['connection']['username'],
+      '#required' => TRUE,
+    ];
+
+    // Add key module fields for secure password storage
+    $this->addKeyFieldsToForm($form);
+
+    $form['connection']['ssl_mode'] = [
       '#type' => 'select',
-      '#title' => $this->t('Embedding Provider'),
+      '#title' => $this->t('SSL Mode'),
       '#options' => [
-        'openai' => $this->t('OpenAI'),
-        'huggingface' => $this->t('Hugging Face'),
-        'local' => $this->t('Local Model'),
+        'disable' => $this->t('Disable'),
+        'allow' => $this->t('Allow'),
+        'prefer' => $this->t('Prefer'),
+        'require' => $this->t('Require'),
+        'verify-ca' => $this->t('Verify CA'),
+        'verify-full' => $this->t('Verify Full'),
       ],
-      '#default_value' => $this->configuration['vector_search']['provider'],
+      '#default_value' => $this->configuration['connection']['ssl_mode'],
+      '#description' => $this->t('SSL connection mode. Use "require" or higher for production.'),
+    ];
+
+    // Index settings
+    $form['index_settings'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Index Settings'),
+      '#open' => TRUE,
+    ];
+
+    $form['index_settings']['index_prefix'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Index table prefix'),
+      '#default_value' => $this->configuration['index_prefix'],
+      '#description' => $this->t('Prefix for index tables in the database.'),
+    ];
+
+    $form['index_settings']['fts_configuration'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Full-text search configuration'),
+      '#options' => [
+        'simple' => $this->t('Simple'),
+        'english' => $this->t('English'),
+        'spanish' => $this->t('Spanish'),
+        'french' => $this->t('French'),
+        'german' => $this->t('German'),
+        'italian' => $this->t('Italian'),
+        'portuguese' => $this->t('Portuguese'),
+        'russian' => $this->t('Russian'),
+        'arabic' => $this->t('Arabic'),
+        'danish' => $this->t('Danish'),
+        'dutch' => $this->t('Dutch'),
+        'finnish' => $this->t('Finnish'),
+        'hungarian' => $this->t('Hungarian'),
+        'norwegian' => $this->t('Norwegian'),
+        'romanian' => $this->t('Romanian'),
+        'swedish' => $this->t('Swedish'),
+        'turkish' => $this->t('Turkish'),
+      ],
+      '#default_value' => $this->configuration['fts_configuration'],
+      '#description' => $this->t('PostgreSQL text search configuration to use.'),
+    ];
+
+    $form['index_settings']['batch_size'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Batch size'),
+      '#default_value' => $this->configuration['batch_size'],
+      '#min' => 1,
+      '#max' => 1000,
+      '#description' => $this->t('Number of items to index per batch.'),
+    ];
+
+    // AI Embeddings (Optional)
+    $form['ai_embeddings'] = [
+      '#type' => 'details',
+      '#title' => $this->t('AI Text Embeddings (Optional)'),
+      '#open' => $this->configuration['ai_embeddings']['enabled'],
+      '#description' => $this->t('Enable semantic search using AI-generated text embeddings.'),
+    ];
+
+    $form['ai_embeddings']['enabled'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable AI text embeddings'),
+      '#default_value' => $this->configuration['ai_embeddings']['enabled'],
+      '#description' => $this->t('Requires pgvector extension and Azure AI services.'),
+    ];
+
+    // Azure AI settings
+    $form['ai_embeddings']['azure_ai'] = [
+      '#type' => 'container',
       '#states' => [
         'visible' => [
-          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
+          ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
         ],
       ],
     ];
 
-    $form['vector_search']['api_key'] = [
-      '#type' => 'password',
+    $form['ai_embeddings']['azure_ai']['endpoint'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Azure AI Services Endpoint'),
+      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['endpoint'],
+      '#description' => $this->t('Your Azure OpenAI endpoint (e.g., https://myresource.openai.azure.com/)'),
+    ];
+
+    // Add secure API key field
+    $keys = [];
+    foreach ($this->getKeyRepository()->getKeys() as $key) {
+      $keys[$key->id()] = $key->label();
+    }
+
+    $form['ai_embeddings']['azure_ai']['api_key_name'] = [
+      '#type' => 'select',
       '#title' => $this->t('API Key'),
-      '#default_value' => '', // Don't show existing key
-      '#description' => $this->t('API key for the embedding service. Leave empty to keep current key.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
-          ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'openai'],
-        ],
-      ],
+      '#options' => $keys,
+      '#empty_option' => $this->t('- Select a key -'),
+      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['api_key_name'],
+      '#description' => $this->t('Select a key containing your Azure AI API key.'),
     ];
 
-    $form['vector_search']['model'] = [
+    $form['ai_embeddings']['azure_ai']['deployment_name'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Deployment Name'),
+      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['deployment_name'],
+      '#description' => $this->t('Your Azure OpenAI deployment name for embeddings.'),
+    ];
+
+    $form['ai_embeddings']['azure_ai']['model'] = [
       '#type' => 'select',
       '#title' => $this->t('Embedding Model'),
       '#options' => [
@@ -225,122 +423,21 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         'text-embedding-3-small' => $this->t('text-embedding-3-small (1536 dimensions)'),
         'text-embedding-3-large' => $this->t('text-embedding-3-large (3072 dimensions)'),
       ],
-      '#default_value' => $this->configuration['vector_search']['model'],
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
-          ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'openai'],
-        ],
-      ],
+      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['model'],
     ];
 
-    // Vector index configuration
-    $form['vector_index'] = [
-      '#type' => 'fieldset',
-      '#title' => $this->t('Vector Index Configuration'),
-      '#collapsible' => TRUE,
-      '#collapsed' => TRUE,
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
-        ],
-      ],
+    // Advanced settings
+    $form['advanced'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Advanced Settings'),
+      '#open' => FALSE,
     ];
 
-    $form['vector_index']['method'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Index Method'),
-      '#options' => [
-        'ivfflat' => $this->t('IVFFlat (faster build, good for larger datasets)'),
-        'hnsw' => $this->t('HNSW (slower build, better recall)'),
-      ],
-      '#default_value' => $this->configuration['vector_index']['method'],
-      '#description' => $this->t('Vector index algorithm. HNSW generally provides better search quality.'),
-    ];
-
-    $form['vector_index']['ivfflat_lists'] = [
-      '#type' => 'number',
-      '#title' => $this->t('IVFFlat Lists'),
-      '#default_value' => $this->configuration['vector_index']['ivfflat_lists'],
-      '#min' => 10,
-      '#max' => 1000,
-      '#description' => $this->t('Number of clusters for IVFFlat index. Rule of thumb: rows/1000.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_index][method]"]' => ['value' => 'ivfflat'],
-        ],
-      ],
-    ];
-
-    $form['vector_index']['hnsw_m'] = [
-      '#type' => 'number',
-      '#title' => $this->t('HNSW M'),
-      '#default_value' => $this->configuration['vector_index']['hnsw_m'],
-      '#min' => 2,
-      '#max' => 100,
-      '#description' => $this->t('Maximum number of connections for HNSW index.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_index][method]"]' => ['value' => 'hnsw'],
-        ],
-      ],
-    ];
-
-    $form['vector_index']['hnsw_ef_construction'] = [
-      '#type' => 'number',
-      '#title' => $this->t('HNSW EF Construction'),
-      '#default_value' => $this->configuration['vector_index']['hnsw_ef_construction'],
-      '#min' => 4,
-      '#max' => 1000,
-      '#description' => $this->t('Size of the dynamic candidate list for HNSW index construction.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_index][method]"]' => ['value' => 'hnsw'],
-        ],
-      ],
-    ];
-
-    // Hybrid search configuration
-    $form['hybrid_search'] = [
-      '#type' => 'fieldset',
-      '#title' => $this->t('Hybrid Search Configuration'),
-      '#collapsible' => TRUE,
-      '#collapsed' => TRUE,
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
-        ],
-      ],
-    ];
-
-    $form['hybrid_search']['text_weight'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Text Search Weight'),
-      '#default_value' => $this->configuration['hybrid_search']['text_weight'],
-      '#min' => 0,
-      '#max' => 1,
-      '#step' => 0.1,
-      '#description' => $this->t('Weight for traditional full-text search in hybrid mode.'),
-    ];
-
-    $form['hybrid_search']['vector_weight'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Vector Search Weight'),
-      '#default_value' => $this->configuration['hybrid_search']['vector_weight'],
-      '#min' => 0,
-      '#max' => 1,
-      '#step' => 0.1,
-      '#description' => $this->t('Weight for vector similarity search in hybrid mode.'),
-    ];
-
-    $form['hybrid_search']['similarity_threshold'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Similarity Threshold'),
-      '#default_value' => $this->configuration['hybrid_search']['similarity_threshold'],
-      '#min' => 0,
-      '#max' => 1,
-      '#step' => 0.01,
-      '#description' => $this->t('Minimum similarity score for vector search results.'),
+    $form['advanced']['debug'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable debug mode'),
+      '#default_value' => $this->configuration['debug'],
+      '#description' => $this->t('Log all queries and operations. Disable in production.'),
     ];
 
     return $form;
@@ -350,26 +447,29 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
    * {@inheritdoc}
    */
   public function validateConfigurationForm(array &$form, FormStateInterface $form_state) {
-    parent::validateConfigurationForm($form, $form_state);
-
-    // Validate vector search configuration
-    if ($form_state->getValue(['vector_search', 'enabled'])) {
-      $provider = $form_state->getValue(['vector_search', 'provider']);
-      
-      if ($provider === 'openai') {
-        $api_key = $form_state->getValue(['vector_search', 'api_key']);
-        if (empty($api_key) && empty($this->configuration['vector_search']['api_key'])) {
-          $form_state->setErrorByName('vector_search][api_key', $this->t('API key is required for OpenAI provider.'));
-        }
+    // Test database connection
+    $values = $form_state->getValues();
+    $config = $values['connection'];
+    
+    // Get password from key if configured
+    if (!empty($config['password_key'])) {
+      try {
+        $config['password'] = $this->getDatabasePassword();
       }
-
-      // Validate hybrid search weights
-      $text_weight = $form_state->getValue(['hybrid_search', 'text_weight']);
-      $vector_weight = $form_state->getValue(['hybrid_search', 'vector_weight']);
-      
-      if (abs(($text_weight + $vector_weight) - 1.0) > 0.01) {
-        $form_state->setError($form['hybrid_search']['text_weight'], $this->t('Text and vector search weights must sum to 1.0.'));
+      catch (\Exception $e) {
+        $form_state->setErrorByName('connection][password_key', $e->getMessage());
+        return;
       }
+    }
+    
+    try {
+      $test_connector = new PostgreSQLConnector($config, $this->logger);
+      $test_connector->testConnection();
+    }
+    catch (\Exception $e) {
+      $form_state->setErrorByName('connection', $this->t('Database connection failed: @message', [
+        '@message' => $e->getMessage(),
+      ]));
     }
   }
 
@@ -377,29 +477,12 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
    * {@inheritdoc}
    */
   public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
-    parent::submitConfigurationForm($form, $form_state);
-
-    // Save vector search configuration
-    $this->configuration['vector_search']['enabled'] = $form_state->getValue(['vector_search', 'enabled']);
-    $this->configuration['vector_search']['provider'] = $form_state->getValue(['vector_search', 'provider']);
-    $this->configuration['vector_search']['model'] = $form_state->getValue(['vector_search', 'model']);
-    $this->configuration['vector_search']['dimension'] = $form_state->getValue(['vector_search', 'dimension']);
-
-    // Only update API key if a new one is provided
-    $new_api_key = $form_state->getValue(['vector_search', 'api_key']);
-    if (!empty($new_api_key)) {
-      $this->configuration['vector_search']['api_key'] = $new_api_key;
-    }
-
-    // Save vector index configuration
-    $this->configuration['vector_index']['method'] = $form_state->getValue(['vector_index', 'method']);
-    $this->configuration['vector_index']['ivfflat_lists'] = $form_state->getValue(['vector_index', 'ivfflat_lists']);
-    $this->configuration['vector_index']['hnsw_m'] = $form_state->getValue(['vector_index', 'hnsw_m']);
-    $this->configuration['vector_index']['hnsw_ef_construction'] = $form_state->getValue(['vector_index', 'hnsw_ef_construction']);
-
-    // Save hybrid search configuration
-    $this->configuration['hybrid_search']['text_weight'] = $form_state->getValue(['hybrid_search', 'text_weight']);
-    $this->configuration['hybrid_search']['vector_weight'] = $form_state->getValue(['hybrid_search', 'vector_weight']);
-    $this->configuration['hybrid_search']['similarity_threshold'] = $form_state->getValue(['hybrid_search', 'similarity_threshold']);
+    $values = $form_state->getValues();
+    
+    // Save all configuration
+    $this->configuration = $values + $this->configuration;
+    
+    // Clear connection to force reconnect with new settings
+    $this->connector = NULL;
   }
 }
