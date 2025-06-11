@@ -98,7 +98,7 @@ services:
     class: Drupal\search_api_postgresql\Form\BulkRegenerateForm
     arguments:
       - '@entity_type.manager'
-      - '@batch.builder'
+      - '@messenger'
       - '@search_api_postgresql.embedding_queue_manager'
 
   search_api_postgresql.form.cache_management:
