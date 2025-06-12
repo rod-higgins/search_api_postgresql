@@ -57,6 +57,21 @@ class PostgreSQLConnector {
   ];
 
   /**
+   * Valid PostgreSQL data types.
+   *
+   * @var array
+   */
+  protected static $validDataTypes = [
+    'BIGINT', 'BIGSERIAL', 'BIT', 'BIT VARYING', 'BOOLEAN', 'BOX', 'BYTEA',
+    'CHARACTER', 'CHARACTER VARYING', 'CIDR', 'CIRCLE', 'DATE', 'DOUBLE PRECISION',
+    'INET', 'INTEGER', 'INTERVAL', 'JSON', 'JSONB', 'LINE', 'LSEG', 'MACADDR',
+    'MACADDR8', 'MONEY', 'NUMERIC', 'PATH', 'PG_LSN', 'POINT', 'POLYGON',
+    'REAL', 'SMALLINT', 'SMALLSERIAL', 'SERIAL', 'TEXT', 'TIME', 'TIMESTAMP',
+    'TIMESTAMPTZ', 'TSQUERY', 'TSVECTOR', 'TXID_SNAPSHOT', 'UUID', 'XML',
+    'VARCHAR', 'INT', 'FLOAT', 'DECIMAL', 'CHAR', 'TIMETZ',
+  ];
+
+  /**
    * Constructs a PostgreSQLConnector object.
    *
    * @param array $config
@@ -74,33 +89,13 @@ class PostgreSQLConnector {
    * Establishes the database connection.
    */
   protected function connect() {
-    // Build DSN parts
-    $dsn_parts = [
-      'host=' . $this->config['host'],
-      'port=' . $this->config['port'],
-      'dbname=' . $this->config['database'],
-    ];
-    
-    // Only add user if provided
-    if (!empty($this->config['username'])) {
-      $dsn_parts[] = 'user=' . $this->config['username'];
-    }
-    
-    // Only add password if provided (optional for local dev)
-    if (!empty($this->config['password'])) {
-      $dsn_parts[] = 'password=' . $this->config['password'];
-    }
-    
-    // SSL mode configuration
-    if (!empty($this->config['ssl_mode']) && $this->config['ssl_mode'] !== 'disable') {
-      $dsn_parts[] = 'sslmode=' . $this->config['ssl_mode'];
-      
-      if (!empty($this->config['ssl_ca'])) {
-        $dsn_parts[] = 'sslrootcert=' . $this->config['ssl_ca'];
-      }
-    }
-    
-    $dsn = 'pgsql:' . implode(';', $dsn_parts);
+    $dsn = sprintf(
+      "pgsql:host=%s;port=%d;dbname=%s;sslmode=%s",
+      $this->config['host'],
+      $this->config['port'],
+      $this->config['database'],
+      $this->config['ssl_mode'] ?? 'require'
+    );
 
     $options = [
       \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
@@ -114,42 +109,36 @@ class PostgreSQLConnector {
     }
 
     try {
-      // Create connection without separate username/password parameters
-      // They're already in the DSN if provided
-      $this->connection = new \PDO($dsn, null, null, $options);
+      // Handle empty passwords gracefully for Lando/development
+      $password = $this->config['password'] ?? '';
+      
+      $this->connection = new \PDO(
+        $dsn,
+        $this->config['username'],
+        $password, // Can be empty string for passwordless connections
+        $options
+      );
       
       // Set default character set.
       $this->connection->exec("SET NAMES 'UTF8'");
-      
-      // Set search path if configured
-      if (!empty($this->config['search_path'])) {
-        $this->connection->exec('SET search_path TO ' . $this->config['search_path']);
-      }
       
       $this->logger->debug('PostgreSQL connection established to @host:@port/@database @passwordless', [
         '@host' => $this->config['host'],
         '@port' => $this->config['port'],
         '@database' => $this->config['database'],
-        '@passwordless' => empty($this->config['password']) ? '(passwordless)' : '(with password)',
+        '@passwordless' => empty($password) ? '(passwordless)' : '(with password)',
       ]);
     }
     catch (\PDOException $e) {
       $this->logger->error('Failed to connect to PostgreSQL: @message', ['@message' => $e->getMessage()]);
       
-      // Provide helpful error message for common issues
+      // Provide helpful error message for common Lando issues
       $error_message = $e->getMessage();
-      
-      if (stripos($error_message, 'password authentication failed') !== FALSE) {
-        throw new SearchApiException(
-          'Database connection failed: Password authentication failed. ' .
-          'For local development environments (e.g., Lando) that don\'t require passwords, ' .
-          'leave the password field empty.',
-          (int) $e->getCode(),
-          $e
-        );
+      if (empty($this->config['password']) && strpos($error_message, 'authentication failed') !== FALSE) {
+        $error_message .= ' (Note: If using Lando, ensure your database is configured for trust-based authentication)';
       }
       
-      throw new SearchApiException('Database connection failed: ' . $error_message, (int) $e->getCode(), $e);
+      throw new SearchApiException('Database connection failed: ' . $error_message, $e->getCode(), $e);
     }
   }
 
@@ -192,17 +181,20 @@ class PostgreSQLConnector {
       return $stmt->fetchColumn();
     }
     catch (\PDOException $e) {
+      $this->logger->error('Failed to get PostgreSQL version: @message', [
+        '@message' => $e->getMessage(),
+      ]);
       return 'Unknown';
     }
   }
 
   /**
-   * Validates an identifier (table, column, etc.) to prevent SQL injection.
+   * Validates a SQL identifier (table name, column name, etc.).
    *
    * @param string $identifier
    *   The identifier to validate.
    * @param string $type
-   *   The type of identifier (for error messages).
+   *   The type of identifier for error messages.
    *
    * @return string
    *   The validated identifier.
@@ -211,26 +203,24 @@ class PostgreSQLConnector {
    *   If the identifier is invalid.
    */
   public function validateIdentifier($identifier, $type = 'identifier') {
-    // Check if empty
-    if (empty($identifier)) {
-      throw new SearchApiException("Empty {$type} is not allowed.");
+    // Check for null or empty identifier
+    if (empty($identifier) || !is_string($identifier)) {
+      throw new SearchApiException("Invalid {$type}: identifier cannot be empty.");
     }
 
-    // Check length (PostgreSQL max identifier length is 63)
-    if (strlen($identifier) > 63) {
-      throw new SearchApiException("The {$type} '{$identifier}' exceeds maximum length of 63 characters.");
+    // PostgreSQL identifier rules:
+    // - Start with letter (a-z, A-Z) or underscore
+    // - Contain only letters, digits, underscores, and dollar signs
+    // - Max 63 characters (PostgreSQL limit)
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_$]{0,62}$/', $identifier)) {
+      throw new SearchApiException("Invalid {$type}: '{$identifier}'. Must start with letter or underscore and contain only alphanumeric characters, underscores, and dollar signs (max 63 chars).");
     }
-
-    // Check for valid characters (alphanumeric and underscore)
-    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $identifier)) {
-      throw new SearchApiException("The {$type} '{$identifier}' contains invalid characters. Only alphanumeric and underscore allowed.");
-    }
-
-    // Check against reserved words
+    
+    // Check against PostgreSQL reserved words (case-insensitive)
     if (in_array(strtolower($identifier), self::$reservedWords)) {
-      throw new SearchApiException("The {$type} '{$identifier}' is a reserved PostgreSQL keyword.");
+      throw new SearchApiException("Invalid {$type}: '{$identifier}' is a PostgreSQL reserved word.");
     }
-
+    
     return $identifier;
   }
 
@@ -283,6 +273,84 @@ class PostgreSQLConnector {
   public function quoteIndexName($index_name) {
     $validated_name = $this->validateIdentifier($index_name, 'index name');
     return '"' . $validated_name . '"';
+  }
+
+  /**
+   * Validates a PostgreSQL data type.
+   *
+   * @param string $data_type
+   *   The data type to validate.
+   *
+   * @return string
+   *   The validated data type.
+   *
+   * @throws \Drupal\search_api\SearchApiException
+   *   If the data type is invalid.
+   */
+  public function validateDataType($data_type) {
+    // Handle parameterized types
+    if (preg_match('/^(VARCHAR|CHARACTER VARYING|BIT VARYING|CHAR|CHARACTER)\s*\(\s*\d+\s*\)$/i', $data_type)) {
+      return strtoupper($data_type);
+    }
+    
+    if (preg_match('/^(NUMERIC|DECIMAL)\s*\(\s*\d+\s*(,\s*\d+)?\s*\)$/i', $data_type)) {
+      return strtoupper($data_type);
+    }
+    
+    if (preg_match('/^(TIME|TIMESTAMP|TIMETZ|TIMESTAMPTZ)\s*\(\s*\d+\s*\)(\s+WITH(OUT)?\s+TIME\s+ZONE)?$/i', $data_type)) {
+      return strtoupper($data_type);
+    }
+    
+    // Handle VECTOR type for pgvector extension
+    if (preg_match('/^VECTOR\s*\(\s*\d+\s*\)$/i', $data_type)) {
+      return $data_type;
+    }
+    
+    // Check against base types
+    $base_type = strtoupper(trim($data_type));
+    if (in_array($base_type, self::$validDataTypes)) {
+      return $base_type;
+    }
+    
+    throw new SearchApiException("Invalid PostgreSQL data type: '{$data_type}'");
+  }
+
+  /**
+   * Gets the columns of a table.
+   *
+   * @param string $table_name
+   *   The table name (unquoted).
+   *
+   * @return array
+   *   Array of column names.
+   *
+   * @throws \Drupal\search_api\SearchApiException
+   *   If getting columns fails.
+   */
+  public function getTableColumns($table_name) {
+    try {
+      $sql = "SELECT column_name 
+              FROM information_schema.columns 
+              WHERE table_schema = 'public' 
+              AND table_name = :table_name 
+              ORDER BY ordinal_position";
+      
+      $stmt = $this->executeQuery($sql, [':table_name' => $table_name]);
+      $columns = [];
+      
+      while ($row = $stmt->fetch()) {
+        $columns[] = $row['column_name'];
+      }
+      
+      return $columns;
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to get columns for table @table: @message', [
+        '@table' => $table_name,
+        '@message' => $e->getMessage(),
+      ]);
+      throw new SearchApiException("Failed to get table columns: " . $e->getMessage(), $e->getCode(), $e);
+    }
   }
 
   /**
@@ -352,7 +420,7 @@ class PostgreSQLConnector {
    */
   public function rollback() {
     try {
-      $this->connection->rollBack();
+      $this->connection->rollback();
     }
     catch (\PDOException $e) {
       throw new SearchApiException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
@@ -360,17 +428,66 @@ class PostgreSQLConnector {
   }
 
   /**
-   * Checks if in a transaction.
+   * Checks if a table exists in the database.
+   *
+   * @param string $table_name
+   *   The table name to check (without quotes).
    *
    * @return bool
-   *   TRUE if in a transaction, FALSE otherwise.
+   *   TRUE if the table exists, FALSE otherwise.
    */
-  public function inTransaction() {
-    return $this->connection->inTransaction();
+  public function tableExists($table_name) {
+    try {
+      // Use unquoted table name for existence check
+      $sql = "SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = :table_name
+      )";
+      
+      $stmt = $this->executeQuery($sql, [':table_name' => $table_name]);
+      return (bool) $stmt->fetchColumn();
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to check table existence for @table: @message', [
+        '@table' => $table_name,
+        '@message' => $e->getMessage(),
+      ]);
+      return FALSE;
+    }
   }
 
   /**
-   * Gets the last insert ID.
+   * Checks if an index exists in the database.
+   *
+   * @param string $index_name
+   *   The index name to check (without quotes).
+   *
+   * @return bool
+   *   TRUE if the index exists, FALSE otherwise.
+   */
+  public function indexExists($index_name) {
+    try {
+      $sql = "SELECT EXISTS (
+        SELECT FROM pg_indexes 
+        WHERE schemaname = 'public' 
+        AND indexname = :index_name
+      )";
+      
+      $stmt = $this->executeQuery($sql, [':index_name' => $index_name]);
+      return (bool) $stmt->fetchColumn();
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to check index existence for @index: @message', [
+        '@index' => $index_name,
+        '@message' => $e->getMessage(),
+      ]);
+      return FALSE;
+    }
+  }
+
+  /**
+   * Gets the last inserted ID.
    *
    * @param string $sequence_name
    *   Optional sequence name for PostgreSQL.
@@ -507,5 +624,4 @@ class PostgreSQLConnector {
   public function __destruct() {
     $this->close();
   }
-
 }
