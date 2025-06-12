@@ -15,8 +15,8 @@ use Drupal\search_api_postgresql\Service\HuggingFaceEmbeddingService;
  *
  * @SearchApiBackend(
  *   id = "postgresql_azure",
- *   label = @Translation("Azure PostgreSQL with Vector Search"),
- *   description = @Translation("Azure PostgreSQL backend with hybrid text and semantic vector search capabilities")
+ *   label = @Translation("PostgreSQL with Azure AI Vector Search"),
+ *   description = @Translation("Azure-optimized PostgreSQL backend with hybrid text and semantic vector search capabilities")
  * )
  */
 class AzurePostgreSQLBackend extends PostgreSQLBackend {
@@ -37,6 +37,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
         'enabled' => FALSE,
         'provider' => 'openai',
         'api_key' => '',
+        'api_key_name' => '',
         'model' => 'text-embedding-ada-002',
         'dimension' => 1536,
       ],
@@ -91,25 +92,66 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     
     switch ($provider) {
       case 'openai':
-        $api_key = $this->configuration['vector_search']['api_key'];
-        $model = $this->configuration['vector_search']['model'];
+        // Get API key using secure key management
+        $api_key = NULL;
+        if (!empty($this->configuration['vector_search']['api_key_name'])) {
+          try {
+            $key_repository = $this->getKeyRepository();
+            if ($key_repository) {
+              $key = $key_repository->getKey($this->configuration['vector_search']['api_key_name']);
+              if ($key) {
+                $api_key = $key->getKeyValue();
+              }
+            }
+          }
+          catch (\Exception $e) {
+            $this->getLogger()->error('Failed to retrieve API key: @message', [
+              '@message' => $e->getMessage(),
+            ]);
+          }
+        }
+        // Fall back to direct API key if no key name is set
+        elseif (!empty($this->configuration['vector_search']['api_key'])) {
+          $api_key = $this->configuration['vector_search']['api_key'];
+        }
         
-        if ($api_key) {
+        if ($api_key && class_exists('Drupal\search_api_postgresql\Service\OpenAIEmbeddingService')) {
+          $model = $this->configuration['vector_search']['model'];
           $this->embeddingService = new OpenAIEmbeddingService($api_key, $model);
         }
         break;
         
       case 'huggingface':
-        $api_key = $this->configuration['vector_search']['huggingface_api_key'] ?? '';
-        $model = $this->configuration['vector_search']['huggingface_model'] ?? 'sentence-transformers/all-MiniLM-L6-v2';
+        // Similar key handling for Hugging Face
+        $api_key = NULL;
+        if (!empty($this->configuration['vector_search']['huggingface_api_key_name'])) {
+          try {
+            $key_repository = $this->getKeyRepository();
+            if ($key_repository) {
+              $key = $key_repository->getKey($this->configuration['vector_search']['huggingface_api_key_name']);
+              if ($key) {
+                $api_key = $key->getKeyValue();
+              }
+            }
+          }
+          catch (\Exception $e) {
+            $this->getLogger()->error('Failed to retrieve Hugging Face API key: @message', [
+              '@message' => $e->getMessage(),
+            ]);
+          }
+        }
+        elseif (!empty($this->configuration['vector_search']['huggingface_api_key'])) {
+          $api_key = $this->configuration['vector_search']['huggingface_api_key'];
+        }
         
-        if ($api_key) {
+        if ($api_key && class_exists('Drupal\search_api_postgresql\Service\HuggingFaceEmbeddingService')) {
+          $model = $this->configuration['vector_search']['huggingface_model'] ?? 'sentence-transformers/all-MiniLM-L6-v2';
           $this->embeddingService = new HuggingFaceEmbeddingService($api_key, $model);
         }
         break;
         
       case 'local':
-        // Implementation for local embedding models would go here
+        // Implementation for local embedding models
         break;
     }
   }
@@ -121,10 +163,9 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     $features = parent::getSupportedFeatures();
     
     if ($this->configuration['vector_search']['enabled']) {
-      $features[] = 'search_api_azure_vector_search';
+      $features[] = 'search_api_vector_search';
       $features[] = 'search_api_semantic_search';
       $features[] = 'search_api_hybrid_search';
-      $features[] = 'search_api_azure_ai';
     }
     
     return $features;
@@ -141,10 +182,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
   }
 
   /**
-   * Checks if pgvector extension is available and creates it if possible.
-   *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If pgvector is required but not available.
+   * Checks if pgvector extension is available.
    */
   protected function checkPgVectorExtension() {
     if (!$this->configuration['vector_search']['enabled']) {
@@ -173,10 +211,10 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
 
     // Vector search configuration
     $form['vector_search'] = [
-      '#type' => 'fieldset',
+      '#type' => 'details',
       '#title' => $this->t('Vector Search Configuration'),
-      '#collapsible' => TRUE,
-      '#collapsed' => !$this->configuration['vector_search']['enabled'],
+      '#open' => $this->configuration['vector_search']['enabled'],
+      '#description' => $this->t('Configure semantic vector search using AI embeddings.'),
     ];
 
     $form['vector_search']['enabled'] = [
@@ -202,18 +240,8 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       ],
     ];
 
-    $form['vector_search']['api_key'] = [
-      '#type' => 'password',
-      '#title' => $this->t('API Key'),
-      '#default_value' => '',
-      '#description' => $this->t('API key for the embedding service. Leave empty to keep current key.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
-          ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'openai'],
-        ],
-      ],
-    ];
+    // Use the trait to add secure key fields for API keys
+    $this->addVectorSearchKeyFields($form);
 
     $form['vector_search']['model'] = [
       '#type' => 'select',
@@ -233,19 +261,6 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     ];
 
     // Hugging Face specific fields
-    $form['vector_search']['huggingface_api_key'] = [
-      '#type' => 'password',
-      '#title' => $this->t('Hugging Face API Key'),
-      '#default_value' => '',
-      '#description' => $this->t('Hugging Face API key for inference API.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
-          ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'huggingface'],
-        ],
-      ],
-    ];
-
     $form['vector_search']['huggingface_model'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Hugging Face Model'),
@@ -261,10 +276,9 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
 
     // Vector index configuration
     $form['vector_index'] = [
-      '#type' => 'fieldset',
-      '#title' => $this->t('Vector Index Configuration'),
-      '#collapsible' => TRUE,
-      '#collapsed' => TRUE,
+      '#type' => 'details',
+      '#title' => $this->t('Vector Index Settings'),
+      '#open' => FALSE,
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
@@ -276,61 +290,62 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#type' => 'select',
       '#title' => $this->t('Index Method'),
       '#options' => [
-        'ivfflat' => $this->t('IVFFlat (faster build, good for larger datasets)'),
-        'hnsw' => $this->t('HNSW (slower build, better recall)'),
+        'ivfflat' => $this->t('IVFFlat (faster, less accurate)'),
+        'hnsw' => $this->t('HNSW (slower, more accurate)'),
       ],
       '#default_value' => $this->configuration['vector_index']['method'],
-      '#description' => $this->t('Vector index algorithm. HNSW generally provides better search quality.'),
+      '#description' => $this->t('Vector index algorithm. IVFFlat is faster but less accurate, HNSW is slower but more accurate.'),
     ];
 
+    // IVFFlat settings
     $form['vector_index']['ivfflat_lists'] = [
       '#type' => 'number',
       '#title' => $this->t('IVFFlat Lists'),
       '#default_value' => $this->configuration['vector_index']['ivfflat_lists'],
       '#min' => 1,
       '#max' => 1000,
+      '#description' => $this->t('Number of lists for IVFFlat index. More lists = slower build, faster search.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_index][method]"]' => ['value' => 'ivfflat'],
         ],
       ],
-      '#description' => $this->t('Number of lists for IVFFlat index. More lists = better recall but slower build.'),
     ];
 
+    // HNSW settings
     $form['vector_index']['hnsw_m'] = [
       '#type' => 'number',
-      '#title' => $this->t('HNSW M Parameter'),
+      '#title' => $this->t('HNSW M'),
       '#default_value' => $this->configuration['vector_index']['hnsw_m'],
       '#min' => 2,
       '#max' => 100,
+      '#description' => $this->t('Number of bi-directional links for HNSW. Higher = better recall, more memory.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_index][method]"]' => ['value' => 'hnsw'],
         ],
       ],
-      '#description' => $this->t('Number of bi-directional links for HNSW. Higher = better recall but more memory.'),
     ];
 
     $form['vector_index']['hnsw_ef_construction'] = [
       '#type' => 'number',
       '#title' => $this->t('HNSW ef_construction'),
       '#default_value' => $this->configuration['vector_index']['hnsw_ef_construction'],
-      '#min' => 4,
+      '#min' => 1,
       '#max' => 1000,
+      '#description' => $this->t('Size of the dynamic candidate list. Higher = better index quality, slower build.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_index][method]"]' => ['value' => 'hnsw'],
         ],
       ],
-      '#description' => $this->t('Size of the dynamic candidate list. Higher = better index quality but slower build.'),
     ];
 
-    // Hybrid search configuration
+    // Hybrid search settings
     $form['hybrid_search'] = [
-      '#type' => 'fieldset',
-      '#title' => $this->t('Hybrid Search Configuration'),
-      '#collapsible' => TRUE,
-      '#collapsed' => FALSE,
+      '#type' => 'details',
+      '#title' => $this->t('Hybrid Search Settings'),
+      '#open' => FALSE,
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
@@ -345,7 +360,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#min' => 0,
       '#max' => 1,
       '#step' => 0.1,
-      '#description' => $this->t('Weight for traditional text search (0-1). Must sum to 1.0 with vector weight.'),
+      '#description' => $this->t('Weight for traditional text search (0-1). Text weight + vector weight should equal 1.'),
     ];
 
     $form['hybrid_search']['vector_weight'] = [
@@ -355,7 +370,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#min' => 0,
       '#max' => 1,
       '#step' => 0.1,
-      '#description' => $this->t('Weight for vector similarity search (0-1). Must sum to 1.0 with text weight.'),
+      '#description' => $this->t('Weight for semantic vector search (0-1). Text weight + vector weight should equal 1.'),
     ];
 
     $form['hybrid_search']['similarity_threshold'] = [
@@ -365,10 +380,87 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#min' => 0,
       '#max' => 1,
       '#step' => 0.01,
-      '#description' => $this->t('Minimum similarity score for vector search results (0-1).'),
+      '#description' => $this->t('Minimum cosine similarity score (0-1) for vector search results.'),
     ];
 
     return $form;
+  }
+
+  /**
+   * Adds vector search API key fields using secure key management.
+   *
+   * @param array &$form
+   *   The form array to add fields to.
+   */
+  protected function addVectorSearchKeyFields(array &$form) {
+    $key_repository = $this->getKeyRepository();
+    
+    if ($key_repository) {
+      // Get available keys
+      $keys = [];
+      foreach ($key_repository->getKeys() as $key) {
+        $keys[$key->id()] = $key->label();
+      }
+
+      // OpenAI API key field
+      $form['vector_search']['api_key_name'] = [
+        '#type' => 'select',
+        '#title' => $this->t('OpenAI API Key'),
+        '#options' => $keys,
+        '#empty_option' => $this->t('- Select a key -'),
+        '#default_value' => $this->configuration['vector_search']['api_key_name'] ?? '',
+        '#description' => $this->t('Select a key that contains the OpenAI API key.'),
+        '#states' => [
+          'visible' => [
+            ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
+            ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'openai'],
+          ],
+        ],
+      ];
+
+      // Hugging Face API key field
+      $form['vector_search']['huggingface_api_key_name'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Hugging Face API Key'),
+        '#options' => $keys,
+        '#empty_option' => $this->t('- Select a key -'),
+        '#default_value' => $this->configuration['vector_search']['huggingface_api_key_name'] ?? '',
+        '#description' => $this->t('Select a key that contains the Hugging Face API key.'),
+        '#states' => [
+          'visible' => [
+            ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
+            ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'huggingface'],
+          ],
+        ],
+      ];
+    } else {
+      // Fallback to direct API key fields if Key module is not available
+      $form['vector_search']['api_key'] = [
+        '#type' => 'password',
+        '#title' => $this->t('API Key'),
+        '#default_value' => '',
+        '#description' => $this->t('API key for the embedding service. Leave empty to keep current key.'),
+        '#states' => [
+          'visible' => [
+            ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
+            ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'openai'],
+          ],
+        ],
+      ];
+
+      $form['vector_search']['huggingface_api_key'] = [
+        '#type' => 'password',
+        '#title' => $this->t('Hugging Face API Key'),
+        '#default_value' => '',
+        '#description' => $this->t('Hugging Face API key for inference API.'),
+        '#states' => [
+          'visible' => [
+            ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
+            ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'huggingface'],
+          ],
+        ],
+      ];
+    }
   }
 
   /**
@@ -376,31 +468,26 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
    */
   public function validateConfigurationForm(array &$form, FormStateInterface $form_state) {
     parent::validateConfigurationForm($form, $form_state);
-
-    if ($form_state->getValue(['vector_search', 'enabled'])) {
-      // Validate weights sum to 1.0
-      $text_weight = $form_state->getValue(['hybrid_search', 'text_weight']);
-      $vector_weight = $form_state->getValue(['hybrid_search', 'vector_weight']);
+    
+    $values = $form_state->getValues();
+    
+    // Validate hybrid search weights
+    if ($values['vector_search']['enabled']) {
+      $text_weight = $values['hybrid_search']['text_weight'];
+      $vector_weight = $values['hybrid_search']['vector_weight'];
       
       if (abs(($text_weight + $vector_weight) - 1.0) > 0.01) {
-        $form_state->setErrorByName('hybrid_search', 
-          $this->t('Text and vector weights should sum to 1.0'));
+        $form_state->setErrorByName('hybrid_search][text_weight', 
+          $this->t('Text weight and vector weight must sum to 1.0'));
       }
-
-      // Test embedding service if API key provided
-      $provider = $form_state->getValue(['vector_search', 'provider']);
-      $api_key = $form_state->getValue(['vector_search', 'api_key']);
       
-      if ($provider === 'openai' && $api_key) {
-        try {
-          $test_service = new OpenAIEmbeddingService($api_key);
-          $test_service->generateEmbedding('test');
-        }
-        catch (\Exception $e) {
-          $form_state->setErrorByName('vector_search', 
-            $this->t('Failed to connect to embedding service: @message', 
-              ['@message' => $e->getMessage()]));
-        }
+      // Validate API key configuration
+      $provider = $values['vector_search']['provider'];
+      $key_field = $provider === 'huggingface' ? 'huggingface_api_key_name' : 'api_key_name';
+      
+      if (empty($values['vector_search'][$key_field]) && empty($values['vector_search']['api_key'])) {
+        $form_state->setErrorByName('vector_search][' . $key_field, 
+          $this->t('An API key is required when vector search is enabled.'));
       }
     }
   }
@@ -410,86 +497,8 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
    */
   public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
     parent::submitConfigurationForm($form, $form_state);
-
-    // Vector search configuration
-    $this->configuration['vector_search']['enabled'] = $form_state->getValue(['vector_search', 'enabled']);
-    $this->configuration['vector_search']['provider'] = $form_state->getValue(['vector_search', 'provider']);
-    $this->configuration['vector_search']['model'] = $form_state->getValue(['vector_search', 'model']);
-
-    if ($api_key = $form_state->getValue(['vector_search', 'api_key'])) {
-      $this->configuration['vector_search']['api_key'] = $api_key;
-    }
-
-    // Hugging Face configuration
-    if ($hf_api_key = $form_state->getValue(['vector_search', 'huggingface_api_key'])) {
-      $this->configuration['vector_search']['huggingface_api_key'] = $hf_api_key;
-    }
-    $this->configuration['vector_search']['huggingface_model'] = $form_state->getValue(['vector_search', 'huggingface_model']);
-
-    // Vector index configuration
-    $this->configuration['vector_index']['method'] = $form_state->getValue(['vector_index', 'method']);
-    $this->configuration['vector_index']['ivfflat_lists'] = $form_state->getValue(['vector_index', 'ivfflat_lists']);
-    $this->configuration['vector_index']['hnsw_m'] = $form_state->getValue(['vector_index', 'hnsw_m']);
-    $this->configuration['vector_index']['hnsw_ef_construction'] = $form_state->getValue(['vector_index', 'hnsw_ef_construction']);
-
-    // Hybrid search configuration
-    $this->configuration['hybrid_search']['text_weight'] = $form_state->getValue(['hybrid_search', 'text_weight']);
-    $this->configuration['hybrid_search']['vector_weight'] = $form_state->getValue(['hybrid_search', 'vector_weight']);
-    $this->configuration['hybrid_search']['similarity_threshold'] = $form_state->getValue(['hybrid_search', 'similarity_threshold']);
-  }
-
-  /**
-   * Gets Azure-specific vector search statistics for an index.
-   *
-   * @param \Drupal\search_api\IndexInterface $index
-   *   The search index.
-   *
-   * @return array
-   *   Azure vector search statistics.
-   */
-  public function getAzureVectorStats(IndexInterface $index) {
-    $stats = [
-      'azure_service' => 'azure_openai',
-      'embedding_model' => $this->configuration['vector_search']['model'] ?? 'text-embedding-ada-002',
-      'vector_dimension' => $this->configuration['vector_search']['dimension'] ?? 1536,
-      'index_method' => $this->configuration['vector_index']['method'] ?? 'ivfflat',
-    ];
     
-    if (!$this->configuration['vector_search']['enabled']) {
-      $stats['status'] = 'disabled';
-      return $stats;
-    }
-
-    $table_name = $this->getIndexTableName($index);
-    
-    // Count items with embeddings
-    $sql = "SELECT COUNT(*) FROM {$table_name} WHERE content_embedding IS NOT NULL";
-    $result = $this->connector->executeQuery($sql);
-    $stats['items_with_embeddings'] = $result->fetchColumn();
-    
-    // Get total items
-    $sql = "SELECT COUNT(*) FROM {$table_name}";
-    $result = $this->connector->executeQuery($sql);
-    $stats['total_items'] = $result->fetchColumn();
-    
-    $stats['embedding_coverage'] = $stats['total_items'] > 0 ? 
-      ($stats['items_with_embeddings'] / $stats['total_items']) * 100 : 0;
-    
-    $stats['status'] = 'active';
-
-    return $stats;
-  }
-
-  /**
-   * Helper method to get index table name.
-   *
-   * @param \Drupal\search_api\IndexInterface $index
-   *   The search index.
-   *
-   * @return string
-   *   The table name.
-   */
-  protected function getIndexTableName(IndexInterface $index) {
-    return $this->configuration['index_prefix'] . $index->id();
+    // Clear embedding service to force reinitialization
+    $this->embeddingService = NULL;
   }
 }

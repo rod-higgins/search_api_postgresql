@@ -1,32 +1,39 @@
-# Configuration schema for Search API PostgreSQL module
+# Schema for Search API PostgreSQL module configuration
 
-# Main backend configuration
+# Standard PostgreSQL backend configuration
 search_api.backend.plugin.postgresql:
-  type: mapping
-  label: 'PostgreSQL backend configuration'
+  type: config_object
+  label: 'PostgreSQL search backend'
   mapping:
     connection:
       type: mapping
-      label: 'Database connection settings'
+      label: 'Database connection'
       mapping:
         host:
           type: string
-          label: 'Database host'
+          label: 'Host'
         port:
           type: integer
-          label: 'Database port'
+          label: 'Port'
         database:
           type: string
           label: 'Database name'
         username:
           type: string
           label: 'Username'
+        password:
+          type: string
+          label: 'Password (optional)'
+          # Note: This field is optional - no 'required' constraint
         password_key:
           type: string
           label: 'Password key reference (Key module)'
         ssl_mode:
           type: string
           label: 'SSL Mode'
+        ssl_ca:
+          type: string
+          label: 'Path to SSL certificate'
         options:
           type: sequence
           label: 'Additional PDO options'
@@ -46,187 +53,74 @@ search_api.backend.plugin.postgresql:
       label: 'Indexing batch size'
     ai_embeddings:
       type: mapping
-      label: 'AI Text Embeddings Configuration'
+      label: 'AI Embeddings configuration'
       mapping:
         enabled:
           type: boolean
-          label: 'Enable AI text embeddings'
-        hybrid_search:
-          type: boolean
-          label: 'Enable hybrid search (FTS + Vector)'
+          label: 'Enable AI embeddings'
         azure_ai:
           type: mapping
-          label: 'Azure AI Services Configuration'
+          label: 'Azure AI configuration'
           mapping:
             endpoint:
               type: string
-              label: 'Azure AI Services endpoint'
+              label: 'Azure OpenAI endpoint'
+            api_key:
+              type: string
+              label: 'API key (deprecated - use api_key_name)'
             api_key_name:
               type: string
               label: 'API key reference (Key module)'
+            deployment_name:
+              type: string
+              label: 'Deployment name'
+            api_version:
+              type: string
+              label: 'API version'
             model:
               type: string
-              label: 'Embedding model'
+              label: 'Model name'
             dimensions:
               type: integer
               label: 'Vector dimensions'
             batch_size:
               type: integer
-              label: 'Embedding batch size'
-        similarity_threshold:
-          type: float
-          label: 'Vector similarity threshold'
-        weight_vector:
-          type: float
-          label: 'Vector search weight in hybrid mode'
-        weight_fulltext:
-          type: float
-          label: 'Full-text search weight in hybrid mode'
-        cache:
-          type: mapping
-          label: 'Embedding cache configuration'
-          mapping:
-            enabled:
-              type: boolean
-              label: 'Enable embedding caching'
-            backend:
-              type: string
-              label: 'Cache backend (database or memory)'
-            ttl:
+              label: 'Batch size'
+            timeout:
               type: integer
-              label: 'Cache TTL in seconds'
-            max_entries:
+              label: 'Request timeout'
+            retry_attempts:
               type: integer
-              label: 'Maximum cache entries'
-            compression:
-              type: boolean
-              label: 'Enable cache compression'
-            cleanup_probability:
-              type: float
-              label: 'Cache cleanup probability'
-    vector_search:
-      type: mapping
-      label: 'Vector Search Configuration'
-      mapping:
-        enabled:
-          type: boolean
-          label: 'Enable vector search'
-        provider:
-          type: string
-          label: 'Embedding provider'
-        api_key:
-          type: string
-          label: 'API key'
-        model:
-          type: string
-          label: 'Embedding model'
-        dimension:
-          type: integer
-          label: 'Vector dimension'
-    vector_index:
-      type: mapping
-      label: 'Vector index configuration'
-      mapping:
-        method:
-          type: string
-          label: 'Vector index method'
-        ivfflat_lists:
-          type: integer
-          label: 'IVFFlat lists parameter'
-        hnsw_m:
-          type: integer
-          label: 'HNSW m parameter'
-        hnsw_ef_construction:
-          type: integer
-          label: 'HNSW ef_construction parameter'
-    hybrid_search:
-      type: mapping
-      label: 'Hybrid search configuration'
-      mapping:
-        text_weight:
-          type: float
-          label: 'Text search weight'
-        vector_weight:
-          type: float
-          label: 'Vector search weight'
-        similarity_threshold:
-          type: float
-          label: 'Similarity threshold'
-    queue_processing:
-      type: mapping
-      label: 'Queue Processing Configuration'
-      mapping:
-        enabled:
-          type: boolean
-          label: 'Enable queue-based embedding processing'
-        mode:
-          type: string
-          label: 'Processing mode (queue, sync, hybrid)'
-        batch_threshold:
-          type: integer
-          label: 'Use batch processing for this many or more items'
-        priority:
-          type: string
-          label: 'Default queue priority (high, normal, low)'
-        fallback_to_sync:
-          type: boolean
-          label: 'Fall back to synchronous processing on queue failure'
-        max_queue_time:
-          type: integer
-          label: 'Maximum time to wait for queue processing (seconds)'
-        sync_for_realtime:
-          type: boolean
-          label: 'Use synchronous processing for real-time requests'
-    performance:
-      type: mapping
-      label: 'Performance Optimization Settings'
-      mapping:
-        connection_pooling:
-          type: boolean
-          label: 'Enable connection pooling'
-        pool_size:
-          type: integer
-          label: 'Connection pool size'
-        prefetch_size:
-          type: integer
-          label: 'Query prefetch size'
-        lazy_loading:
-          type: boolean
-          label: 'Enable lazy loading for large result sets'
-        query_cache:
-          type: boolean
-          label: 'Enable query result caching'
-        cache_ttl:
-          type: integer
-          label: 'Query cache TTL in seconds'
-        auto_vacuum:
-          type: boolean
-          label: 'Enable automatic vacuum scheduling'
-        parallel_workers:
-          type: integer
-          label: 'Number of parallel workers for indexing'
+              label: 'Retry attempts'
+            retry_delay:
+              type: integer
+              label: 'Retry delay in milliseconds'
 
-# Azure PostgreSQL backend configuration
+# Azure-optimized PostgreSQL backend configuration
 search_api.backend.plugin.postgresql_azure:
-  type: mapping
-  label: 'Azure PostgreSQL backend configuration'
+  type: config_object
+  label: 'PostgreSQL with Azure AI Vector Search'
   mapping:
     connection:
       type: mapping
-      label: 'Database connection settings'
+      label: 'Database connection'
       mapping:
         host:
           type: string
-          label: 'Azure PostgreSQL server hostname'
+          label: 'Host (format: servername.postgres.database.azure.com)'
         port:
           type: integer
-          label: 'Database port'
+          label: 'The port'
         database:
           type: string
           label: 'Database name'
         username:
           type: string
           label: 'Username (format: username@servername)'
+        password:
+          type: string
+          label: 'Password (optional)'
+          # Note: This field is optional - no 'required' constraint
         password_key:
           type: string
           label: 'Password key reference (Key module)'
@@ -265,6 +159,9 @@ search_api.backend.plugin.postgresql_azure:
           label: 'Azure OpenAI endpoint'
         api_key:
           type: string
+          label: 'API key (deprecated - use api_key_name)'
+        api_key_name:
+          type: string
           label: 'API key reference (Key module)'
         deployment_name:
           type: string
@@ -282,6 +179,92 @@ search_api.backend.plugin.postgresql_azure:
           type: integer
           label: 'Number of retries on failure'
 
+# PostgreSQL with vector search backend configuration  
+search_api.backend.plugin.postgresql_vector:
+  type: config_object
+  label: 'PostgreSQL with Vector Search'
+  mapping:
+    connection:
+      type: mapping
+      label: 'Database connection'
+      mapping:
+        host:
+          type: string
+          label: 'Host'
+        port:
+          type: integer
+          label: 'Port'
+        database:
+          type: string
+          label: 'Database name'
+        username:
+          type: string
+          label: 'Username'
+        password:
+          type: string
+          label: 'Password (optional)'
+          # Note: This field is optional - no 'required' constraint
+        password_key:
+          type: string
+          label: 'Password key reference (Key module)'
+        ssl_mode:
+          type: string
+          label: 'SSL Mode'
+        options:
+          type: sequence
+          label: 'Additional PDO options'
+          sequence:
+            type: string
+    index_prefix:
+      type: string
+      label: 'Index table prefix'
+    fts_configuration:
+      type: string
+      label: 'PostgreSQL FTS configuration'
+    debug:
+      type: boolean
+      label: 'Debug mode'
+    batch_size:
+      type: integer
+      label: 'Indexing batch size'
+    vector_search:
+      type: mapping
+      label: 'Vector Search Configuration'
+      mapping:
+        enabled:
+          type: boolean
+          label: 'Enable vector search'
+        provider:
+          type: string
+          label: 'Embedding provider'
+        api_key:
+          type: string
+          label: 'API key (deprecated - use api_key_name)'
+        api_key_name:
+          type: string
+          label: 'API key reference (Key module)'
+        model:
+          type: string
+          label: 'Embedding model'
+        dimensions:
+          type: integer
+          label: 'Vector dimensions'
+        similarity_threshold:
+          type: float
+          label: 'Similarity threshold'
+        index_method:
+          type: string
+          label: 'Vector index method'
+        ivfflat_lists:
+          type: integer
+          label: 'IVFFlat lists parameter'
+        hnsw_m:
+          type: integer
+          label: 'HNSW M parameter'
+        hnsw_ef_construction:
+          type: integer
+          label: 'HNSW ef_construction parameter'
+
 # Queue settings configuration
 search_api_postgresql.queue_settings:
   type: config_object
@@ -298,146 +281,49 @@ search_api_postgresql.queue_settings:
       label: 'Default batch size for queue processing'
     max_processing_time:
       type: integer
-      label: 'Maximum processing time per queue run (seconds)'
-    priority_levels:
-      type: mapping
-      label: 'Priority level definitions'
-      mapping:
-        high:
-          type: integer
-          label: 'High priority value'
-        normal:
-          type: integer
-          label: 'Normal priority value'
-        low:
-          type: integer
-          label: 'Low priority value'
-    servers:
-      type: mapping
-      label: 'Server-specific queue settings'
-      mapping:
-        '[a-zA-Z0-9_]+':
-          type: mapping
-          label: 'Server queue configuration'
-          mapping:
-            enabled:
-              type: boolean
-              label: 'Enable queue processing for this server'
-            batch_size:
-              type: integer
-              label: 'Server-specific batch size'
-            priority:
-              type: string
-              label: 'Default priority for this server'
-            max_items_per_run:
-              type: integer
-              label: 'Maximum items to process per queue run'
+      label: 'Maximum processing time per cron run (seconds)'
+    retry_attempts:
+      type: integer
+      label: 'Number of retry attempts for failed items'
+    retry_delay:
+      type: integer
+      label: 'Delay between retries (seconds)'
 
-# Queued embedding service configuration
-search_api_postgresql.queued_embedding:
+# Settings configuration
+search_api_postgresql.settings:
   type: config_object
-  label: 'Queued Embedding Service Settings'
+  label: 'Search API PostgreSQL Settings'
   mapping:
-    enabled:
+    connection_timeout:
+      type: integer
+      label: 'Database connection timeout'
+    query_timeout:
+      type: integer
+      label: 'Query execution timeout'
+    enable_query_logging:
       type: boolean
-      label: 'Enable queued embedding processing'
-    default_dimension:
-      type: integer
-      label: 'Default embedding dimension'
-    fallback_to_sync:
+      label: 'Enable query logging'
+    log_slow_queries:
       type: boolean
-      label: 'Fall back to synchronous processing if queue fails'
-    batch_threshold:
+      label: 'Log slow queries'
+    slow_query_threshold:
       type: integer
-      label: 'Use batch processing for this many or more items'
-    priority_mapping:
-      type: mapping
-      label: 'Priority mapping for different operation types'
-      mapping:
-        realtime:
-          type: string
-          label: 'Priority for real-time operations'
-        index:
-          type: string
-          label: 'Priority for indexing operations'
-        bulk:
-          type: string
-          label: 'Priority for bulk operations'
-    performance:
-      type: mapping
-      label: 'Performance settings'
-      mapping:
-        max_memory_usage:
-          type: integer
-          label: 'Maximum memory usage per worker (MB)'
-        rate_limit:
-          type: integer
-          label: 'Rate limit for API calls (requests per minute)'
-        timeout:
-          type: integer
-          label: 'Timeout for individual operations (seconds)'
-
-# Embedding cache configuration
-search_api_postgresql.embedding_cache:
-  type: config_object
-  label: 'Embedding Cache Settings'
-  mapping:
-    default_ttl:
-      type: integer
-      label: 'Default cache TTL in seconds'
-    max_entries:
-      type: integer
-      label: 'Maximum number of cache entries'
-    cleanup_probability:
-      type: float
-      label: 'Probability of cleanup on write (0-1)'
-    enable_compression:
+      label: 'Slow query threshold (milliseconds)'
+    enable_performance_monitoring:
       type: boolean
-      label: 'Enable compression for cached embeddings'
-    table_name:
-      type: string
-      label: 'Database table name for cache'
-
-# Performance monitoring configuration
-search_api_postgresql.performance:
-  type: config_object
-  label: 'Performance Monitoring Settings'
-  mapping:
-    connection_pool:
-      type: mapping
-      label: 'Connection pool configuration'
-      mapping:
-        max_connections:
-          type: integer
-          label: 'Maximum connections in pool'
-        connection_timeout:
-          type: integer
-          label: 'Connection timeout in seconds'
-        idle_timeout:
-          type: integer
-          label: 'Idle connection timeout in seconds'
-        validation_query:
-          type: string
-          label: 'Query to validate connections'
-        retry_attempts:
-          type: integer
-          label: 'Number of connection retry attempts'
-    performance_monitor:
-      type: mapping
-      label: 'Performance monitoring configuration'
-      mapping:
-        enabled:
-          type: boolean
-          label: 'Enable performance monitoring'
-        slow_query_threshold:
-          type: float
-          label: 'Slow query threshold in seconds'
-        memory_usage_threshold:
-          type: integer
-          label: 'Memory usage warning threshold in MB'
-        cache_hit_rate_threshold:
-          type: float
-          label: 'Minimum acceptable cache hit rate (0-1)'
-        sample_rate:
-          type: float
-          label: 'Performance sampling rate (0-1)'
+      label: 'Enable performance monitoring'
+    cache_embedding_results:
+      type: boolean
+      label: 'Cache embedding results'
+    embedding_cache_lifetime:
+      type: integer
+      label: 'Embedding cache lifetime (seconds)'
+    enable_analytics:
+      type: boolean
+      label: 'Enable search analytics'
+    analytics_retention_days:
+      type: integer
+      label: 'Analytics data retention (days)'
+    maintenance_mode:
+      type: boolean
+      label: 'Maintenance mode'

@@ -74,13 +74,33 @@ class PostgreSQLConnector {
    * Establishes the database connection.
    */
   protected function connect() {
-    $dsn = sprintf(
-      "pgsql:host=%s;port=%d;dbname=%s;sslmode=%s",
-      $this->config['host'],
-      $this->config['port'],
-      $this->config['database'],
-      $this->config['ssl_mode'] ?? 'require'
-    );
+    // Build DSN parts
+    $dsn_parts = [
+      'host=' . $this->config['host'],
+      'port=' . $this->config['port'],
+      'dbname=' . $this->config['database'],
+    ];
+    
+    // Only add user if provided
+    if (!empty($this->config['username'])) {
+      $dsn_parts[] = 'user=' . $this->config['username'];
+    }
+    
+    // Only add password if provided (optional for local dev)
+    if (!empty($this->config['password'])) {
+      $dsn_parts[] = 'password=' . $this->config['password'];
+    }
+    
+    // SSL mode configuration
+    if (!empty($this->config['ssl_mode']) && $this->config['ssl_mode'] !== 'disable') {
+      $dsn_parts[] = 'sslmode=' . $this->config['ssl_mode'];
+      
+      if (!empty($this->config['ssl_ca'])) {
+        $dsn_parts[] = 'sslrootcert=' . $this->config['ssl_ca'];
+      }
+    }
+    
+    $dsn = 'pgsql:' . implode(';', $dsn_parts);
 
     $options = [
       \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
@@ -94,36 +114,42 @@ class PostgreSQLConnector {
     }
 
     try {
-      // Handle empty passwords gracefully for Lando/development
-      $password = $this->config['password'] ?? '';
-      
-      $this->connection = new \PDO(
-        $dsn,
-        $this->config['username'],
-        $password, // Can be empty string for passwordless connections
-        $options
-      );
+      // Create connection without separate username/password parameters
+      // They're already in the DSN if provided
+      $this->connection = new \PDO($dsn, null, null, $options);
       
       // Set default character set.
       $this->connection->exec("SET NAMES 'UTF8'");
+      
+      // Set search path if configured
+      if (!empty($this->config['search_path'])) {
+        $this->connection->exec('SET search_path TO ' . $this->config['search_path']);
+      }
       
       $this->logger->debug('PostgreSQL connection established to @host:@port/@database @passwordless', [
         '@host' => $this->config['host'],
         '@port' => $this->config['port'],
         '@database' => $this->config['database'],
-        '@passwordless' => empty($password) ? '(passwordless)' : '(with password)',
+        '@passwordless' => empty($this->config['password']) ? '(passwordless)' : '(with password)',
       ]);
     }
     catch (\PDOException $e) {
       $this->logger->error('Failed to connect to PostgreSQL: @message', ['@message' => $e->getMessage()]);
       
-      // Provide helpful error message for common Lando issues
+      // Provide helpful error message for common issues
       $error_message = $e->getMessage();
-      if (empty($this->config['password']) && strpos($error_message, 'authentication failed') !== FALSE) {
-        $error_message .= ' (Note: If using Lando, ensure your database is configured for trust-based authentication)';
+      
+      if (stripos($error_message, 'password authentication failed') !== FALSE) {
+        throw new SearchApiException(
+          'Database connection failed: Password authentication failed. ' .
+          'For local development environments (e.g., Lando) that don\'t require passwords, ' .
+          'leave the password field empty.',
+          (int) $e->getCode(),
+          $e
+        );
       }
       
-      throw new SearchApiException('Database connection failed: ' . $error_message, $e->getCode(), $e);
+      throw new SearchApiException('Database connection failed: ' . $error_message, (int) $e->getCode(), $e);
     }
   }
 
@@ -166,20 +192,17 @@ class PostgreSQLConnector {
       return $stmt->fetchColumn();
     }
     catch (\PDOException $e) {
-      $this->logger->error('Failed to get PostgreSQL version: @message', [
-        '@message' => $e->getMessage(),
-      ]);
       return 'Unknown';
     }
   }
 
   /**
-   * Validates a SQL identifier (table name, column name, etc.).
+   * Validates an identifier (table, column, etc.) to prevent SQL injection.
    *
    * @param string $identifier
    *   The identifier to validate.
    * @param string $type
-   *   The type of identifier for error messages.
+   *   The type of identifier (for error messages).
    *
    * @return string
    *   The validated identifier.
@@ -188,24 +211,26 @@ class PostgreSQLConnector {
    *   If the identifier is invalid.
    */
   public function validateIdentifier($identifier, $type = 'identifier') {
-    // Check for null or empty identifier
-    if (empty($identifier) || !is_string($identifier)) {
-      throw new SearchApiException("Invalid {$type}: identifier cannot be empty.");
+    // Check if empty
+    if (empty($identifier)) {
+      throw new SearchApiException("Empty {$type} is not allowed.");
     }
 
-    // PostgreSQL identifier rules:
-    // - Start with letter (a-z, A-Z) or underscore
-    // - Contain only letters, digits, underscores, and dollar signs
-    // - Max 63 characters (PostgreSQL limit)
-    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_$]{0,62}$/', $identifier)) {
-      throw new SearchApiException("Invalid {$type}: '{$identifier}'. Must start with letter or underscore and contain only alphanumeric characters, underscores, and dollar signs (max 63 chars).");
+    // Check length (PostgreSQL max identifier length is 63)
+    if (strlen($identifier) > 63) {
+      throw new SearchApiException("The {$type} '{$identifier}' exceeds maximum length of 63 characters.");
     }
-    
-    // Check against PostgreSQL reserved words (case-insensitive)
+
+    // Check for valid characters (alphanumeric and underscore)
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $identifier)) {
+      throw new SearchApiException("The {$type} '{$identifier}' contains invalid characters. Only alphanumeric and underscore allowed.");
+    }
+
+    // Check against reserved words
     if (in_array(strtolower($identifier), self::$reservedWords)) {
-      throw new SearchApiException("Invalid {$type}: '{$identifier}' is a PostgreSQL reserved word.");
+      throw new SearchApiException("The {$type} '{$identifier}' is a reserved PostgreSQL keyword.");
     }
-    
+
     return $identifier;
   }
 
@@ -327,7 +352,7 @@ class PostgreSQLConnector {
    */
   public function rollback() {
     try {
-      $this->connection->rollback();
+      $this->connection->rollBack();
     }
     catch (\PDOException $e) {
       throw new SearchApiException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
@@ -335,66 +360,17 @@ class PostgreSQLConnector {
   }
 
   /**
-   * Checks if a table exists in the database.
-   *
-   * @param string $table_name
-   *   The table name to check (without quotes).
+   * Checks if in a transaction.
    *
    * @return bool
-   *   TRUE if the table exists, FALSE otherwise.
+   *   TRUE if in a transaction, FALSE otherwise.
    */
-  public function tableExists($table_name) {
-    try {
-      // Use unquoted table name for existence check
-      $sql = "SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = :table_name
-      )";
-      
-      $stmt = $this->executeQuery($sql, [':table_name' => $table_name]);
-      return (bool) $stmt->fetchColumn();
-    }
-    catch (\Exception $e) {
-      $this->logger->error('Failed to check table existence for @table: @message', [
-        '@table' => $table_name,
-        '@message' => $e->getMessage(),
-      ]);
-      return FALSE;
-    }
+  public function inTransaction() {
+    return $this->connection->inTransaction();
   }
 
   /**
-   * Checks if an index exists in the database.
-   *
-   * @param string $index_name
-   *   The index name to check (without quotes).
-   *
-   * @return bool
-   *   TRUE if the index exists, FALSE otherwise.
-   */
-  public function indexExists($index_name) {
-    try {
-      $sql = "SELECT EXISTS (
-        SELECT FROM pg_indexes 
-        WHERE schemaname = 'public' 
-        AND indexname = :index_name
-      )";
-      
-      $stmt = $this->executeQuery($sql, [':index_name' => $index_name]);
-      return (bool) $stmt->fetchColumn();
-    }
-    catch (\Exception $e) {
-      $this->logger->error('Failed to check index existence for @index: @message', [
-        '@index' => $index_name,
-        '@message' => $e->getMessage(),
-      ]);
-      return FALSE;
-    }
-  }
-
-  /**
-   * Gets the last inserted ID.
+   * Gets the last insert ID.
    *
    * @param string $sequence_name
    *   Optional sequence name for PostgreSQL.

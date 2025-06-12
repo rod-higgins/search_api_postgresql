@@ -118,17 +118,10 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
     if (!$this->connector) {
       $config = $this->configuration['connection'];
       
-      // Use Key module for password if configured
-      if (!empty($config['password_key']) && !empty($this->keyRepository)) {
-        try {
-          $config['password'] = $this->getDatabasePassword();
-        }
-        catch (\Exception $e) {
-          // If key retrieval fails, try to use direct password
-          if (empty($config['password'])) {
-            throw $e;
-          }
-        }
+      // Get password using the trait method which handles both key and direct password
+      $password = $this->getDatabasePassword();
+      if ($password !== NULL) {
+        $config['password'] = $password;
       }
       
       $this->connector = new PostgreSQLConnector($config, $this->getLogger());
@@ -367,16 +360,16 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
       '#required' => TRUE,
     ];
 
-    // Add key module fields for secure password storage if available
-    if (!empty($this->keyRepository)) {
-      $this->addKeyFieldsToForm($form);
-    }
-    else {
-      // Fallback to direct password field
+    // Always add key fields (which includes password handling)
+    $this->addKeyFieldsToForm($form);
+    
+    // If Key module is not available, ensure we still have a password field
+    if (empty($this->keyRepository) && !isset($form['connection']['password'])) {
       $form['connection']['password'] = [
         '#type' => 'password',
-        '#title' => $this->t('Password'),
-        '#description' => $this->t('The password will not be shown. Leave empty to keep current password.'),
+        '#title' => $this->t('Password (Optional)'),
+        '#description' => $this->t('Database password. Leave empty if no password is required (e.g., local development).'),
+        '#required' => FALSE,
       ];
     }
 
@@ -421,15 +414,7 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
         'italian' => $this->t('Italian'),
         'portuguese' => $this->t('Portuguese'),
         'russian' => $this->t('Russian'),
-        'arabic' => $this->t('Arabic'),
-        'danish' => $this->t('Danish'),
-        'dutch' => $this->t('Dutch'),
-        'finnish' => $this->t('Finnish'),
-        'hungarian' => $this->t('Hungarian'),
-        'norwegian' => $this->t('Norwegian'),
-        'romanian' => $this->t('Romanian'),
-        'swedish' => $this->t('Swedish'),
-        'turkish' => $this->t('Turkish'),
+        'custom' => $this->t('Custom'),
       ],
       '#default_value' => $this->configuration['fts_configuration'],
       '#description' => $this->t('PostgreSQL text search configuration to use.'),
@@ -437,31 +422,31 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
 
     $form['index_settings']['batch_size'] = [
       '#type' => 'number',
-      '#title' => $this->t('Batch size'),
+      '#title' => $this->t('Indexing batch size'),
       '#default_value' => $this->configuration['batch_size'],
       '#min' => 1,
       '#max' => 1000,
       '#description' => $this->t('Number of items to index per batch.'),
     ];
 
-    // AI Embeddings (Optional)
+    // AI embeddings settings
     $form['ai_embeddings'] = [
       '#type' => 'details',
-      '#title' => $this->t('AI Text Embeddings (Optional)'),
+      '#title' => $this->t('AI Embeddings (Optional)'),
       '#open' => $this->configuration['ai_embeddings']['enabled'],
-      '#description' => $this->t('Enable semantic search using AI-generated text embeddings.'),
     ];
 
     $form['ai_embeddings']['enabled'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Enable AI text embeddings'),
       '#default_value' => $this->configuration['ai_embeddings']['enabled'],
-      '#description' => $this->t('Requires pgvector extension and Azure AI services.'),
+      '#description' => $this->t('Use Azure OpenAI to generate semantic embeddings for enhanced search.'),
     ];
 
-    // Azure AI settings
+    // Azure AI configuration
     $form['ai_embeddings']['azure_ai'] = [
-      '#type' => 'container',
+      '#type' => 'fieldset',
+      '#title' => $this->t('Azure OpenAI Configuration'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
@@ -471,65 +456,36 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
 
     $form['ai_embeddings']['azure_ai']['endpoint'] = [
       '#type' => 'textfield',
-      '#title' => $this->t('Azure AI Services Endpoint'),
+      '#title' => $this->t('Azure OpenAI Endpoint'),
       '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['endpoint'],
-      '#description' => $this->t('Your Azure OpenAI endpoint (e.g., https://myresource.openai.azure.com/)'),
+      '#description' => $this->t('Your Azure OpenAI endpoint URL (e.g., https://your-resource.openai.azure.com/).'),
     ];
-
-    // Add secure API key field if key repository available
-    if (!empty($this->keyRepository)) {
-      $keys = [];
-      foreach ($this->getKeyRepository()->getKeys() as $key) {
-        $keys[$key->id()] = $key->label();
-      }
-
-      $form['ai_embeddings']['azure_ai']['api_key_name'] = [
-        '#type' => 'select',
-        '#title' => $this->t('API Key'),
-        '#options' => $keys,
-        '#empty_option' => $this->t('- Select a key -'),
-        '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['api_key_name'],
-        '#description' => $this->t('Select a key containing your Azure AI API key.'),
-      ];
-    }
-    else {
-      $form['ai_embeddings']['azure_ai']['api_key'] = [
-        '#type' => 'password',
-        '#title' => $this->t('API Key'),
-        '#description' => $this->t('Your Azure AI API key. Leave empty to keep current key.'),
-      ];
-    }
 
     $form['ai_embeddings']['azure_ai']['deployment_name'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Deployment Name'),
       '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['deployment_name'],
-      '#description' => $this->t('Your Azure OpenAI deployment name for embeddings.'),
+      '#description' => $this->t('The name of your embedding model deployment.'),
     ];
 
     $form['ai_embeddings']['azure_ai']['model'] = [
       '#type' => 'select',
       '#title' => $this->t('Embedding Model'),
       '#options' => [
-        'text-embedding-ada-002' => $this->t('text-embedding-ada-002 (1536 dimensions)'),
-        'text-embedding-3-small' => $this->t('text-embedding-3-small (1536 dimensions)'),
-        'text-embedding-3-large' => $this->t('text-embedding-3-large (3072 dimensions)'),
+        'text-embedding-ada-002' => 'text-embedding-ada-002 (1536 dimensions)',
+        'text-embedding-3-small' => 'text-embedding-3-small (1536 dimensions)',
+        'text-embedding-3-large' => 'text-embedding-3-large (3072 dimensions)',
       ],
       '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['model'],
+      '#description' => $this->t('The embedding model to use.'),
     ];
 
-    // Advanced settings
-    $form['advanced'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Advanced Settings'),
-      '#open' => FALSE,
-    ];
-
-    $form['advanced']['debug'] = [
+    // Debug settings
+    $form['debug'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Enable debug mode'),
       '#default_value' => $this->configuration['debug'],
-      '#description' => $this->t('Log all queries and operations. Disable in production.'),
+      '#description' => $this->t('Log detailed information about indexing and search operations. Disable in production.'),
     ];
 
     return $form;
@@ -539,34 +495,55 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
    * {@inheritdoc}
    */
   public function validateConfigurationForm(array &$form, FormStateInterface $form_state) {
-    // Test database connection
     $values = $form_state->getValues();
     $config = $values['connection'];
     
-    // Get password from key if configured
+    // Get password - either from key or direct entry
+    $password = NULL;
+    
+    // First check if a password key is configured
     if (!empty($config['password_key']) && !empty($this->keyRepository)) {
       try {
-        $key = $this->getKeyRepository()->getKey($config['password_key']);
+        $key = $this->keyRepository->getKey($config['password_key']);
         if ($key) {
-          $config['password'] = $key->getKeyValue();
+          $password = $key->getKeyValue();
+        } else {
+          $form_state->setErrorByName('connection][password_key', 
+            $this->t('Selected password key not found.'));
+          return;
         }
       }
       catch (\Exception $e) {
-        $form_state->setErrorByName('connection][password_key', $e->getMessage());
+        $form_state->setErrorByName('connection][password_key', 
+          $this->t('Error retrieving password key: @message', ['@message' => $e->getMessage()]));
         return;
       }
     }
+    // Otherwise use direct password if provided
+    elseif (!empty($config['password'])) {
+      $password = $config['password'];
+    }
     
-    // Only test connection if we have a password
-    if (!empty($config['password'])) {
-      try {
-        $test_connector = new PostgreSQLConnector($config, $this->getLogger());
-        $test_connector->testConnection();
-      }
-      catch (\Exception $e) {
-        $form_state->setErrorByName('connection', $this->t('Database connection failed: @message', [
-          '@message' => $e->getMessage(),
-        ]));
+    // Set the password in config for connection test (may be NULL for passwordless connections)
+    $config['password'] = $password;
+    
+    // Test connection
+    try {
+      $test_connector = new PostgreSQLConnector($config, $this->getLogger());
+      $test_connector->testConnection();
+    }
+    catch (\Exception $e) {
+      // Only show error if it's not a password-related issue when password is optional
+      $error_message = $e->getMessage();
+      $is_password_error = stripos($error_message, 'password') !== FALSE || 
+                          stripos($error_message, 'authentication') !== FALSE;
+      
+      if (!$is_password_error || !empty($password)) {
+        $form_state->setErrorByName('connection', 
+          $this->t('Database connection failed: @message', ['@message' => $error_message]));
+      } else {
+        // Log warning but don't block form submission for local dev without passwords
+        $this->getLogger()->warning('Database connection test skipped - no password provided. This is acceptable for local development environments.');
       }
     }
   }
@@ -584,9 +561,13 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
       }
     }
     
-    // Handle password separately
+    // Handle direct password if provided
     if (!empty($values['connection']['password'])) {
+      // Store the password in configuration
       $this->configuration['connection']['password'] = $values['connection']['password'];
+    } elseif (empty($values['connection']['password_key'])) {
+      // If no password key selected and no direct password, clear any stored password
+      unset($this->configuration['connection']['password']);
     }
     
     // Clear connection to force reconnect with new settings
