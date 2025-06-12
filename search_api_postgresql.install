@@ -111,24 +111,6 @@ function search_api_postgresql_schema() {
         'type' => 'int',
         'description' => 'Number of tokens processed.',
       ],
-      'cost' => [
-        'type' => 'numeric',
-        'precision' => 10,
-        'scale' => 6,
-        'description' => 'Cost in USD.',
-      ],
-      'success' => [
-        'type' => 'int',
-        'size' => 'tiny',
-        'not null' => TRUE,
-        'default' => 1,
-        'description' => 'Whether operation succeeded.',
-      ],
-      'error_type' => [
-        'type' => 'varchar',
-        'length' => 100,
-        'description' => 'Error type if failed.',
-      ],
       'metadata' => [
         'type' => 'text',
         'serialize' => TRUE,
@@ -137,15 +119,14 @@ function search_api_postgresql_schema() {
     ],
     'primary key' => ['id'],
     'indexes' => [
-      'server_timestamp' => ['server_id', 'timestamp'],
+      'server_time' => ['server_id', 'timestamp'],
       'operation' => ['operation'],
-      'timestamp' => ['timestamp'],
     ],
   ];
 
   // Cost tracking table
   $schema['search_api_postgresql_costs'] = [
-    'description' => 'Daily cost aggregates.',
+    'description' => 'Tracks API costs.',
     'fields' => [
       'server_id' => [
         'type' => 'varchar',
@@ -165,25 +146,25 @@ function search_api_postgresql_schema() {
         'not null' => TRUE,
         'description' => 'Model name.',
       ],
-      'operation_count' => [
+      'requests' => [
         'type' => 'int',
         'not null' => TRUE,
         'default' => 0,
-        'description' => 'Number of operations.',
+        'description' => 'Number of requests.',
       ],
-      'token_count' => [
+      'tokens' => [
         'type' => 'int',
         'not null' => TRUE,
         'default' => 0,
-        'description' => 'Total tokens.',
+        'description' => 'Total tokens used.',
       ],
-      'total_cost' => [
+      'cost_usd' => [
         'type' => 'numeric',
         'precision' => 10,
         'scale' => 6,
         'not null' => TRUE,
         'default' => 0,
-        'description' => 'Total cost in USD.',
+        'description' => 'Cost in USD.',
       ],
     ],
     'primary key' => ['server_id', 'date', 'model'],
@@ -266,42 +247,67 @@ function search_api_postgresql_install() {
  * Implements hook_uninstall().
  */
 function search_api_postgresql_uninstall() {
-  // Remove configuration
-  \Drupal::configFactory()->getEditable('search_api_postgresql.settings')->delete();
+  // Remove all configuration
+  $config_factory = \Drupal::configFactory();
+  
+  // Delete main settings
+  $config_factory->getEditable('search_api_postgresql.settings')->delete();
+  
+  // Delete any other configuration with our prefix
+  $config_names = $config_factory->listAll('search_api_postgresql.');
+  foreach ($config_names as $config_name) {
+    $config_factory->getEditable($config_name)->delete();
+  }
   
   // Delete queues
   $queue_factory = \Drupal::service('queue');
   $queue_factory->get('search_api_postgresql_embedding')->deleteQueue();
   
-  // Note: Schema tables will be removed automatically
+  // Clean up any key value storage
+  \Drupal::keyValue('search_api_postgresql')->deleteAll();
+  
+  // Clean up any state variables
+  $state = \Drupal::state();
+  $state->delete('search_api_postgresql.last_cache_cleanup');
+  $state->delete('search_api_postgresql.last_analytics_aggregation');
+  
+  // Note: Schema tables will be removed automatically by Drupal
 }
 
 /**
- * Add analytics and cache tables.
+ * Implements hook_requirements().
  */
-function search_api_postgresql_update_8001() {
-  $schema = search_api_postgresql_schema();
-  
-  if (!db_table_exists('search_api_postgresql_embedding_cache')) {
-    db_create_table('search_api_postgresql_embedding_cache', $schema['search_api_postgresql_embedding_cache']);
-  }
-  
-  if (!db_table_exists('search_api_postgresql_analytics')) {
-    db_create_table('search_api_postgresql_analytics', $schema['search_api_postgresql_analytics']);
-  }
-}
+function search_api_postgresql_requirements($phase) {
+  $requirements = [];
 
-/**
- * Add cost tracking and metrics tables.
- */
-function search_api_postgresql_update_8002() {
-  $schema = search_api_postgresql_schema();
-  
-  if (!db_table_exists('search_api_postgresql_costs')) {
-    db_create_table('search_api_postgresql_costs', $schema['search_api_postgresql_costs']);
+  if ($phase == 'install') {
+    // Check if Search API is enabled
+    if (!\Drupal::moduleHandler()->moduleExists('search_api')) {
+      $requirements['search_api_postgresql_search_api'] = [
+        'title' => t('Search API'),
+        'description' => t('Search API PostgreSQL requires the Search API module.'),
+        'severity' => REQUIREMENT_ERROR,
+      ];
+    }
+
+    // Check if Key module is enabled
+    if (!\Drupal::moduleHandler()->moduleExists('key')) {
+      $requirements['search_api_postgresql_key'] = [
+        'title' => t('Key'),
+        'description' => t('Search API PostgreSQL requires the Key module for secure credential storage.'),
+        'severity' => REQUIREMENT_ERROR,
+      ];
+    }
+
+    // Check PDO PostgreSQL
+    if (!extension_loaded('pdo_pgsql')) {
+      $requirements['search_api_postgresql_pdo'] = [
+        'title' => t('PDO PostgreSQL'),
+        'description' => t('The PDO PostgreSQL PHP extension is required.'),
+        'severity' => REQUIREMENT_ERROR,
+      ];
+    }
   }
-  
-  if (!db_table_exists('search_api_postgresql_metrics')) {
-    db_create_table('search_api_postgresql_metrics', $schema['search_api_postgresql_metrics']);
-  }
+
+  return $requirements;
 }
