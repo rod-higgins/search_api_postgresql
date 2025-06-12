@@ -62,6 +62,13 @@ class EmbeddingAnalyticsService {
   protected $metricsTable = 'search_api_postgresql_metrics';
 
   /**
+   * Daily aggregates table name.
+   *
+   * @var string
+   */
+  protected $dailyAggregatesTable = 'search_api_postgresql_daily_aggregates';
+
+  /**
    * Constructs an EmbeddingAnalyticsService.
    *
    * @param \Drupal\Core\Database\Connection $database
@@ -116,618 +123,458 @@ class EmbeddingAnalyticsService {
           'timestamp' => time(),
         ])
         ->execute();
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to record API call: @message', ['@message' => $e->getMessage()]);
+    }
+  }
 
-      // Also record in cost tracking table
-      $this->recordCost($server_id, $cost, $token_count, $operation);
+  /**
+   * Records a performance metric.
+   *
+   * @param string $server_id
+   *   The server ID.
+   * @param string $metric_type
+   *   The metric type.
+   * @param string $metric_name
+   *   The metric name.
+   * @param float $value
+   *   The metric value.
+   * @param array $metadata
+   *   Additional metadata.
+   * @param string|null $index_id
+   *   Optional index ID.
+   */
+  public function recordMetric($server_id, $metric_type, $metric_name, $value, array $metadata = [], $index_id = NULL) {
+    try {
+      $fields = [
+        'server_id' => $server_id,
+        'metric_type' => $metric_type,
+        'metric_name' => $metric_name,
+        'value' => $value,
+        'metadata' => json_encode($metadata),
+        'timestamp' => time(),
+      ];
       
-    } catch (\Exception $e) {
-      $this->logger->error('Failed to record API call analytics: @message', [
-        '@message' => $e->getMessage()
-      ]);
-    }
-  }
-
-  /**
-   * Records a search operation.
-   *
-   * @param string $server_id
-   *   The server ID.
-   * @param string $index_id
-   *   The index ID.
-   * @param string $search_type
-   *   Type of search (text, vector, hybrid).
-   * @param int $duration_ms
-   *   Duration in milliseconds.
-   * @param int $result_count
-   *   Number of results returned.
-   * @param array $metadata
-   *   Additional metadata.
-   */
-  public function recordSearch($server_id, $index_id, $search_type, $duration_ms, $result_count, array $metadata = []) {
-    try {
+      if ($index_id) {
+        $fields['index_id'] = $index_id;
+      }
+      
       $this->database->insert($this->metricsTable)
-        ->fields([
-          'server_id' => $server_id,
-          'index_id' => $index_id,
-          'metric_type' => 'search',
-          'metric_name' => 'search_operation',
-          'value' => $duration_ms,
-          'metadata' => json_encode(array_merge($metadata, [
-            'search_type' => $search_type,
-            'result_count' => $result_count,
-          ])),
-          'timestamp' => time(),
-        ])
+        ->fields($fields)
         ->execute();
-        
-    } catch (\Exception $e) {
-      $this->logger->error('Failed to record search analytics: @message', [
-        '@message' => $e->getMessage()
-      ]);
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to record metric: @message', ['@message' => $e->getMessage()]);
     }
   }
 
   /**
-   * Records cache performance.
-   *
-   * @param string $server_id
-   *   The server ID.
-   * @param string $operation
-   *   Cache operation (hit, miss, set).
-   * @param array $metadata
-   *   Additional metadata.
-   */
-  public function recordCacheOperation($server_id, $operation, array $metadata = []) {
-    try {
-      $this->database->insert($this->metricsTable)
-        ->fields([
-          'server_id' => $server_id,
-          'metric_type' => 'cache',
-          'metric_name' => 'cache_' . $operation,
-          'value' => 1,
-          'metadata' => json_encode($metadata),
-          'timestamp' => time(),
-        ])
-        ->execute();
-        
-    } catch (\Exception $e) {
-      $this->logger->error('Failed to record cache analytics: @message', [
-        '@message' => $e->getMessage()
-      ]);
-    }
-  }
-
-  /**
-   * Gets cost analytics for a time period.
+   * Gets cost analytics for a period.
    *
    * @param string $period
-   *   Time period (24h, 7d, 30d, 90d).
-   * @param string $server_id
-   *   Optional server ID to filter by.
+   *   The time period (24h, 7d, 30d, 90d).
+   * @param string|null $server_id
+   *   Optional server ID filter.
    *
    * @return array
    *   Cost analytics data.
    */
-  public function getCostAnalytics($period, $server_id = NULL) {
-    $seconds = $this->getPeriodSeconds($period);
-    $start_time = time() - $seconds;
+  public function getCostAnalytics($period = '7d', $server_id = NULL) {
+    $start_time = time() - $this->getPeriodSeconds($period);
     
-    $query = $this->database->select($this->costTable, 'c')
-      ->condition('c.timestamp', $start_time, '>=');
-      
+    $query = $this->database->select($this->analyticsTable, 'a')
+      ->fields('a')
+      ->condition('timestamp', $start_time, '>=');
+    
     if ($server_id) {
-      $query->condition('c.server_id', $server_id);
+      $query->condition('server_id', $server_id);
     }
-
-    // Current period costs
-    $current_cost = $query
-      ->addExpression('SUM(cost_usd)', 'total_cost')
-      ->addExpression('SUM(token_count)', 'total_tokens')
-      ->addExpression('COUNT(*)', 'api_calls')
-      ->execute()
-      ->fetchAssoc();
-
-    // Previous period for comparison
-    $prev_start = $start_time - $seconds;
-    $prev_query = $this->database->select($this->costTable, 'c')
-      ->condition('c.timestamp', $prev_start, '>=')
-      ->condition('c.timestamp', $start_time, '<');
+    
+    $results = $query->execute()->fetchAll();
+    
+    $total_cost = 0;
+    $total_tokens = 0;
+    $api_calls = 0;
+    $by_operation = [];
+    
+    foreach ($results as $record) {
+      $total_cost += $record->cost_usd;
+      $total_tokens += $record->token_count;
+      $api_calls++;
       
-    if ($server_id) {
-      $prev_query->condition('c.server_id', $server_id);
+      if (!isset($by_operation[$record->operation])) {
+        $by_operation[$record->operation] = [
+          'cost' => 0,
+          'tokens' => 0,
+          'calls' => 0,
+        ];
+      }
+      
+      $by_operation[$record->operation]['cost'] += $record->cost_usd;
+      $by_operation[$record->operation]['tokens'] += $record->token_count;
+      $by_operation[$record->operation]['calls']++;
     }
-
-    $previous_cost = $prev_query
-      ->addExpression('SUM(cost_usd)', 'total_cost')
-      ->execute()
-      ->fetchField();
-
+    
+    // Calculate projections
+    $days_in_period = $this->getPeriodSeconds($period) / 86400;
+    $daily_cost = $days_in_period > 0 ? $total_cost / $days_in_period : 0;
+    $projected_monthly = $daily_cost * 30;
+    
     // Calculate trend
     $trend = 0;
-    if ($previous_cost > 0) {
-      $trend = (($current_cost['total_cost'] - $previous_cost) / $previous_cost) * 100;
+    if ($days_in_period >= 2) {
+      $mid_time = $start_time + ($this->getPeriodSeconds($period) / 2);
+      
+      $first_half = $this->database->select($this->analyticsTable, 'a')
+        ->condition('timestamp', [$start_time, $mid_time], 'BETWEEN')
+        ->addExpression('SUM(cost_usd)', 'total_cost')
+        ->execute()
+        ->fetchField();
+      
+      $second_half = $this->database->select($this->analyticsTable, 'a')
+        ->condition('timestamp', $mid_time, '>')
+        ->addExpression('SUM(cost_usd)', 'total_cost')
+        ->execute()
+        ->fetchField();
+      
+      if ($first_half > 0) {
+        $trend = (($second_half - $first_half) / $first_half) * 100;
+      }
     }
-
-    // Project monthly costs
-    $daily_average = $current_cost['total_cost'] / ($seconds / 86400);
-    $projected_monthly = $daily_average * 30;
-
+    
     return [
-      'current_cost' => round($current_cost['total_cost'], 4),
-      'api_calls' => (int) $current_cost['api_calls'],
-      'tokens_used' => (int) $current_cost['total_tokens'],
-      'trend' => round($trend, 1),
-      'projected_monthly' => round($projected_monthly, 2),
-      'projected_calls' => round(($current_cost['api_calls'] / ($seconds / 86400)) * 30),
-      'projected_tokens' => round(($current_cost['total_tokens'] / ($seconds / 86400)) * 30),
-      'daily_average' => round($daily_average, 4),
+      'current_cost' => $total_cost,
+      'tokens_used' => $total_tokens,
+      'api_calls' => $api_calls,
+      'projected_monthly' => $projected_monthly,
+      'projected_calls' => $api_calls * (30 / $days_in_period),
+      'projected_tokens' => $total_tokens * (30 / $days_in_period),
+      'trend' => $trend,
+      'by_operation' => $by_operation,
     ];
   }
 
   /**
-   * Gets performance metrics for a time period.
+   * Gets performance metrics for a period.
    *
    * @param string $period
-   *   Time period (24h, 7d, 30d, 90d).
-   * @param string $server_id
-   *   Optional server ID to filter by.
+   *   The time period.
+   * @param string|null $server_id
+   *   Optional server ID filter.
    *
    * @return array
    *   Performance metrics data.
    */
-  public function getPerformanceMetrics($period, $server_id = NULL) {
-    $seconds = $this->getPeriodSeconds($period);
-    $start_time = time() - $seconds;
+  public function getPerformanceMetrics($period = '7d', $server_id = NULL) {
+    $start_time = time() - $this->getPeriodSeconds($period);
     
-    // Search latency over time
-    $latency_data = $this->getTimeSeriesData(
-      'search',
-      'search_operation',
-      $start_time,
-      time(),
-      $server_id,
-      'AVG'
-    );
-
-    // Cache hit rate over time
-    $cache_hits = $this->getTimeSeriesData(
-      'cache',
-      'cache_hit',
-      $start_time,
-      time(),
-      $server_id,
-      'SUM'
-    );
-
-    $cache_misses = $this->getTimeSeriesData(
-      'cache',
-      'cache_miss',
-      $start_time,
-      time(),
-      $server_id,
-      'SUM'
-    );
-
-    // Calculate hit rate percentage
-    $cache_hit_rate = [];
-    foreach ($cache_hits as $timestamp => $hits) {
-      $misses = $cache_misses[$timestamp] ?? 0;
-      $total = $hits + $misses;
-      $cache_hit_rate[$timestamp] = $total > 0 ? ($hits / $total) * 100 : 0;
-    }
-
-    return [
-      'search_latency' => $latency_data,
-      'cache_hit_rate' => $cache_hit_rate,
-    ];
-  }
-
-  /**
-   * Gets usage patterns for a time period.
-   *
-   * @param string $period
-   *   Time period (24h, 7d, 30d, 90d).
-   * @param string $server_id
-   *   Optional server ID to filter by.
-   *
-   * @return array
-   *   Usage patterns data.
-   */
-  public function getUsagePatterns($period, $server_id = NULL) {
-    $seconds = $this->getPeriodSeconds($period);
-    $start_time = time() - $seconds;
-
-    // Query volume over time
-    $query_volume = $this->getTimeSeriesData(
-      'search',
-      'search_operation',
-      $start_time,
-      time(),
-      $server_id,
-      'COUNT'
-    );
-
-    // Embedding generation over time
-    $embedding_volume = $this->getEmbeddingGenerationData($start_time, time(), $server_id);
-
-    return [
-      'query_volume' => $query_volume,
-      'embedding_generation' => $embedding_volume,
-    ];
-  }
-
-  /**
-   * Gets server-specific metrics.
-   *
-   * @param string $server_id
-   *   The server ID.
-   * @param string $period
-   *   Time period (24h, 7d, 30d, 90d).
-   *
-   * @return array
-   *   Server metrics.
-   */
-  public function getServerMetrics($server_id, $period) {
-    $seconds = $this->getPeriodSeconds($period);
-    $start_time = time() - $seconds;
-
-    // Search metrics
-    $search_metrics = $this->database->select($this->metricsTable, 'm')
+    $query = $this->database->select($this->metricsTable, 'm')
       ->fields('m')
-      ->condition('m.server_id', $server_id)
-      ->condition('m.metric_type', 'search')
-      ->condition('m.timestamp', $start_time, '>=')
-      ->execute()
-      ->fetchAll();
-
-    $search_queries = count($search_metrics);
-    $avg_query_time = $search_queries > 0 ? 
-      array_sum(array_column($search_metrics, 'value')) / $search_queries : 0;
-
-    // API call metrics
-    $api_metrics = $this->database->select($this->analyticsTable, 'a')
-      ->condition('a.server_id', $server_id)
-      ->condition('a.timestamp', $start_time, '>=')
-      ->addExpression('COUNT(*)', 'api_calls')
-      ->addExpression('SUM(cost_usd)', 'total_cost')
-      ->addExpression('SUM(token_count)', 'total_tokens')
-      ->execute()
-      ->fetchAssoc();
-
-    // Cache metrics
-    $cache_hits = $this->database->select($this->metricsTable, 'm')
-      ->condition('m.server_id', $server_id)
-      ->condition('m.metric_name', 'cache_hit')
-      ->condition('m.timestamp', $start_time, '>=')
-      ->addExpression('SUM(value)', 'hits')
-      ->execute()
-      ->fetchField();
-
-    $cache_misses = $this->database->select($this->metricsTable, 'm')
-      ->condition('m.server_id', $server_id)
-      ->condition('m.metric_name', 'cache_miss')
-      ->condition('m.timestamp', $start_time, '>=')
-      ->addExpression('SUM(value)', 'misses')
-      ->execute()
-      ->fetchField();
-
-    $cache_total = $cache_hits + $cache_misses;
-    $cache_hit_rate = $cache_total > 0 ? ($cache_hits / $cache_total) * 100 : 0;
-
-    // Count different search types
-    $vector_searches = 0;
-    $hybrid_searches = 0;
-    $embeddings_generated = 0;
-
-    foreach ($search_metrics as $metric) {
-      $metadata = json_decode($metric->metadata, TRUE) ?: [];
-      $search_type = $metadata['search_type'] ?? 'text';
-      
-      if ($search_type === 'vector_only') {
-        $vector_searches++;
-      } elseif ($search_type === 'hybrid') {
-        $hybrid_searches++;
-      }
-    }
-
-    // Count embedding generations
-    $embedding_operations = $this->database->select($this->analyticsTable, 'a')
-      ->condition('a.server_id', $server_id)
-      ->condition('a.operation', ['generate_embedding', 'batch_generate_embeddings'], 'IN')
-      ->condition('a.timestamp', $start_time, '>=')
-      ->execute()
-      ->fetchAll();
-
-    foreach ($embedding_operations as $operation) {
-      $metadata = json_decode($operation->metadata, TRUE) ?: [];
-      $embeddings_generated += $metadata['embedding_count'] ?? 1;
-    }
-
-    return [
-      'search_queries' => $search_queries,
-      'avg_query_time' => round($avg_query_time, 2),
-      'api_calls' => (int) $api_metrics['api_calls'],
-      'api_cost' => (float) $api_metrics['total_cost'],
-      'tokens_used' => (int) $api_metrics['total_tokens'],
-      'cache_hit_rate' => round($cache_hit_rate, 1),
-      'vector_searches' => $vector_searches,
-      'hybrid_searches' => $hybrid_searches,
-      'embeddings_generated' => $embeddings_generated,
-    ];
-  }
-
-  /**
-   * Gets cost breakdown by operation type.
-   *
-   * @param string $period
-   *   Time period.
-   * @param string $server_id
-   *   Optional server ID.
-   *
-   * @return array
-   *   Cost breakdown.
-   */
-  public function getCostBreakdown($period, $server_id = NULL) {
-    $seconds = $this->getPeriodSeconds($period);
-    $start_time = time() - $seconds;
+      ->condition('timestamp', $start_time, '>=')
+      ->orderBy('timestamp', 'ASC');
     
-    $query = $this->database->select($this->analyticsTable, 'a')
-      ->fields('a', ['operation'])
-      ->condition('a.timestamp', $start_time, '>=')
-      ->addExpression('SUM(cost_usd)', 'total_cost')
-      ->addExpression('SUM(token_count)', 'total_tokens')
-      ->addExpression('COUNT(*)', 'call_count')
-      ->groupBy('a.operation')
-      ->orderBy('total_cost', 'DESC');
-      
     if ($server_id) {
-      $query->condition('a.server_id', $server_id);
+      $query->condition('server_id', $server_id);
     }
-
-    $results = $query->execute()->fetchAllAssoc('operation');
     
-    $breakdown = [];
-    foreach ($results as $operation => $data) {
-      $breakdown[] = [
-        'operation' => $operation,
-        'cost' => round($data->total_cost, 4),
-        'tokens' => (int) $data->total_tokens,
-        'calls' => (int) $data->call_count,
-        'avg_cost_per_call' => $data->call_count > 0 ? round($data->total_cost / $data->call_count, 6) : 0,
-      ];
+    $results = $query->execute()->fetchAll();
+    
+    $metrics = [
+      'search_latency' => [],
+      'cache_hit_rate' => [],
+      'queue_size' => [],
+      'error_rate' => [],
+    ];
+    
+    // Group metrics by hour
+    $hourly_buckets = [];
+    foreach ($results as $record) {
+      $hour = floor($record->timestamp / 3600) * 3600;
+      
+      if (!isset($hourly_buckets[$hour])) {
+        $hourly_buckets[$hour] = [
+          'search_latency' => [],
+          'cache_hits' => 0,
+          'cache_misses' => 0,
+          'queue_size' => [],
+          'errors' => 0,
+          'total' => 0,
+        ];
+      }
+      
+      switch ($record->metric_type) {
+        case 'search':
+          if ($record->metric_name === 'latency') {
+            $hourly_buckets[$hour]['search_latency'][] = $record->value;
+          }
+          break;
+          
+        case 'cache':
+          if ($record->metric_name === 'hit') {
+            $hourly_buckets[$hour]['cache_hits']++;
+          }
+          elseif ($record->metric_name === 'miss') {
+            $hourly_buckets[$hour]['cache_misses']++;
+          }
+          break;
+          
+        case 'queue':
+          if ($record->metric_name === 'size') {
+            $hourly_buckets[$hour]['queue_size'][] = $record->value;
+          }
+          break;
+          
+        case 'error':
+          $hourly_buckets[$hour]['errors']++;
+          break;
+      }
+      
+      $hourly_buckets[$hour]['total']++;
     }
-
-    return $breakdown;
-  }
-
-  /**
-   * Gets top consuming indexes.
-   *
-   * @param string $period
-   *   Time period.
-   * @param int $limit
-   *   Number of results to return.
-   *
-   * @return array
-   *   Top consuming indexes.
-   */
-  public function getTopConsumingIndexes($period, $limit = 10) {
-    $seconds = $this->getPeriodSeconds($period);
-    $start_time = time() - $seconds;
-
-    // Get costs by server, then map to indexes
-    $server_costs = $this->database->select($this->analyticsTable, 'a')
-      ->fields('a', ['server_id'])
-      ->condition('a.timestamp', $start_time, '>=')
-      ->addExpression('SUM(cost_usd)', 'total_cost')
-      ->addExpression('SUM(token_count)', 'total_tokens')
-      ->groupBy('a.server_id')
-      ->orderBy('total_cost', 'DESC')
-      ->range(0, $limit)
-      ->execute()
-      ->fetchAllAssoc('server_id');
-
-    $results = [];
-    foreach ($server_costs as $server_id => $cost_data) {
-      // Get indexes for this server
-      $indexes = $this->entityTypeManager
-        ->getStorage('search_api_index')
-        ->loadByProperties(['server' => $server_id]);
-
-      foreach ($indexes as $index) {
-        $results[] = [
-          'index_id' => $index->id(),
-          'index_name' => $index->label(),
-          'server_id' => $server_id,
-          'cost' => round($cost_data->total_cost / count($indexes), 4), // Approximate
-          'tokens' => round($cost_data->total_tokens / count($indexes)),
+    
+    // Process hourly buckets
+    foreach ($hourly_buckets as $hour => $data) {
+      // Average search latency
+      if (!empty($data['search_latency'])) {
+        $metrics['search_latency'][] = [
+          'timestamp' => $hour,
+          'value' => array_sum($data['search_latency']) / count($data['search_latency']),
+        ];
+      }
+      
+      // Cache hit rate
+      $cache_total = $data['cache_hits'] + $data['cache_misses'];
+      if ($cache_total > 0) {
+        $metrics['cache_hit_rate'][] = [
+          'timestamp' => $hour,
+          'value' => ($data['cache_hits'] / $cache_total) * 100,
+        ];
+      }
+      
+      // Average queue size
+      if (!empty($data['queue_size'])) {
+        $metrics['queue_size'][] = [
+          'timestamp' => $hour,
+          'value' => array_sum($data['queue_size']) / count($data['queue_size']),
+        ];
+      }
+      
+      // Error rate
+      if ($data['total'] > 0) {
+        $metrics['error_rate'][] = [
+          'timestamp' => $hour,
+          'value' => ($data['errors'] / $data['total']) * 100,
         ];
       }
     }
-
-    // Sort by cost and limit
-    usort($results, function($a, $b) {
-      return $b['cost'] <=> $a['cost'];
-    });
-
-    return array_slice($results, 0, $limit);
+    
+    return $metrics;
   }
 
   /**
-   * Cleans up old analytics data.
+   * Aggregates daily statistics.
    *
-   * @param int $retention_days
-   *   Number of days to retain data.
+   * This method is called by cron to aggregate analytics data into daily summaries.
+   */
+  public function aggregateDailyStats() {
+    try {
+      // Get the last aggregation timestamp
+      $last_aggregation = $this->database->select($this->dailyAggregatesTable, 'da')
+        ->fields('da', ['date'])
+        ->orderBy('date', 'DESC')
+        ->range(0, 1)
+        ->execute()
+        ->fetchField();
+      
+      // Default to yesterday if no previous aggregation
+      $start_date = $last_aggregation ? strtotime($last_aggregation . ' +1 day') : strtotime('yesterday midnight');
+      $end_date = strtotime('today midnight');
+      
+      // Don't aggregate today's incomplete data
+      if ($start_date >= $end_date) {
+        return;
+      }
+      
+      // Process each day
+      for ($date = $start_date; $date < $end_date; $date = strtotime('+1 day', $date)) {
+        $day_start = $date;
+        $day_end = strtotime('+1 day', $date) - 1;
+        
+        // Aggregate cost data
+        $cost_query = $this->database->select($this->analyticsTable, 'a')
+          ->condition('timestamp', [$day_start, $day_end], 'BETWEEN');
+        
+        $cost_query->addExpression('COUNT(*)', 'total_calls');
+        $cost_query->addExpression('SUM(cost_usd)', 'total_cost');
+        $cost_query->addExpression('SUM(token_count)', 'total_tokens');
+        $cost_query->addExpression('AVG(duration_ms)', 'avg_duration');
+        $cost_query->addField('a', 'server_id');
+        $cost_query->addField('a', 'operation');
+        $cost_query->groupBy('server_id');
+        $cost_query->groupBy('operation');
+        
+        $cost_results = $cost_query->execute()->fetchAll();
+        
+        foreach ($cost_results as $result) {
+          $this->database->merge($this->dailyAggregatesTable)
+            ->keys([
+              'date' => date('Y-m-d', $date),
+              'server_id' => $result->server_id,
+              'operation' => $result->operation,
+            ])
+            ->fields([
+              'total_calls' => $result->total_calls,
+              'total_cost' => $result->total_cost,
+              'total_tokens' => $result->total_tokens,
+              'avg_duration' => $result->avg_duration,
+              'created' => time(),
+            ])
+            ->execute();
+        }
+        
+        // Aggregate performance metrics
+        $metrics_query = $this->database->select($this->metricsTable, 'm')
+          ->condition('timestamp', [$day_start, $day_end], 'BETWEEN');
+        
+        $metrics_query->addExpression('COUNT(*)', 'count');
+        $metrics_query->addExpression('AVG(value)', 'avg_value');
+        $metrics_query->addExpression('MIN(value)', 'min_value');
+        $metrics_query->addExpression('MAX(value)', 'max_value');
+        $metrics_query->addField('m', 'server_id');
+        $metrics_query->addField('m', 'metric_type');
+        $metrics_query->addField('m', 'metric_name');
+        $metrics_query->groupBy('server_id');
+        $metrics_query->groupBy('metric_type');
+        $metrics_query->groupBy('metric_name');
+        
+        $metrics_results = $metrics_query->execute()->fetchAll();
+        
+        foreach ($metrics_results as $result) {
+          $this->database->insert($this->metricsTable)
+            ->fields([
+              'server_id' => $result->server_id,
+              'metric_type' => 'daily_aggregate',
+              'metric_name' => $result->metric_type . '_' . $result->metric_name,
+              'value' => $result->avg_value,
+              'metadata' => json_encode([
+                'date' => date('Y-m-d', $date),
+                'count' => $result->count,
+                'min' => $result->min_value,
+                'max' => $result->max_value,
+                'original_type' => $result->metric_type,
+                'original_name' => $result->metric_name,
+              ]),
+              'timestamp' => $date,
+            ])
+            ->execute();
+        }
+      }
+      
+      // Clean up old raw data (keep 90 days)
+      $cutoff_time = time() - (90 * 86400);
+      $this->database->delete($this->analyticsTable)
+        ->condition('timestamp', $cutoff_time, '<')
+        ->execute();
+      
+      $this->logger->info('Aggregated daily stats from @start to @end', [
+        '@start' => date('Y-m-d', $start_date),
+        '@end' => date('Y-m-d', $end_date - 1),
+      ]);
+      
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to aggregate daily stats: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+    }
+  }
+
+  /**
+   * Gets server statistics.
+   *
+   * @param string $server_id
+   *   The server ID.
    *
    * @return array
-   *   Cleanup results.
+   *   Server statistics.
    */
-  public function cleanupOldData($retention_days = 90) {
-    $cutoff_time = time() - ($retention_days * 86400);
+  public function getServerStats($server_id) {
+    $stats = [
+      'total_embeddings' => 0,
+      'total_cost' => 0,
+      'avg_latency' => 0,
+      'cache_hit_rate' => 0,
+      'last_activity' => NULL,
+    ];
     
-    $results = [];
+    // Get total embeddings and cost
+    $totals = $this->database->select($this->analyticsTable, 'a')
+      ->condition('server_id', $server_id)
+      ->fields('a')
+      ->addExpression('COUNT(*)', 'total_calls')
+      ->addExpression('SUM(cost_usd)', 'total_cost')
+      ->addExpression('MAX(timestamp)', 'last_activity')
+      ->execute()
+      ->fetchAssoc();
     
-    try {
-      // Clean analytics table
-      $deleted_analytics = $this->database->delete($this->analyticsTable)
-        ->condition('timestamp', $cutoff_time, '<')
-        ->execute();
-      
-      // Clean cost table
-      $deleted_costs = $this->database->delete($this->costTable)
-        ->condition('timestamp', $cutoff_time, '<')
-        ->execute();
-      
-      // Clean metrics table
-      $deleted_metrics = $this->database->delete($this->metricsTable)
-        ->condition('timestamp', $cutoff_time, '<')
-        ->execute();
-
-      $results = [
-        'success' => TRUE,
-        'deleted_analytics' => $deleted_analytics,
-        'deleted_costs' => $deleted_costs,
-        'deleted_metrics' => $deleted_metrics,
-        'total_deleted' => $deleted_analytics + $deleted_costs + $deleted_metrics,
-        'retention_days' => $retention_days,
-      ];
-
-      $this->logger->info('Cleaned up old analytics data: @total records deleted', [
-        '@total' => $results['total_deleted']
-      ]);
-
-    } catch (\Exception $e) {
-      $results = [
-        'success' => FALSE,
-        'error' => $e->getMessage(),
-      ];
-      
-      $this->logger->error('Failed to clean up analytics data: @message', [
-        '@message' => $e->getMessage()
-      ]);
+    if ($totals) {
+      $stats['total_embeddings'] = $totals['total_calls'];
+      $stats['total_cost'] = $totals['total_cost'];
+      $stats['last_activity'] = $totals['last_activity'];
     }
-
-    return $results;
-  }
-
-  /**
-   * Records a cost entry.
-   */
-  protected function recordCost($server_id, $cost, $token_count, $operation) {
-    $this->database->insert($this->costTable)
-      ->fields([
-        'server_id' => $server_id,
-        'cost_usd' => $cost,
-        'token_count' => $token_count,
-        'operation' => $operation,
-        'timestamp' => time(),
-      ])
-      ->execute();
-  }
-
-  /**
-   * Gets time series data for metrics.
-   */
-  protected function getTimeSeriesData($metric_type, $metric_name, $start_time, $end_time, $server_id = NULL, $aggregation = 'AVG') {
-    // Calculate interval based on time range
-    $duration = $end_time - $start_time;
-    $interval = $this->calculateInterval($duration);
-
-    $query = $this->database->select($this->metricsTable, 'm')
-      ->condition('m.metric_type', $metric_type)
-      ->condition('m.metric_name', $metric_name)
-      ->condition('m.timestamp', $start_time, '>=')
-      ->condition('m.timestamp', $end_time, '<=');
-
-    if ($server_id) {
-      $query->condition('m.server_id', $server_id);
-    }
-
-    // Group by time intervals
-    $query->addExpression("FLOOR(timestamp / {$interval}) * {$interval}", 'time_bucket');
     
-    switch ($aggregation) {
-      case 'SUM':
-        $query->addExpression('SUM(value)', 'aggregated_value');
-        break;
-      case 'COUNT':
-        $query->addExpression('COUNT(*)', 'aggregated_value');
-        break;
-      case 'MAX':
-        $query->addExpression('MAX(value)', 'aggregated_value');
-        break;
-      case 'MIN':
-        $query->addExpression('MIN(value)', 'aggregated_value');
-        break;
-      default:
-        $query->addExpression('AVG(value)', 'aggregated_value');
-    }
-
-    $query->groupBy('time_bucket')
-      ->orderBy('time_bucket');
-
-    $results = $query->execute()->fetchAllKeyed();
+    // Get average latency from last 24 hours
+    $yesterday = time() - 86400;
+    $latency = $this->database->select($this->metricsTable, 'm')
+      ->condition('server_id', $server_id)
+      ->condition('metric_type', 'search')
+      ->condition('metric_name', 'latency')
+      ->condition('timestamp', $yesterday, '>')
+      ->fields('m')
+      ->addExpression('AVG(value)', 'avg_latency')
+      ->execute()
+      ->fetchField();
     
-    // Fill in missing intervals with zeros
-    $filled_results = [];
-    for ($time = $start_time; $time <= $end_time; $time += $interval) {
-      $bucket = floor($time / $interval) * $interval;
-      $filled_results[$bucket] = $results[$bucket] ?? 0;
+    if ($latency) {
+      $stats['avg_latency'] = round($latency, 2);
     }
-
-    return $filled_results;
-  }
-
-  /**
-   * Gets embedding generation data over time.
-   */
-  protected function getEmbeddingGenerationData($start_time, $end_time, $server_id = NULL) {
-    $duration = $end_time - $start_time;
-    $interval = $this->calculateInterval($duration);
-
-    $query = $this->database->select($this->analyticsTable, 'a')
-      ->condition('a.operation', ['generate_embedding', 'batch_generate_embeddings'], 'IN')
-      ->condition('a.timestamp', $start_time, '>=')
-      ->condition('a.timestamp', $end_time, '<=');
-
-    if ($server_id) {
-      $query->condition('a.server_id', $server_id);
-    }
-
-    $query->addExpression("FLOOR(timestamp / {$interval}) * {$interval}", 'time_bucket');
-    $query->addExpression('COUNT(*)', 'operation_count');
-    $query->groupBy('time_bucket')
-      ->orderBy('time_bucket');
-
-    $results = $query->execute()->fetchAllKeyed();
     
-    // Fill in missing intervals
-    $filled_results = [];
-    for ($time = $start_time; $time <= $end_time; $time += $interval) {
-      $bucket = floor($time / $interval) * $interval;
-      $filled_results[$bucket] = $results[$bucket] ?? 0;
+    // Calculate cache hit rate from last 24 hours
+    $cache_hits = $this->database->select($this->metricsTable, 'm')
+      ->condition('server_id', $server_id)
+      ->condition('metric_type', 'cache')
+      ->condition('metric_name', 'hit')
+      ->condition('timestamp', $yesterday, '>')
+      ->countQuery()
+      ->execute()
+      ->fetchField();
+    
+    $cache_misses = $this->database->select($this->metricsTable, 'm')
+      ->condition('server_id', $server_id)
+      ->condition('metric_type', 'cache')
+      ->condition('metric_name', 'miss')
+      ->condition('timestamp', $yesterday, '>')
+      ->countQuery()
+      ->execute()
+      ->fetchField();
+    
+    $cache_total = $cache_hits + $cache_misses;
+    if ($cache_total > 0) {
+      $stats['cache_hit_rate'] = round(($cache_hits / $cache_total) * 100, 2);
     }
-
-    return $filled_results;
-  }
-
-  /**
-   * Calculates appropriate interval for time series data.
-   */
-  protected function calculateInterval($duration) {
-    if ($duration <= 86400) { // 1 day
-      return 3600; // 1 hour intervals
-    } elseif ($duration <= 604800) { // 1 week
-      return 21600; // 6 hour intervals
-    } elseif ($duration <= 2592000) { // 30 days
-      return 86400; // 1 day intervals
-    } else {
-      return 604800; // 1 week intervals
-    }
+    
+    return $stats;
   }
 
   /**
    * Converts period string to seconds.
+   *
+   * @param string $period
+   *   The period string.
+   *
+   * @return int
+   *   Number of seconds.
    */
   protected function getPeriodSeconds($period) {
     switch ($period) {
@@ -817,58 +664,7 @@ class EmbeddingAnalyticsService {
       $schema->createTable($this->analyticsTable, $table_spec);
     }
 
-    // Cost tracking table
-    if (!$schema->tableExists($this->costTable)) {
-      $table_spec = [
-        'description' => 'Cost tracking for embedding operations',
-        'fields' => [
-          'id' => [
-            'type' => 'serial',
-            'not null' => TRUE,
-            'description' => 'Primary key',
-          ],
-          'server_id' => [
-            'type' => 'varchar',
-            'length' => 255,
-            'not null' => TRUE,
-            'description' => 'Server ID',
-          ],
-          'cost_usd' => [
-            'type' => 'numeric',
-            'precision' => 10,
-            'scale' => 6,
-            'not null' => TRUE,
-            'description' => 'Cost in USD',
-          ],
-          'token_count' => [
-            'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
-            'description' => 'Number of tokens',
-          ],
-          'operation' => [
-            'type' => 'varchar',
-            'length' => 255,
-            'not null' => TRUE,
-            'description' => 'Operation type',
-          ],
-          'timestamp' => [
-            'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
-            'description' => 'Unix timestamp',
-          ],
-        ],
-        'primary key' => ['id'],
-        'indexes' => [
-          'server_timestamp' => ['server_id', 'timestamp'],
-          'timestamp' => ['timestamp'],
-        ],
-      ];
-      $schema->createTable($this->costTable, $table_spec);
-    }
-
-    // Metrics table
+    // Performance metrics table
     if (!$schema->tableExists($this->metricsTable)) {
       $table_spec = [
         'description' => 'Performance metrics for Search API PostgreSQL',
@@ -927,6 +723,83 @@ class EmbeddingAnalyticsService {
         ],
       ];
       $schema->createTable($this->metricsTable, $table_spec);
+    }
+
+    // Daily aggregates table
+    if (!$schema->tableExists($this->dailyAggregatesTable)) {
+      $table_spec = [
+        'description' => 'Daily aggregated statistics for Search API PostgreSQL',
+        'fields' => [
+          'id' => [
+            'type' => 'serial',
+            'not null' => TRUE,
+            'description' => 'Primary key',
+          ],
+          'date' => [
+            'type' => 'varchar',
+            'length' => 10,
+            'not null' => TRUE,
+            'description' => 'Date (YYYY-MM-DD)',
+          ],
+          'server_id' => [
+            'type' => 'varchar',
+            'length' => 255,
+            'not null' => TRUE,
+            'description' => 'Server ID',
+          ],
+          'operation' => [
+            'type' => 'varchar',
+            'length' => 255,
+            'not null' => TRUE,
+            'description' => 'Operation type',
+          ],
+          'total_calls' => [
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+            'default' => 0,
+            'description' => 'Total API calls',
+          ],
+          'total_cost' => [
+            'type' => 'numeric',
+            'precision' => 10,
+            'scale' => 6,
+            'not null' => TRUE,
+            'default' => 0,
+            'description' => 'Total cost in USD',
+          ],
+          'total_tokens' => [
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+            'default' => 0,
+            'description' => 'Total tokens processed',
+          ],
+          'avg_duration' => [
+            'type' => 'numeric',
+            'precision' => 10,
+            'scale' => 2,
+            'not null' => TRUE,
+            'default' => 0,
+            'description' => 'Average duration in milliseconds',
+          ],
+          'created' => [
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+            'description' => 'Timestamp when aggregate was created',
+          ],
+        ],
+        'primary key' => ['id'],
+        'unique keys' => [
+          'date_server_operation' => ['date', 'server_id', 'operation'],
+        ],
+        'indexes' => [
+          'date' => ['date'],
+          'server_date' => ['server_id', 'date'],
+        ],
+      ];
+      $schema->createTable($this->dailyAggregatesTable, $table_spec);
     }
   }
 
