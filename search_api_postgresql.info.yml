@@ -11,8 +11,6 @@ dependencies:
 test_dependencies:
   - search_api:search_api_test
 
-configure: search_api.admin_index
-
 # Optional features
 suggests:
   - drupal/facets

@@ -3,12 +3,10 @@
 namespace Drupal\search_api_postgresql\Cache;
 
 use Drupal\Core\Database\Connection;
-use Drupal\Core\Database\Database;
-use Drupal\search_api\SearchApiException;
 use Psr\Log\LoggerInterface;
 
 /**
- * Database implementation of embedding cache.
+ * Database-backed embedding cache implementation.
  */
 class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
 
@@ -20,11 +18,23 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
   protected $connection;
 
   /**
-   * The logger.
+   * The logger service.
    *
    * @var \Psr\Log\LoggerInterface
    */
   protected $logger;
+
+  /**
+   * Cache statistics.
+   *
+   * @var array
+   */
+  protected $stats = [
+    'hits' => 0,
+    'misses' => 0,
+    'sets' => 0,
+    'invalidations' => 0,
+  ];
 
   /**
    * The cache table name.
@@ -41,19 +51,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
   protected $config;
 
   /**
-   * Cache statistics.
-   *
-   * @var array
-   */
-  protected $stats = [
-    'hits' => 0,
-    'misses' => 0,
-    'sets' => 0,
-    'invalidations' => 0,
-  ];
-
-  /**
-   * Constructs a DatabaseEmbeddingCache.
+   * Constructs a DatabaseEmbeddingCache object.
    *
    * @param \Drupal\Core\Database\Connection $connection
    *   The database connection.
@@ -85,12 +83,14 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
     }
 
     $this->validateHash($text_hash);
+    
+    $request_time = \Drupal::time()->getRequestTime();
 
     try {
       $query = $this->connection->select($this->tableName, 'c')
         ->fields('c', ['embedding_data', 'created', 'expires'])
         ->condition('text_hash', $text_hash)
-        ->condition('expires', REQUEST_TIME, '>')
+        ->condition('expires', $request_time, '>')
         ->range(0, 1);
 
       $result = $query->execute()->fetchAssoc();
@@ -100,7 +100,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
         
         // Update last accessed time
         $this->connection->update($this->tableName)
-          ->fields(['last_accessed' => REQUEST_TIME])
+          ->fields(['last_accessed' => $request_time])
           ->condition('text_hash', $text_hash)
           ->execute();
 
@@ -133,9 +133,11 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
 
     $this->validateHash($text_hash);
     $this->validateEmbedding($embedding);
+    
+    $request_time = \Drupal::time()->getRequestTime();
 
     $ttl = $ttl ?? $this->config['default_ttl'];
-    $expires = REQUEST_TIME + $ttl;
+    $expires = $request_time + $ttl;
 
     try {
       $embedding_data = $this->serializeEmbedding($embedding);
@@ -146,8 +148,8 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
         ->fields([
           'embedding_data' => $embedding_data,
           'dimensions' => count($embedding),
-          'created' => REQUEST_TIME,
-          'last_accessed' => REQUEST_TIME,
+          'created' => $request_time,
+          'last_accessed' => $request_time,
           'expires' => $expires,
           'hit_count' => 1,
         ])
@@ -215,6 +217,8 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
     if (empty($text_hashes)) {
       return [];
     }
+    
+    $request_time = \Drupal::time()->getRequestTime();
 
     // Validate all hashes
     foreach ($text_hashes as $hash) {
@@ -225,7 +229,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
       $query = $this->connection->select($this->tableName, 'c')
         ->fields('c', ['text_hash', 'embedding_data'])
         ->condition('text_hash', $text_hashes, 'IN')
-        ->condition('expires', REQUEST_TIME, '>');
+        ->condition('expires', $request_time, '>');
 
       $results = $query->execute()->fetchAllKeyed();
       $embeddings = [];
@@ -241,7 +245,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
       // Update last accessed time for found items
       if (!empty($embeddings)) {
         $this->connection->update($this->tableName)
-          ->fields(['last_accessed' => REQUEST_TIME])
+          ->fields(['last_accessed' => $request_time])
           ->condition('text_hash', array_keys($embeddings), 'IN')
           ->execute();
       }
@@ -271,9 +275,11 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
     if (empty($items)) {
       return TRUE;
     }
+    
+    $request_time = \Drupal::time()->getRequestTime();
 
     $ttl = $ttl ?? $this->config['default_ttl'];
-    $expires = REQUEST_TIME + $ttl;
+    $expires = $request_time + $ttl;
 
     try {
       $transaction = $this->connection->startTransaction();
@@ -293,8 +299,8 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
           ->fields([
             'embedding_data' => $embedding_data,
             'dimensions' => count($embedding),
-            'created' => REQUEST_TIME,
-            'last_accessed' => REQUEST_TIME,
+            'created' => $request_time,
+            'last_accessed' => $request_time,
             'expires' => $expires,
             'hit_count' => 1,
           ])
@@ -346,6 +352,8 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
    * {@inheritdoc}
    */
   public function getStats() {
+    $request_time = \Drupal::time()->getRequestTime();
+    
     try {
       // Get database stats
       $query = $this->connection->select($this->tableName, 'c');
@@ -359,7 +367,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
 
       // Get expired count
       $expired_count = $this->connection->select($this->tableName, 'c')
-        ->condition('expires', REQUEST_TIME, '<=')
+        ->condition('expires', $request_time, '<=')
         ->countQuery()
         ->execute()
         ->fetchField();
@@ -405,9 +413,11 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
    * Performs cleanup of expired and excess entries.
    */
   protected function performCleanup() {
+    $request_time = \Drupal::time()->getRequestTime();
+    
     // Remove expired entries
     $expired_deleted = $this->connection->delete($this->tableName)
-      ->condition('expires', REQUEST_TIME, '<=')
+      ->condition('expires', $request_time, '<=')
       ->execute();
 
     if ($expired_deleted > 0) {
@@ -468,61 +478,59 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
     $schema = $this->connection->schema();
     
     if (!$schema->tableExists($this->tableName)) {
-      $this->createCacheTable();
+      $table_definition = $this->getTableDefinition();
+      $schema->createTable($this->tableName, $table_definition);
+      $this->logger->info('Created embedding cache table: @table', ['@table' => $this->tableName]);
     }
   }
 
   /**
-   * Creates the cache table.
+   * Returns the table definition.
+   *
+   * @return array
+   *   The table schema definition.
    */
-  protected function createCacheTable() {
-    $schema = $this->connection->schema();
-
-    $table_definition = [
-      'description' => 'Cache for AI text embeddings',
+  protected function getTableDefinition() {
+    return [
+      'description' => 'Cache table for embedding vectors.',
       'fields' => [
         'text_hash' => [
           'type' => 'varchar',
           'length' => 64,
           'not null' => TRUE,
-          'description' => 'SHA-256 hash of the text content',
+          'description' => 'SHA256 hash of the text.',
         ],
         'embedding_data' => [
           'type' => 'blob',
           'size' => 'big',
           'not null' => TRUE,
-          'description' => 'Serialized embedding vector data',
+          'description' => 'Serialized and possibly compressed embedding vector.',
         ],
         'dimensions' => [
           'type' => 'int',
-          'unsigned' => TRUE,
           'not null' => TRUE,
-          'description' => 'Number of dimensions in the embedding',
+          'description' => 'Number of dimensions in the vector.',
         ],
         'created' => [
           'type' => 'int',
-          'unsigned' => TRUE,
           'not null' => TRUE,
-          'description' => 'Timestamp when the embedding was cached',
+          'description' => 'Unix timestamp when created.',
         ],
         'last_accessed' => [
           'type' => 'int',
-          'unsigned' => TRUE,
           'not null' => TRUE,
-          'description' => 'Timestamp when the embedding was last accessed',
+          'description' => 'Unix timestamp when last accessed.',
         ],
         'expires' => [
           'type' => 'int',
-          'unsigned' => TRUE,
           'not null' => TRUE,
-          'description' => 'Timestamp when the embedding expires',
+          'description' => 'Unix timestamp when expires.',
         ],
         'hit_count' => [
           'type' => 'int',
-          'unsigned' => TRUE,
           'not null' => TRUE,
           'default' => 0,
-          'description' => 'Number of times this embedding has been accessed',
+          'description' => 'Number of times accessed.',
         ],
       ],
       'primary key' => ['text_hash'],
@@ -530,60 +538,12 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
         'expires' => ['expires'],
         'last_accessed' => ['last_accessed'],
         'created' => ['created'],
-        'hit_count' => ['hit_count'],
-        'dimensions' => ['dimensions'],
       ],
     ];
-
-    $schema->createTable($this->tableName, $table_definition);
-    
-    $this->logger->info('Created embedding cache table: @table', ['@table' => $this->tableName]);
   }
 
   /**
-   * Serializes an embedding for storage.
-   *
-   * @param array $embedding
-   *   The embedding vector.
-   *
-   * @return string
-   *   Serialized embedding data.
-   */
-  protected function serializeEmbedding(array $embedding) {
-    if ($this->config['enable_compression']) {
-      return gzcompress(serialize($embedding), 6);
-    }
-    return serialize($embedding);
-  }
-
-  /**
-   * Unserializes an embedding from storage.
-   *
-   * @param string $embedding_data
-   *   Serialized embedding data.
-   *
-   * @return array|null
-   *   The embedding vector, or NULL on failure.
-   */
-  protected function unserializeEmbedding($embedding_data) {
-    try {
-      if ($this->config['enable_compression']) {
-        $decompressed = gzuncompress($embedding_data);
-        if ($decompressed === FALSE) {
-          throw new \Exception('Failed to decompress embedding data');
-        }
-        return unserialize($decompressed);
-      }
-      return unserialize($embedding_data);
-    }
-    catch (\Exception $e) {
-      $this->logger->error('Failed to unserialize embedding: @message', ['@message' => $e->getMessage()]);
-      return NULL;
-    }
-  }
-
-  /**
-   * Validates a text hash.
+   * Validates a cache hash.
    *
    * @param string $hash
    *   The hash to validate.
@@ -593,7 +553,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
    */
   protected function validateHash($hash) {
     if (!is_string($hash) || strlen($hash) !== 64 || !ctype_xdigit($hash)) {
-      throw new \InvalidArgumentException('Invalid hash format. Expected 64-character hexadecimal string.');
+      throw new \InvalidArgumentException('Invalid hash format. Expected 64-character hex string.');
     }
   }
 
@@ -611,20 +571,59 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
       throw new \InvalidArgumentException('Embedding cannot be empty.');
     }
 
-    if (count($embedding) > 16000) {
-      throw new \InvalidArgumentException('Embedding too large: ' . count($embedding) . ' dimensions (max 16000).');
-    }
-
-    foreach ($embedding as $index => $value) {
+    foreach ($embedding as $value) {
       if (!is_numeric($value)) {
-        throw new \InvalidArgumentException("Embedding component at index {$index} is not numeric.");
-      }
-      
-      $float_val = (float) $value;
-      if (!is_finite($float_val)) {
-        throw new \InvalidArgumentException("Embedding component at index {$index} is infinite or NaN.");
+        throw new \InvalidArgumentException('All embedding values must be numeric.');
       }
     }
   }
 
+  /**
+   * Serializes an embedding for storage.
+   *
+   * @param array $embedding
+   *   The embedding vector.
+   *
+   * @return string
+   *   The serialized embedding.
+   */
+  protected function serializeEmbedding(array $embedding) {
+    $data = json_encode($embedding);
+    
+    if ($this->config['enable_compression'] && function_exists('gzcompress')) {
+      $compressed = gzcompress($data, 9);
+      if ($compressed !== FALSE && strlen($compressed) < strlen($data)) {
+        return $compressed;
+      }
+    }
+    
+    return $data;
+  }
+
+  /**
+   * Unserializes an embedding from storage.
+   *
+   * @param string $data
+   *   The serialized embedding data.
+   *
+   * @return array|null
+   *   The embedding vector or NULL on failure.
+   */
+  protected function unserializeEmbedding($data) {
+    if (empty($data)) {
+      return NULL;
+    }
+
+    // Try to decompress if it looks like compressed data
+    if ($this->config['enable_compression'] && function_exists('gzuncompress')) {
+      $uncompressed = @gzuncompress($data);
+      if ($uncompressed !== FALSE) {
+        $data = $uncompressed;
+      }
+    }
+
+    $embedding = json_decode($data, TRUE);
+    
+    return is_array($embedding) ? $embedding : NULL;
+  }
 }
