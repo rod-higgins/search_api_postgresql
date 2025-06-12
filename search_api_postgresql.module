@@ -34,17 +34,30 @@ function search_api_postgresql_help($route_name, RouteMatchInterface $route_matc
  * Implements hook_cron().
  */
 function search_api_postgresql_cron() {
-  // Process embedding queue
-  $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
-  $queue_manager->processQueue(['max_items' => 50, 'max_time' => 30]);
+  try {
+    // Process embedding queue
+    $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
+    if ($queue_manager) {
+      $queue_manager->processQueue(['max_items' => 50, 'max_time' => 30]);
+    }
 
-  // Clean up old cache entries
-  $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
-  $cache_manager->performMaintenance();
+    // Clean up old cache entries
+    $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
+    if ($cache_manager) {
+      $cache_manager->performMaintenance();
+    }
 
-  // Update analytics aggregates
-  $analytics = \Drupal::service('search_api_postgresql.analytics');
-  $analytics->aggregateDailyStats();
+    // Update analytics aggregates
+    $analytics = \Drupal::service('search_api_postgresql.analytics');
+    if ($analytics) {
+      $analytics->aggregateDailyStats();
+    }
+  }
+  catch (\Exception $e) {
+    \Drupal::logger('search_api_postgresql')->error('Error in cron: @message', [
+      '@message' => $e->getMessage(),
+    ]);
+  }
 }
 
 /**
@@ -53,16 +66,39 @@ function search_api_postgresql_cron() {
 function search_api_postgresql_search_api_server_delete(ServerInterface $server) {
   // Clean up server-specific data
   $backend = $server->getBackend();
-  if (in_array($backend->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
-    // Clear analytics data for this server
-    \Drupal::database()->delete('search_api_postgresql_analytics')
-      ->condition('server_id', $server->id())
-      ->execute();
-    
-    // Clear cache entries for this server
-    \Drupal::database()->delete('search_api_postgresql_embedding_cache')
-      ->condition('server_id', $server->id())
-      ->execute();
+  if ($backend && in_array($backend->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
+    try {
+      $database = \Drupal::database();
+      
+      // Clear analytics data for this server
+      $database->delete('search_api_postgresql_analytics')
+        ->condition('server_id', $server->id())
+        ->execute();
+      
+      // Clear cache entries for this server
+      $database->delete('search_api_postgresql_embedding_cache')
+        ->condition('server_id', $server->id())
+        ->execute();
+      
+      // Clear metrics data for this server
+      $database->delete('search_api_postgresql_metrics')
+        ->condition('server_id', $server->id())
+        ->execute();
+      
+      // Clear daily aggregates for this server
+      $database->delete('search_api_postgresql_daily_aggregates')
+        ->condition('server_id', $server->id())
+        ->execute();
+      
+      \Drupal::logger('search_api_postgresql')->info('Cleaned up data for deleted server: @server', [
+        '@server' => $server->id(),
+      ]);
+    }
+    catch (\Exception $e) {
+      \Drupal::logger('search_api_postgresql')->error('Error cleaning up server data: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+    }
   }
 }
 
@@ -88,5 +124,113 @@ function search_api_postgresql_theme() {
         'unit' => '',
       ],
     ],
+    'search_api_postgresql_cost_card' => [
+      'variables' => [
+        'title' => '',
+        'cost' => 0,
+        'api_calls' => 0,
+        'tokens' => 0,
+        'trend' => 0,
+        'is_projection' => FALSE,
+      ],
+    ],
   ];
+}
+
+/**
+ * Implements hook_requirements().
+ */
+function search_api_postgresql_requirements($phase) {
+  $requirements = [];
+
+  if ($phase == 'runtime') {
+    // Check if pgvector extension is available
+    $requirements['search_api_postgresql_pgvector'] = [
+      'title' => t('PostgreSQL pgvector extension'),
+      'value' => t('Not checked'),
+      'severity' => REQUIREMENT_INFO,
+      'description' => t('The pgvector extension is required for AI-powered vector search functionality.'),
+    ];
+
+    // Check if Key module is enabled
+    $requirements['search_api_postgresql_key'] = [
+      'title' => t('Key module'),
+    ];
+
+    if (\Drupal::moduleHandler()->moduleExists('key')) {
+      $requirements['search_api_postgresql_key']['value'] = t('Enabled');
+      $requirements['search_api_postgresql_key']['severity'] = REQUIREMENT_OK;
+    }
+    else {
+      $requirements['search_api_postgresql_key']['value'] = t('Not enabled');
+      $requirements['search_api_postgresql_key']['severity'] = REQUIREMENT_WARNING;
+      $requirements['search_api_postgresql_key']['description'] = t('The Key module is recommended for secure storage of API credentials.');
+    }
+
+    // Check analytics tables
+    try {
+      $analytics = \Drupal::service('search_api_postgresql.analytics');
+      if ($analytics) {
+        $requirements['search_api_postgresql_analytics'] = [
+          'title' => t('Search API PostgreSQL Analytics'),
+          'value' => t('Tables initialized'),
+          'severity' => REQUIREMENT_OK,
+        ];
+      }
+    }
+    catch (\Exception $e) {
+      $requirements['search_api_postgresql_analytics'] = [
+        'title' => t('Search API PostgreSQL Analytics'),
+        'value' => t('Error'),
+        'severity' => REQUIREMENT_ERROR,
+        'description' => t('Analytics tables could not be initialized: @error', [
+          '@error' => $e->getMessage(),
+        ]),
+      ];
+    }
+  }
+
+  return $requirements;
+}
+
+/**
+ * Implements hook_install().
+ */
+function search_api_postgresql_install() {
+  // Initialize analytics tables
+  try {
+    $analytics = \Drupal::service('search_api_postgresql.analytics');
+    \Drupal::messenger()->addMessage(t('Search API PostgreSQL analytics tables initialized.'));
+  }
+  catch (\Exception $e) {
+    \Drupal::messenger()->addError(t('Failed to initialize analytics tables: @error', [
+      '@error' => $e->getMessage(),
+    ]));
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function search_api_postgresql_uninstall() {
+  // Remove analytics tables
+  $tables = [
+    'search_api_postgresql_analytics',
+    'search_api_postgresql_metrics',
+    'search_api_postgresql_daily_aggregates',
+    'search_api_postgresql_embedding_cache',
+  ];
+
+  $database = \Drupal::database();
+  $schema = $database->schema();
+
+  foreach ($tables as $table) {
+    if ($schema->tableExists($table)) {
+      $schema->dropTable($table);
+    }
+  }
+
+  // Remove configuration
+  \Drupal::configFactory()->getEditable('search_api_postgresql.settings')->delete();
+  \Drupal::configFactory()->getEditable('search_api_postgresql.dashboard')->delete();
 }

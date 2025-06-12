@@ -2,114 +2,270 @@
 
 /**
  * @file
- * Install, update, and uninstall functions for Search API PostgreSQL.
+ * Install, update and uninstall functions for the Search API PostgreSQL module.
  */
 
 use Drupal\Core\Database\Database;
-use Drupal\search_api\ServerInterface;
 
 /**
  * Implements hook_schema().
  */
 function search_api_postgresql_schema() {
+  $schema = [];
+
+  // Analytics table
+  $schema['search_api_postgresql_analytics'] = [
+    'description' => 'Analytics data for Search API PostgreSQL embedding operations',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary key',
+      ],
+      'server_id' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Server ID',
+      ],
+      'operation' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Operation type',
+      ],
+      'token_count' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of tokens',
+      ],
+      'cost_usd' => [
+        'type' => 'numeric',
+        'precision' => 10,
+        'scale' => 6,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Cost in USD',
+      ],
+      'duration_ms' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Duration in milliseconds',
+      ],
+      'metadata' => [
+        'type' => 'text',
+        'description' => 'Additional metadata as JSON',
+      ],
+      'timestamp' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Unix timestamp',
+      ],
+    ],
+    'primary key' => ['id'],
+    'indexes' => [
+      'server_timestamp' => ['server_id', 'timestamp'],
+      'operation_timestamp' => ['operation', 'timestamp'],
+      'timestamp' => ['timestamp'],
+    ],
+  ];
+
+  // Performance metrics table
+  $schema['search_api_postgresql_metrics'] = [
+    'description' => 'Performance metrics for Search API PostgreSQL',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary key',
+      ],
+      'server_id' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Server ID',
+      ],
+      'index_id' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'description' => 'Index ID (optional)',
+      ],
+      'metric_type' => [
+        'type' => 'varchar',
+        'length' => 100,
+        'not null' => TRUE,
+        'description' => 'Metric type (search, cache, etc)',
+      ],
+      'metric_name' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Specific metric name',
+      ],
+      'value' => [
+        'type' => 'numeric',
+        'precision' => 15,
+        'scale' => 6,
+        'not null' => TRUE,
+        'description' => 'Metric value',
+      ],
+      'metadata' => [
+        'type' => 'text',
+        'description' => 'Additional metadata as JSON',
+      ],
+      'timestamp' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Unix timestamp',
+      ],
+    ],
+    'primary key' => ['id'],
+    'indexes' => [
+      'metric_timestamp' => ['metric_type', 'metric_name', 'timestamp'],
+      'server_timestamp' => ['server_id', 'timestamp'],
+      'timestamp' => ['timestamp'],
+    ],
+  ];
+
+  // Daily aggregates table
+  $schema['search_api_postgresql_daily_aggregates'] = [
+    'description' => 'Daily aggregated statistics for Search API PostgreSQL',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary key',
+      ],
+      'date' => [
+        'type' => 'varchar',
+        'length' => 10,
+        'not null' => TRUE,
+        'description' => 'Date (YYYY-MM-DD)',
+      ],
+      'server_id' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Server ID',
+      ],
+      'operation' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'Operation type',
+      ],
+      'total_calls' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Total API calls',
+      ],
+      'total_cost' => [
+        'type' => 'numeric',
+        'precision' => 10,
+        'scale' => 6,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Total cost in USD',
+      ],
+      'total_tokens' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Total tokens processed',
+      ],
+      'avg_duration' => [
+        'type' => 'numeric',
+        'precision' => 10,
+        'scale' => 2,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Average duration in milliseconds',
+      ],
+      'created' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Timestamp when aggregate was created',
+      ],
+    ],
+    'primary key' => ['id'],
+    'unique keys' => [
+      'date_server_operation' => ['date', 'server_id', 'operation'],
+    ],
+    'indexes' => [
+      'date' => ['date'],
+      'server_date' => ['server_id', 'date'],
+    ],
+  ];
+
+  // Embedding cache table
   $schema['search_api_postgresql_embedding_cache'] = [
-    'description' => 'Cache table for embedding vectors.',
+    'description' => 'Cache for embedding vectors',
     'fields' => [
       'cache_id' => [
         'type' => 'varchar',
         'length' => 255,
         'not null' => TRUE,
-        'description' => 'Unique cache identifier.',
+        'description' => 'Cache ID (hash of content)',
       ],
       'server_id' => [
         'type' => 'varchar',
-        'length' => 50,
+        'length' => 255,
         'not null' => TRUE,
-        'description' => 'Search API server ID.',
+        'description' => 'Server ID',
       ],
-      'model_id' => [
+      'content_hash' => [
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+        'description' => 'SHA-256 hash of the content',
+      ],
+      'embedding' => [
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => TRUE,
+        'description' => 'Serialized embedding vector',
+      ],
+      'model' => [
         'type' => 'varchar',
         'length' => 100,
         'not null' => TRUE,
-        'description' => 'AI model identifier.',
-      ],
-      'embedding' => [
-        'type' => 'blob',
-        'size' => 'big',
-        'not null' => TRUE,
-        'description' => 'Compressed embedding vector.',
-      ],
-      'dimensions' => [
-        'type' => 'int',
-        'not null' => TRUE,
-        'description' => 'Vector dimensions.',
+        'description' => 'Model used to generate embedding',
       ],
       'created' => [
         'type' => 'int',
+        'unsigned' => TRUE,
         'not null' => TRUE,
-        'description' => 'Timestamp when created.',
+        'description' => 'Unix timestamp when created',
       ],
       'accessed' => [
         'type' => 'int',
+        'unsigned' => TRUE,
         'not null' => TRUE,
-        'description' => 'Last access timestamp.',
+        'description' => 'Unix timestamp when last accessed',
       ],
-      'metadata' => [
-        'type' => 'text',
-        'serialize' => TRUE,
-        'description' => 'Additional metadata.',
+      'hit_count' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of cache hits',
       ],
     ],
     'primary key' => ['cache_id'],
     'indexes' => [
-      'server_model' => ['server_id', 'model_id'],
+      'server_hash' => ['server_id', 'content_hash'],
       'created' => ['created'],
       'accessed' => ['accessed'],
-    ],
-  ];
-
-  $schema['search_api_postgresql_analytics'] = [
-    'description' => 'Analytics and performance metrics.',
-    'fields' => [
-      'id' => [
-        'type' => 'serial',
-        'not null' => TRUE,
-        'description' => 'Primary Key.',
-      ],
-      'server_id' => [
-        'type' => 'varchar',
-        'length' => 50,
-        'not null' => TRUE,
-        'description' => 'Search API server ID.',
-      ],
-      'metric_type' => [
-        'type' => 'varchar',
-        'length' => 50,
-        'not null' => TRUE,
-        'description' => 'Type of metric.',
-      ],
-      'timestamp' => [
-        'type' => 'int',
-        'not null' => TRUE,
-        'description' => 'When measured.',
-      ],
-      'value' => [
-        'type' => 'numeric',
-        'precision' => 20,
-        'scale' => 6,
-        'not null' => TRUE,
-        'description' => 'Metric value.',
-      ],
-      'metadata' => [
-        'type' => 'text',
-        'serialize' => TRUE,
-        'description' => 'Additional context.',
-      ],
-    ],
-    'primary key' => ['id'],
-    'indexes' => [
-      'server_metric_time' => ['server_id', 'metric_type', 'timestamp'],
-      'timestamp' => ['timestamp'],
     ],
   ];
 
@@ -117,155 +273,99 @@ function search_api_postgresql_schema() {
 }
 
 /**
- * Implements hook_install().
+ * Add the daily aggregates table for analytics.
  */
-function search_api_postgresql_install() {
-  // Set default configuration values
-  \Drupal::configFactory()->getEditable('search_api_postgresql.settings')
-    ->set('embedding_cache.default_ttl', 604800) // 7 days
-    ->set('embedding_cache.max_entries', 100000)
-    ->set('embedding_cache.compression', TRUE)
-    ->set('queue.batch_size', 10)
-    ->set('queue.max_retries', 3)
-    ->set('analytics.retention_days', 90)
-    ->save();
-
-  // Create initial queue for embedding generation
-  $queue_factory = \Drupal::service('queue');
-  $queue_factory->get('search_api_postgresql_embedding');
+function search_api_postgresql_update_8001() {
+  $schema = Database::getConnection()->schema();
   
-  \Drupal::messenger()->addStatus(t('Search API PostgreSQL module installed successfully.'));
-}
-
-/**
- * Implements hook_uninstall().
- */
-function search_api_postgresql_uninstall() {
-  // Remove all configuration
-  $config_factory = \Drupal::configFactory();
-  
-  // Delete main settings
-  $config_factory->getEditable('search_api_postgresql.settings')->delete();
-  
-  // Delete any other configuration with our prefix
-  $config_names = $config_factory->listAll('search_api_postgresql.');
-  foreach ($config_names as $config_name) {
-    $config_factory->getEditable($config_name)->delete();
-  }
-  
-  // Delete queues
-  $queue_factory = \Drupal::service('queue');
-  $queue_factory->get('search_api_postgresql_embedding')->deleteQueue();
-  
-  // Clean up any key value storage
-  \Drupal::keyValue('search_api_postgresql')->deleteAll();
-  
-  // Clean up any state variables
-  $state = \Drupal::state();
-  $state->delete('search_api_postgresql.last_cache_cleanup');
-  $state->delete('search_api_postgresql.last_analytics_aggregation');
-  
-  // Note: Schema tables will be removed automatically by Drupal
-}
-
-/**
- * Implements hook_requirements().
- */
-function search_api_postgresql_requirements($phase) {
-  $requirements = [];
-
-  // Handle install phase checks
-  if ($phase == 'install') {
-    // Check if Search API is enabled
-    if (!\Drupal::moduleHandler()->moduleExists('search_api')) {
-      $requirements['search_api_postgresql_search_api'] = [
-        'title' => t('Search API'),
-        'description' => t('Search API PostgreSQL requires the Search API module.'),
-        'severity' => REQUIREMENT_ERROR,
-      ];
-    }
-
-    // Check if Key module is enabled
-    if (!\Drupal::moduleHandler()->moduleExists('key')) {
-      $requirements['search_api_postgresql_key'] = [
-        'title' => t('Key'),
-        'description' => t('Search API PostgreSQL requires the Key module for secure credential storage.'),
-        'severity' => REQUIREMENT_ERROR,
-      ];
-    }
-
-    // Check PDO PostgreSQL
-    if (!extension_loaded('pdo_pgsql')) {
-      $requirements['search_api_postgresql_pdo'] = [
-        'title' => t('PDO PostgreSQL'),
-        'description' => t('The PDO PostgreSQL PHP extension is required.'),
-        'severity' => REQUIREMENT_ERROR,
-      ];
-    }
-  }
-
-  // Handle runtime phase checks
-  if ($phase == 'runtime') {
-    // Check PDO PostgreSQL extension
-    $requirements['search_api_postgresql_pdo'] = [
-      'title' => t('PDO PostgreSQL'),
-      'value' => extension_loaded('pdo_pgsql') ? t('Enabled') : t('Not found'),
-      'severity' => extension_loaded('pdo_pgsql') ? REQUIREMENT_OK : REQUIREMENT_ERROR,
-      'description' => extension_loaded('pdo_pgsql') ? '' : t('The PDO PostgreSQL extension is required.'),
+  if (!$schema->tableExists('search_api_postgresql_daily_aggregates')) {
+    $table_spec = [
+      'description' => 'Daily aggregated statistics for Search API PostgreSQL',
+      'fields' => [
+        'id' => [
+          'type' => 'serial',
+          'not null' => TRUE,
+          'description' => 'Primary key',
+        ],
+        'date' => [
+          'type' => 'varchar',
+          'length' => 10,
+          'not null' => TRUE,
+          'description' => 'Date (YYYY-MM-DD)',
+        ],
+        'server_id' => [
+          'type' => 'varchar',
+          'length' => 255,
+          'not null' => TRUE,
+          'description' => 'Server ID',
+        ],
+        'operation' => [
+          'type' => 'varchar',
+          'length' => 255,
+          'not null' => TRUE,
+          'description' => 'Operation type',
+        ],
+        'total_calls' => [
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+          'default' => 0,
+          'description' => 'Total API calls',
+        ],
+        'total_cost' => [
+          'type' => 'numeric',
+          'precision' => 10,
+          'scale' => 6,
+          'not null' => TRUE,
+          'default' => 0,
+          'description' => 'Total cost in USD',
+        ],
+        'total_tokens' => [
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+          'default' => 0,
+          'description' => 'Total tokens processed',
+        ],
+        'avg_duration' => [
+          'type' => 'numeric',
+          'precision' => 10,
+          'scale' => 2,
+          'not null' => TRUE,
+          'default' => 0,
+          'description' => 'Average duration in milliseconds',
+        ],
+        'created' => [
+          'type' => 'int',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+          'description' => 'Timestamp when aggregate was created',
+        ],
+      ],
+      'primary key' => ['id'],
+      'unique keys' => [
+        'date_server_operation' => ['date', 'server_id', 'operation'],
+      ],
+      'indexes' => [
+        'date' => ['date'],
+        'server_date' => ['server_id', 'date'],
+      ],
     ];
-
-    // Check for pgvector extension on configured servers
-    $servers = \Drupal::entityTypeManager()
-      ->getStorage('search_api_server')
-      ->loadMultiple();
     
-    $pgvector_status = [];
-    foreach ($servers as $server) {
-      $backend = $server->getBackend();
-      if (in_array($backend->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
-        $config = $backend->getConfiguration();
-        if (!empty($config['ai_embeddings']['enabled']) || !empty($config['vector_search']['enabled'])) {
-          // Check pgvector availability
-          try {
-            $backend->checkVectorSupport();
-            $pgvector_status[$server->id()] = TRUE;
-          }
-          catch (\Exception $e) {
-            $pgvector_status[$server->id()] = FALSE;
-          }
-        }
-      }
-    }
-
-    if (!empty($pgvector_status)) {
-      $failed = array_filter($pgvector_status, function($status) { return !$status; });
-      $requirements['search_api_postgresql_pgvector'] = [
-        'title' => t('PostgreSQL pgvector extension'),
-        'value' => empty($failed) ? t('Available') : t('Missing on some servers'),
-        'severity' => empty($failed) ? REQUIREMENT_OK : REQUIREMENT_WARNING,
-        'description' => empty($failed) ? '' : t('The pgvector extension is required for AI features on servers: @servers', [
-          '@servers' => implode(', ', array_keys($failed)),
-        ]),
-      ];
-    }
-
-    // Check Key module
-    if (\Drupal::moduleHandler()->moduleExists('key')) {
-      $requirements['search_api_postgresql_key'] = [
-        'title' => t('Key module'),
-        'value' => t('Enabled'),
-        'severity' => REQUIREMENT_OK,
-      ];
-    }
-    else {
-      $requirements['search_api_postgresql_key'] = [
-        'title' => t('Key module'),
-        'value' => t('Not found'),
-        'severity' => REQUIREMENT_ERROR,
-        'description' => t('The Key module is required for secure credential storage.'),
-      ];
-    }
+    $schema->createTable('search_api_postgresql_daily_aggregates', $table_spec);
+    
+    return t('Created the daily aggregates table for analytics.');
   }
+  
+  return t('Daily aggregates table already exists.');
+}
 
-  return $requirements;
+/**
+ * Clear cache to pick up new service methods.
+ */
+function search_api_postgresql_update_8002() {
+  // Clear all caches to ensure the service container is rebuilt
+  drupal_flush_all_caches();
+  
+  return t('Cleared caches to register new analytics service methods.');
 }
