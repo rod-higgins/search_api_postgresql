@@ -69,26 +69,23 @@ function search_api_postgresql_search_api_server_delete(ServerInterface $server)
   if ($backend && in_array($backend->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
     try {
       $database = \Drupal::database();
+      $schema = $database->schema();
       
-      // Clear analytics data for this server
-      $database->delete('search_api_postgresql_analytics')
-        ->condition('server_id', $server->id())
-        ->execute();
+      // Check if tables exist before trying to delete
+      $tables_to_clean = [
+        'search_api_postgresql_analytics',
+        'search_api_postgresql_embedding_cache',
+        'search_api_postgresql_metrics',
+        'search_api_postgresql_daily_aggregates',
+      ];
       
-      // Clear cache entries for this server
-      $database->delete('search_api_postgresql_embedding_cache')
-        ->condition('server_id', $server->id())
-        ->execute();
-      
-      // Clear metrics data for this server
-      $database->delete('search_api_postgresql_metrics')
-        ->condition('server_id', $server->id())
-        ->execute();
-      
-      // Clear daily aggregates for this server
-      $database->delete('search_api_postgresql_daily_aggregates')
-        ->condition('server_id', $server->id())
-        ->execute();
+      foreach ($tables_to_clean as $table) {
+        if ($schema->tableExists($table)) {
+          $database->delete($table)
+            ->condition('server_id', $server->id())
+            ->execute();
+        }
+      }
       
       \Drupal::logger('search_api_postgresql')->info('Cleaned up data for deleted server: @server', [
         '@server' => $server->id(),
