@@ -2,7 +2,6 @@
 
 namespace Drupal\search_api_postgresql\PostgreSQL;
 
-use Drupal\search_api\SearchApiException;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -18,161 +17,166 @@ class PostgreSQLConnector {
   protected $connection;
 
   /**
-   * The connection configuration.
+   * Connection configuration.
    *
    * @var array
    */
   protected $config;
 
   /**
-   * The logger.
+   * Logger service.
    *
    * @var \Psr\Log\LoggerInterface
    */
   protected $logger;
 
   /**
-   * PostgreSQL reserved words to avoid in identifiers.
-   *
-   * @var array
-   */
-  protected static $reservedWords = [
-    'all', 'analyse', 'analyze', 'and', 'any', 'array', 'as', 'asc', 'asymmetric',
-    'authorization', 'binary', 'both', 'case', 'cast', 'check', 'collate', 'collation',
-    'column', 'concurrently', 'constraint', 'create', 'cross', 'current_catalog',
-    'current_date', 'current_role', 'current_schema', 'current_time', 'current_timestamp',
-    'current_user', 'default', 'deferrable', 'desc', 'distinct', 'do', 'else', 'end',
-    'except', 'false', 'fetch', 'for', 'foreign', 'freeze', 'from', 'full', 'grant',
-    'group', 'having', 'ilike', 'in', 'initially', 'inner', 'intersect', 'into', 'is',
-    'isnull', 'join', 'lateral', 'leading', 'left', 'like', 'limit', 'localtime',
-    'localtimestamp', 'natural', 'not', 'notnull', 'null', 'offset', 'on', 'only',
-    'or', 'order', 'outer', 'overlaps', 'placing', 'primary', 'references', 'returning',
-    'right', 'select', 'session_user', 'similar', 'some', 'symmetric', 'table', 'tablesample',
-    'then', 'to', 'trailing', 'true', 'union', 'unique', 'user', 'using', 'variadic',
-    'verbose', 'when', 'where', 'window', 'with',
-  ];
-
-  /**
-   * Constructs a PostgreSQLConnector.
+   * Constructor.
    *
    * @param array $config
-   *   The connection configuration.
+   *   Database connection configuration.
    * @param \Psr\Log\LoggerInterface $logger
-   *   The logger.
+   *   Logger service.
    */
   public function __construct(array $config, LoggerInterface $logger) {
-    $this->config = $config;
+    $this->config = $config + $this->getDefaultConfig();
     $this->logger = $logger;
-    $this->connect();
   }
 
   /**
-   * Establishes the database connection.
+   * Get default configuration.
    *
-   * VISIBILITY: Made public to fix access issues
+   * @return array
+   *   Default configuration values.
+   */
+  protected function getDefaultConfig() {
+    return [
+      'host' => 'localhost',
+      'port' => 5432,
+      'database' => '',
+      'username' => '',
+      'password' => '',
+      'ssl_mode' => 'require',
+      'ssl_ca' => '',
+      'options' => [],
+      'charset' => 'utf8',
+    ];
+  }
+
+  /**
+   * Connect to the database.
+   *
+   * @return \PDO
+   *   The PDO connection.
+   *
+   * @throws \Exception
+   *   If connection fails.
    */
   public function connect() {
-    $dsn = sprintf(
-      "pgsql:host=%s;port=%d;dbname=%s;sslmode=%s",
-      $this->config['host'],
-      $this->config['port'],
-      $this->config['database'],
-      $this->config['ssl_mode'] ?? 'require'
-    );
-
-    $options = [
-      \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-      \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-      \PDO::ATTR_EMULATE_PREPARES => FALSE,
-    ];
-
-    // Add any additional options from configuration.
-    if (!empty($this->config['options'])) {
-      $options = array_merge($options, $this->config['options']);
+    if ($this->connection) {
+      return $this->connection;
     }
 
     try {
-      // Handle empty passwords gracefully for Lando/development
-      $password = $this->config['password'] ?? '';
+      $dsn = $this->buildDsn();
+      $options = $this->buildPdoOptions();
+
+      $this->connection = new \PDO($dsn, $this->config['username'], $this->config['password'], $options);
+      $this->connection->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
       
-      $this->connection = new \PDO(
-        $dsn,
-        $this->config['username'],
-        $password, // Can be empty string for passwordless connections
-        $options
-      );
-      
-      // Set default character set.
-      $this->connection->exec("SET NAMES 'UTF8'");
-      
-      $this->logger->debug('PostgreSQL connection established to @host:@port/@database @passwordless', [
+      $this->logger->info('Successfully connected to PostgreSQL database @host:@port/@database', [
         '@host' => $this->config['host'],
         '@port' => $this->config['port'],
         '@database' => $this->config['database'],
-        '@passwordless' => empty($password) ? '(passwordless)' : '(with password)',
       ]);
-    }
-    catch (\PDOException $e) {
-      $this->logger->error('Failed to connect to PostgreSQL: @message', ['@message' => $e->getMessage()]);
-      
-      // Provide helpful error message for common Lando issues
-      $error_message = $e->getMessage();
-      if (empty($this->config['password']) && strpos($error_message, 'authentication failed') !== FALSE) {
-        $error_message .= ' (Note: If using Lando, ensure your database is configured for trust-based authentication)';
-      }
-      
-      throw new SearchApiException('Database connection failed: ' . $error_message, $e->getCode(), $e);
-    }
-  }
 
-  /**
-   * Tests the database connection.
-   *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If the connection test fails.
-   */
-  public function testConnection() {
-    try {
-      // Simple query to test connection
-      $stmt = $this->connection->query('SELECT version()');
-      $version = $stmt->fetchColumn();
-      
-      $this->logger->info('PostgreSQL connection test successful. Version: @version', [
-        '@version' => $version,
-      ]);
-      
-      return TRUE;
+      return $this->connection;
     }
     catch (\PDOException $e) {
-      $this->logger->error('PostgreSQL connection test failed: @message', [
+      $this->logger->error('Failed to connect to PostgreSQL: @message', [
         '@message' => $e->getMessage(),
       ]);
-      
-      throw new SearchApiException('Database connection test failed: ' . $e->getMessage(), $e->getCode(), $e);
+      throw new \Exception('Database connection failed: ' . $e->getMessage(), $e->getCode(), $e);
     }
   }
 
   /**
-   * Gets the PostgreSQL version.
+   * Build the DSN string.
    *
    * @return string
-   *   The PostgreSQL version string.
+   *   The DSN string.
    */
-  public function getVersion() {
-    try {
-      $stmt = $this->connection->query('SELECT version()');
-      return $stmt->fetchColumn();
+  protected function buildDsn() {
+    $dsn_parts = [
+      'host=' . $this->config['host'],
+      'port=' . $this->config['port'],
+      'dbname=' . $this->config['database'],
+    ];
+
+    // Add SSL configuration
+    if (!empty($this->config['ssl_mode'])) {
+      $dsn_parts[] = 'sslmode=' . $this->config['ssl_mode'];
     }
-    catch (\PDOException $e) {
-      $this->logger->error('Failed to get PostgreSQL version: @message', [
-        '@message' => $e->getMessage(),
-      ]);
-      return 'Unknown';
+
+    if (!empty($this->config['ssl_ca'])) {
+      $dsn_parts[] = 'sslrootcert=' . $this->config['ssl_ca'];
     }
+
+    // Add additional options
+    if (!empty($this->config['options']) && is_array($this->config['options'])) {
+      foreach ($this->config['options'] as $key => $value) {
+        $dsn_parts[] = $key . '=' . $value;
+      }
+    }
+
+    return 'pgsql:' . implode(';', $dsn_parts);
   }
 
   /**
-   * Executes a SQL query.
+   * Build PDO options array.
+   *
+   * @return array
+   *   PDO options.
+   */
+  protected function buildPdoOptions() {
+    $options = [
+      \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+      \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+      \PDO::ATTR_TIMEOUT => 30,
+    ];
+
+    // Set charset if specified
+    if (!empty($this->config['charset'])) {
+      $options[\PDO::MYSQL_ATTR_INIT_COMMAND] = "SET NAMES " . $this->config['charset'];
+    }
+
+    return $options;
+  }
+
+  /**
+   * Test the database connection.
+   *
+   * @throws \Exception
+   *   If connection test fails.
+   */
+  public function testConnection() {
+    $connection = $this->connect();
+    
+    // Test with a simple query
+    $stmt = $connection->query('SELECT version()');
+    $version = $stmt->fetchColumn();
+    
+    if (empty($version)) {
+      throw new \Exception('Connection test failed: Could not retrieve database version.');
+    }
+
+    $this->logger->info('Connection test successful. PostgreSQL version: @version', [
+      '@version' => $version,
+    ]);
+  }
+
+  /**
+   * Execute a query.
    *
    * @param string $sql
    *   The SQL query.
@@ -180,18 +184,19 @@ class PostgreSQLConnector {
    *   Query parameters.
    *
    * @return \PDOStatement
-   *   The prepared statement.
+   *   The executed statement.
    *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If the query fails.
+   * @throws \Exception
+   *   If query execution fails.
    */
   public function executeQuery($sql, array $params = []) {
     try {
+      $connection = $this->connect();
+      
       if (empty($params)) {
-        return $this->connection->query($sql);
-      }
-      else {
-        $stmt = $this->connection->prepare($sql);
+        return $connection->query($sql);
+      } else {
+        $stmt = $connection->prepare($sql);
         $stmt->execute($params);
         return $stmt;
       }
@@ -201,144 +206,189 @@ class PostgreSQLConnector {
         '@message' => $e->getMessage(),
         '@sql' => $sql,
       ]);
-      
-      throw new SearchApiException('Query execution failed: ' . $e->getMessage(), $e->getCode(), $e);
+      throw new \Exception('Query execution failed: ' . $e->getMessage(), $e->getCode(), $e);
     }
   }
 
   /**
-   * Prepares a SQL statement.
+   * Execute a prepared statement.
    *
    * @param string $sql
-   *   The SQL statement.
+   *   The SQL query with placeholders.
+   * @param array $params
+   *   Query parameters.
    *
    * @return \PDOStatement
-   *   The prepared statement.
+   *   The executed statement.
    *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If preparation fails.
+   * @throws \Exception
+   *   If statement execution fails.
    */
-  public function prepare($sql) {
+  public function executePrepared($sql, array $params = []) {
     try {
-      return $this->connection->prepare($sql);
+      $connection = $this->connect();
+      $stmt = $connection->prepare($sql);
+      $stmt->execute($params);
+      return $stmt;
     }
     catch (\PDOException $e) {
-      $this->logger->error('Statement preparation failed: @message. SQL: @sql', [
+      $this->logger->error('Prepared statement execution failed: @message. SQL: @sql', [
         '@message' => $e->getMessage(),
         '@sql' => $sql,
       ]);
-      
-      throw new SearchApiException('Statement preparation failed: ' . $e->getMessage(), $e->getCode(), $e);
+      throw new \Exception('Prepared statement execution failed: ' . $e->getMessage(), $e->getCode(), $e);
     }
   }
 
   /**
-   * Begins a database transaction.
+   * Begin a transaction.
    *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If the transaction cannot be started.
+   * @return bool
+   *   TRUE on success.
+   *
+   * @throws \Exception
+   *   If transaction cannot be started.
    */
   public function beginTransaction() {
     try {
-      $this->connection->beginTransaction();
+      $connection = $this->connect();
+      return $connection->beginTransaction();
     }
     catch (\PDOException $e) {
-      throw new SearchApiException('Failed to begin transaction: ' . $e->getMessage(), $e->getCode(), $e);
+      $this->logger->error('Failed to begin transaction: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      throw new \Exception('Failed to begin transaction: ' . $e->getMessage(), $e->getCode(), $e);
     }
   }
 
   /**
-   * Commits a database transaction.
+   * Commit a transaction.
    *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If the commit fails.
+   * @return bool
+   *   TRUE on success.
+   *
+   * @throws \Exception
+   *   If transaction cannot be committed.
    */
   public function commit() {
     try {
-      $this->connection->commit();
+      if ($this->connection) {
+        return $this->connection->commit();
+      }
+      return FALSE;
     }
     catch (\PDOException $e) {
-      throw new SearchApiException('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
+      $this->logger->error('Failed to commit transaction: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      throw new \Exception('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
     }
   }
 
   /**
-   * Rolls back a database transaction.
+   * Rollback a transaction.
    *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If the rollback fails.
+   * @return bool
+   *   TRUE on success.
+   *
+   * @throws \Exception
+   *   If transaction cannot be rolled back.
    */
   public function rollback() {
     try {
-      $this->connection->rollback();
+      if ($this->connection) {
+        return $this->connection->rollback();
+      }
+      return FALSE;
     }
     catch (\PDOException $e) {
-      throw new SearchApiException('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+      $this->logger->error('Failed to rollback transaction: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      throw new \Exception('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
     }
   }
 
   /**
-   * Creates a savepoint.
+   * Check if a table exists.
    *
-   * @param string $savepoint_name
-   *   The savepoint name.
+   * @param string $table_name
+   *   The table name.
    *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If savepoint creation fails.
+   * @return bool
+   *   TRUE if table exists.
    */
-  public function createSavepoint($savepoint_name) {
+  public function tableExists($table_name) {
     try {
-      $validated_name = $this->validateIdentifier($savepoint_name, 'savepoint name');
-      $this->connection->exec("SAVEPOINT \"{$validated_name}\"");
+      $sql = "SELECT 1 FROM information_schema.tables WHERE table_name = ? AND table_type = 'BASE TABLE'";
+      $stmt = $this->executePrepared($sql, [$table_name]);
+      return $stmt->fetchColumn() !== FALSE;
     }
-    catch (\PDOException $e) {
-      throw new SearchApiException('Failed to create savepoint: ' . $e->getMessage(), $e->getCode(), $e);
+    catch (\Exception $e) {
+      $this->logger->warning('Error checking if table exists: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      return FALSE;
     }
   }
 
   /**
-   * Releases a savepoint.
+   * Check if an extension exists.
    *
-   * @param string $savepoint_name
-   *   The savepoint name.
+   * @param string $extension_name
+   *   The extension name.
    *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If savepoint release fails.
+   * @return bool
+   *   TRUE if extension is installed.
    */
-  public function releaseSavepoint($savepoint_name) {
+  public function extensionExists($extension_name) {
     try {
-      $validated_name = $this->validateIdentifier($savepoint_name, 'savepoint name');
-      $this->connection->exec("RELEASE SAVEPOINT \"{$validated_name}\"");
+      $sql = "SELECT 1 FROM pg_extension WHERE extname = ?";
+      $stmt = $this->executePrepared($sql, [$extension_name]);
+      return $stmt->fetchColumn() !== FALSE;
     }
-    catch (\PDOException $e) {
-      throw new SearchApiException('Failed to release savepoint: ' . $e->getMessage(), $e->getCode(), $e);
+    catch (\Exception $e) {
+      $this->logger->warning('Error checking if extension exists: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      return FALSE;
     }
   }
 
   /**
-   * Rolls back to a savepoint.
+   * Get the last insert ID.
    *
-   * @param string $savepoint_name
-   *   The savepoint name.
+   * @param string $sequence_name
+   *   Optional sequence name.
    *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If rollback to savepoint fails.
+   * @return string
+   *   The last insert ID.
    */
-  public function rollbackToSavepoint($savepoint_name) {
-    try {
-      $validated_name = $this->validateIdentifier($savepoint_name, 'savepoint name');
-      $this->connection->exec("ROLLBACK TO SAVEPOINT \"{$validated_name}\"");
-    }
-    catch (\PDOException $e) {
-      throw new SearchApiException('Failed to rollback to savepoint: ' . $e->getMessage(), $e->getCode(), $e);
-    }
+  public function lastInsertId($sequence_name = NULL) {
+    $connection = $this->connect();
+    return $connection->lastInsertId($sequence_name);
   }
 
   /**
-   * Gets database connection information.
+   * Quote a string for safe SQL usage.
+   *
+   * @param string $string
+   *   The string to quote.
+   *
+   * @return string
+   *   The quoted string.
+   */
+  public function quote($string) {
+    $connection = $this->connect();
+    return $connection->quote($string);
+  }
+
+  /**
+   * Get connection information.
    *
    * @return array
-   *   Array containing connection details.
+   *   Connection information.
    */
   public function getConnectionInfo() {
     return [
@@ -346,92 +396,22 @@ class PostgreSQLConnector {
       'port' => $this->config['port'],
       'database' => $this->config['database'],
       'username' => $this->config['username'],
-      'ssl_mode' => $this->config['ssl_mode'] ?? 'require',
-      'passwordless' => empty($this->config['password']),
+      'ssl_mode' => $this->config['ssl_mode'],
     ];
   }
 
   /**
-   * Validates a SQL identifier (table name, column name, etc.).
-   *
-   * @param string $identifier
-   *   The identifier to validate.
-   * @param string $type
-   *   The type of identifier for error messages.
-   *
-   * @return string
-   *   The validated identifier.
-   *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If the identifier is invalid.
+   * Close the database connection.
    */
-  public function validateIdentifier($identifier, $type = 'identifier') {
-    // Check for null or empty identifier
-    if (empty($identifier) || !is_string($identifier)) {
-      throw new SearchApiException("Invalid {$type}: identifier cannot be empty.");
-    }
-
-    // PostgreSQL identifier rules:
-    // - Start with letter (a-z, A-Z) or underscore
-    // - Contain only letters, digits, underscores, and dollar signs
-    // - Max 63 characters (PostgreSQL limit)
-    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_$]{0,62}$/', $identifier)) {
-      throw new SearchApiException("Invalid {$type}: '{$identifier}'. Must start with letter or underscore and contain only alphanumeric characters, underscores, and dollar signs (max 63 chars).");
-    }
-    
-    // Check against PostgreSQL reserved words (case-insensitive)
-    if (in_array(strtolower($identifier), self::$reservedWords)) {
-      throw new SearchApiException("Invalid {$type}: '{$identifier}' is a PostgreSQL reserved word.");
-    }
-    
-    return $identifier;
-  }
-
-  /**
-   * Validates and quotes a table name for safe use in SQL.
-   *
-   * @param string $table_name
-   *   The table name to validate.
-   *
-   * @return string
-   *   The safely quoted table name.
-   *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If the table name is invalid.
-   */
-  public function quoteTableName($table_name) {
-    $validated_name = $this->validateIdentifier($table_name, 'table name');
-    return "\"{$validated_name}\"";
-  }
-
-  /**
-   * Validates and quotes a column name for safe use in SQL.
-   *
-   * @param string $column_name
-   *   The column name to validate.
-   *
-   * @return string
-   *   The safely quoted column name.
-   *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If the column name is invalid.
-   */
-  public function quoteColumnName($column_name) {
-    $validated_name = $this->validateIdentifier($column_name, 'column name');
-    return "\"{$validated_name}\"";
-  }
-
-  /**
-   * Closes the database connection.
-   */
-  public function close() {
+  public function disconnect() {
     $this->connection = NULL;
   }
 
   /**
-   * Destructor to ensure connection is closed.
+   * Destructor.
    */
   public function __destruct() {
-    $this->close();
+    $this->disconnect();
   }
+
 }

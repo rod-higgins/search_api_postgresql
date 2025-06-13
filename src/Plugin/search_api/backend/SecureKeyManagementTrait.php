@@ -1,11 +1,9 @@
 <?php
 
-namespace Drupal\search_api_postgresql\Plugin\search_api\backend;
-
-use Drupal\key\KeyRepositoryInterface;
+namespace Drupal\search_api_postgresql\Traits;
 
 /**
- * Trait for secure key management in backend plugins.
+ * Trait for secure key management in search backends.
  */
 trait SecureKeyManagementTrait {
 
@@ -13,108 +11,47 @@ trait SecureKeyManagementTrait {
    * Gets the key repository service.
    *
    * @return \Drupal\key\KeyRepositoryInterface|null
-   *   The key repository or NULL if not available.
+   *   The key repository service or NULL if not available.
    */
   protected function getKeyRepository() {
     return $this->keyRepository ?? NULL;
   }
 
   /**
-   * Gets database password from key or direct configuration.
-   * 
-   * UPDATED: Passwords are optional - supports passwordless connections.
-   *
-   * @return string
-   *   The database password (can be empty for passwordless connections).
-   */
-  protected function getDatabasePassword() {
-    $password_key = $this->configuration['connection']['password_key'] ?? '';
-    
-    // If no key is configured, fall back to direct password (which can be empty)
-    if (empty($password_key)) {
-      return $this->configuration['connection']['password'] ?? '';
-    }
-
-    // Try to get password from Key module
-    $key_repository = $this->getKeyRepository();
-    if (!$key_repository) {
-      // Key module not available, fall back to direct password
-      $direct_password = $this->configuration['connection']['password'] ?? '';
-      
-      if (empty($direct_password)) {
-        \Drupal::logger('search_api_postgresql')->warning('Key module not available and no direct password configured. Using passwordless connection.');
-      }
-      
-      return $direct_password;
-    }
-
-    $key = $key_repository->getKey($password_key);
-    if ($key) {
-      $key_value = $key->getKeyValue();
-      
-      // If key exists but has no value, log warning and fall back
-      if (empty($key_value)) {
-        \Drupal::logger('search_api_postgresql')->warning('Database password key "@key" exists but has no value. Falling back to direct password.', [
-          '@key' => $password_key,
-        ]);
-        return $this->configuration['connection']['password'] ?? '';
-      }
-      
-      return $key_value;
-    }
-
-    // Key not found, fall back to direct password
-    \Drupal::logger('search_api_postgresql')->warning('Database password key "@key" not found. Falling back to direct password.', [
-      '@key' => $password_key,
-    ]);
-    return $this->configuration['connection']['password'] ?? '';
-  }
-
-  /**
-   * Gets API key from key module or direct configuration.
-   * 
-   * UPDATED: More lenient - logs warnings instead of throwing exceptions for optional features.
+   * Retrieves a secure key value.
    *
    * @param string $key_name
-   *   The key name from configuration.
+   *   The key name/ID.
    * @param string $direct_key
-   *   The direct key value from configuration.
+   *   Fallback direct key value.
    * @param string $type
-   *   Type of key for error messages (e.g., 'API', 'Database password').
+   *   Type of key for error messages (e.g., 'Database password', 'API key').
    * @param bool $required
-   *   Whether this key is required (throws exception) or optional (logs warning).
+   *   Whether the key is required.
    *
    * @return string
-   *   The API key value.
+   *   The key value.
    *
    * @throws \RuntimeException
-   *   If key is required but not found.
+   *   If the key is required but not found.
    */
-  protected function getSecureKey($key_name, $direct_key, $type = 'API', $required = TRUE) {
+  protected function getSecureKey($key_name, $direct_key = '', $type = 'Key', $required = FALSE) {
     $key_repository = $this->getKeyRepository();
-
-    // Try key module first if key name is provided
-    if (!empty($key_name)) {
-      if (!$key_repository) {
-        $message = sprintf('Key module is not available but %s key name is specified.', $type);
-        if ($required) {
-          throw new \RuntimeException($message);
-        } else {
-          \Drupal::logger('search_api_postgresql')->warning($message);
-          return $direct_key;
-        }
-      }
-      
+    
+    // Try key module first if available
+    if (!empty($key_name) && $key_repository) {
       $key = $key_repository->getKey($key_name);
       if ($key) {
         $key_value = $key->getKeyValue();
-        
-        if (empty($key_value)) {
-          $message = sprintf('%s key "%s" exists but has no value.', $type, $key_name);
-          if ($required) {
-            throw new \RuntimeException($message);
-          } else {
-            \Drupal::logger('search_api_postgresql')->warning($message . ' Falling back to direct value.');
+        if (!empty($key_value)) {
+          return $key_value;
+        } else {
+          // Key exists but is empty - this might be intentional for some setups
+          if (!empty($direct_key)) {
+            \Drupal::logger('search_api_postgresql')->warning('@type key "@key" is empty. Using direct value as fallback.', [
+              '@type' => $type,
+              '@key' => $key_name,
+            ]);
             return $direct_key;
           }
         }
@@ -178,14 +115,24 @@ trait SecureKeyManagementTrait {
   }
 
   /**
-   * Adds Azure AI API key fields to form.
+   * Adds API key fields to a specific form section.
    *
-   * @param array &$form
-   *   The form array to add fields to.
+   * @param array &$form_section
+   *   The form section to add fields to.
+   * @param string $base_path
+   *   The base path for form states (e.g., 'azure_embedding][service').
+   * @param string $config_path
+   *   The configuration path for default values.
    */
-  protected function addAzureApiKeyFields(array &$form) {
+  protected function addApiKeyFields(array &$form_section, $base_path, $config_path) {
     $key_repository = $this->getKeyRepository();
     if (!$key_repository) {
+      // No key module available, add only direct entry
+      $form_section['api_key'] = [
+        '#type' => 'password',
+        '#title' => $this->t('API Key'),
+        '#description' => $this->t('Your API key. Using Key module is recommended for production.'),
+      ];
       return;
     }
 
@@ -195,166 +142,201 @@ trait SecureKeyManagementTrait {
       $keys[$key->id()] = $key->label();
     }
 
-    // Check which form structure we're working with
-    if (isset($form['ai_embeddings']['azure_ai'])) {
-      // Standard AI embeddings structure
-      $form['ai_embeddings']['azure_ai']['api_key_name'] = [
-        '#type' => 'select',
-        '#title' => $this->t('Azure API Key (Key Module)'),
-        '#options' => $keys,
-        '#empty_option' => $this->t('- Select a key -'),
-        '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['api_key_name'] ?? '',
-        '#description' => $this->t('Select a key that contains your Azure OpenAI API key. Recommended approach for security.'),
-        '#states' => [
-          'visible' => [
-            ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
-          ],
-        ],
-      ];
-
-      $form['ai_embeddings']['azure_ai']['api_key'] = [
-        '#type' => 'password',
-        '#title' => $this->t('Direct API Key (Fallback)'),
-        '#description' => $this->t('Direct API key entry. Only used if no key is selected above. Not recommended for production.'),
-        '#states' => [
-          'visible' => [
-            ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
-            ':input[name="backend_config[ai_embeddings][azure_ai][api_key_name]"]' => ['value' => ''],
-          ],
-        ],
-      ];
-    }
-    elseif (isset($form['azure_embedding']['service'])) {
-      // Azure-specific structure
-      $form['azure_embedding']['service']['api_key_name'] = [
-        '#type' => 'select',
-        '#title' => $this->t('Azure API Key (Key Module)'),
-        '#options' => $keys,
-        '#empty_option' => $this->t('- Select a key -'),
-        '#default_value' => $this->configuration['azure_embedding']['api_key_name'] ?? '',
-        '#description' => $this->t('Select a key that contains your Azure OpenAI API key. Recommended approach for security.'),
-        '#states' => [
-          'visible' => [
-            ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
-          ],
-        ],
-      ];
-
-      $form['azure_embedding']['service']['api_key'] = [
-        '#type' => 'password',
-        '#title' => $this->t('Direct API Key (Fallback)'),
-        '#description' => $this->t('Direct API key entry. Only used if no key is selected above. Not recommended for production.'),
-        '#states' => [
-          'visible' => [
-            ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
-            ':input[name="backend_config[azure_embedding][service][api_key_name]"]' => ['value' => ''],
-          ],
-        ],
-      ];
-    }
-  }
-
-  /**
-   * Gets Azure API key from configuration (backward compatibility method).
-   *
-   * @return string
-   *   The API key.
-   */
-  protected function getAzureApiKey() {
-    return $this->getAzureEmbeddingApiKey();
-  }
-
-  /**
-   * Gets Azure embedding API key from configuration.
-   *
-   * @return string
-   *   The API key (can be empty).
-   */
-  protected function getAzureEmbeddingApiKey() {
-    // Try different configuration structures
-    $config_paths = [
-      ['ai_embeddings', 'azure_ai'],
-      ['azure_embedding'],
+    $form_section['api_key_name'] = [
+      '#type' => 'select',
+      '#title' => $this->t('API Key (Key Module)'),
+      '#options' => $keys,
+      '#empty_option' => $this->t('- Select a key or use direct entry below -'),
+      '#default_value' => $this->getConfigValue($config_path . '.api_key_name'),
+      '#description' => $this->t('Select a key containing your API key.'),
+      '#weight' => -1,
     ];
 
-    foreach ($config_paths as $path) {
-      $config = $this->configuration;
-      foreach ($path as $key) {
-        if (isset($config[$key])) {
-          $config = $config[$key];
-        } else {
-          continue 2; // Skip to next path
-        }
-      }
+    $form_section['api_key'] = [
+      '#type' => 'password',
+      '#title' => $this->t('Direct API Key (Fallback)'),
+      '#description' => $this->t('Direct API key entry. Only used if no key is selected above.'),
+      '#states' => [
+        'visible' => [
+          ':input[name="backend_config[' . $base_path . '][api_key_name]"]' => ['value' => ''],
+        ],
+      ],
+      '#weight' => 0,
+    ];
+  }
 
-      $api_key_name = $config['api_key_name'] ?? '';
-      $direct_key = $config['api_key'] ?? '';
+  /**
+   * Get API key name from configuration.
+   *
+   * @return string
+   *   The API key name.
+   */
+  protected function getApiKeyNameFromConfig() {
+    // Try different possible configuration paths
+    $paths = [
+      'ai_embeddings.azure_ai.api_key_name',
+      'azure_embedding.api_key_name',
+      'vector_search.openai.api_key_name',
+      'vector_search.huggingface.api_key_name',
+    ];
 
-      if (!empty($api_key_name) || !empty($direct_key)) {
-        try {
-          return $this->getSecureKey($api_key_name, $direct_key, 'Azure API');
-        } catch (\RuntimeException $e) {
-          // Log warning but don't break - allow empty API keys for optional features
-          \Drupal::logger('search_api_postgresql')->warning('Azure API key error: @message', [
-            '@message' => $e->getMessage(),
-          ]);
-          return '';
-        }
+    foreach ($paths as $path) {
+      $value = $this->getConfigValue($path);
+      if (!empty($value)) {
+        return $value;
       }
     }
 
-    // No API key configuration found - this is OK for optional AI features
     return '';
   }
 
   /**
-   * Validates a key exists and has a value.
+   * Get configuration value by dot notation path.
    *
-   * @param string $key_name
-   *   The key name to validate.
-   * @param string $type
-   *   Type of key for error messages.
+   * @param string $path
+   *   The configuration path in dot notation.
+   *
+   * @return mixed|null
+   *   The configuration value or NULL if not found.
+   */
+  protected function getConfigValue($path) {
+    $keys = explode('.', $path);
+    $value = $this->configuration;
+
+    foreach ($keys as $key) {
+      if (is_array($value) && isset($value[$key])) {
+        $value = $value[$key];
+      } else {
+        return NULL;
+      }
+    }
+
+    return $value;
+  }
+
+  /**
+   * Validates API key configuration.
+   *
+   * @param array $values
+   *   Form values.
+   * @param string $field_path
+   *   The field path for error reporting.
+   * @param string $key_name_field
+   *   The key name field name.
+   * @param string $direct_key_field
+   *   The direct key field name.
+   * @param string $label
+   *   Human-readable label for the key type.
+   *
+   * @return bool
+   *   TRUE if valid, FALSE otherwise.
+   */
+  protected function validateApiKeyConfig(array $values, $field_path, $key_name_field, $direct_key_field, $label = 'API key') {
+    $key_name = $values[$key_name_field] ?? '';
+    $direct_key = $values[$direct_key_field] ?? '';
+
+    if (empty($key_name) && empty($direct_key)) {
+      return FALSE;
+    }
+
+    // If key name is specified, verify it exists
+    if (!empty($key_name)) {
+      $key_repository = $this->getKeyRepository();
+      if ($key_repository) {
+        $key = $key_repository->getKey($key_name);
+        if (!$key) {
+          return FALSE;
+        }
+      }
+    }
+
+    return TRUE;
+  }
+
+  /**
+   * Gets database password considering key configuration.
+   *
+   * @return string
+   *   The database password.
+   */
+  protected function getDatabasePassword() {
+    $connection_config = $this->configuration['connection'] ?? [];
+    $password_key = $connection_config['password_key'] ?? '';
+    $direct_password = $connection_config['password'] ?? '';
+
+    return $this->getSecureKey($password_key, $direct_password, 'Database password', FALSE);
+  }
+
+  /**
+   * Gets API key for Azure services.
+   *
+   * @return string
+   *   The API key.
+   */
+  protected function getApiKey() {
+    // Try different configuration paths
+    $configs = [
+      'ai_embeddings.azure_ai' => 'Azure AI',
+      'azure_embedding' => 'Azure Embedding',
+      'vector_search.openai' => 'OpenAI',
+      'vector_search.huggingface' => 'Hugging Face',
+    ];
+
+    foreach ($configs as $path => $label) {
+      $config = $this->getConfigValue($path);
+      if (!empty($config)) {
+        $key_name = $config['api_key_name'] ?? '';
+        $direct_key = $config['api_key'] ?? '';
+        
+        if (!empty($key_name) || !empty($direct_key)) {
+          return $this->getSecureKey($key_name, $direct_key, $label . ' API key', FALSE);
+        }
+      }
+    }
+
+    return '';
+  }
+
+  /**
+   * Validates that required keys are accessible.
+   *
+   * @param array $required_keys
+   *   Array of required key configurations.
+   *
+   * @throws \RuntimeException
+   *   If a required key is not accessible.
+   */
+  protected function validateRequiredKeys(array $required_keys) {
+    foreach ($required_keys as $key_config) {
+      $key_name = $key_config['key_name'] ?? '';
+      $direct_key = $key_config['direct_key'] ?? '';
+      $label = $key_config['label'] ?? 'Key';
+      $required = $key_config['required'] ?? TRUE;
+
+      if ($required) {
+        $this->getSecureKey($key_name, $direct_key, $label, TRUE);
+      }
+    }
+  }
+
+  /**
+   * Prepares connection configuration with resolved passwords.
    *
    * @return array
-   *   Array with 'valid' boolean and 'message' string.
+   *   Connection configuration with resolved passwords.
    */
-  protected function validateKey($key_name, $type = 'Key') {
-    $key_repository = $this->getKeyRepository();
+  protected function prepareConnectionConfig() {
+    $connection_config = $this->configuration['connection'] ?? [];
     
-    if (!$key_repository) {
-      return [
-        'valid' => FALSE,
-        'message' => 'Key module is not available.',
-      ];
+    // Get password from key if specified
+    if (!empty($connection_config['password_key'])) {
+      $password = $this->getDatabasePassword();
+      if (!empty($password)) {
+        $connection_config['password'] = $password;
+      }
     }
 
-    if (empty($key_name)) {
-      return [
-        'valid' => FALSE,
-        'message' => 'Key name is empty.',
-      ];
-    }
-
-    $key = $key_repository->getKey($key_name);
-    if (!$key) {
-      return [
-        'valid' => FALSE,
-        'message' => sprintf('%s "%s" not found.', $type, $key_name),
-      ];
-    }
-
-    $key_value = $key->getKeyValue();
-    if (empty($key_value)) {
-      return [
-        'valid' => FALSE,
-        'message' => sprintf('%s "%s" exists but has no value.', $type, $key_name),
-      ];
-    }
-
-    return [
-      'valid' => TRUE,
-      'message' => sprintf('%s "%s" is valid.', $type, $key_name),
-    ];
+    return $connection_config;
   }
 
 }

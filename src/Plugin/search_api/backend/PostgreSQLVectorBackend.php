@@ -3,266 +3,89 @@
 namespace Drupal\search_api_postgresql\Plugin\search_api\backend;
 
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\search_api\IndexInterface;
 use Drupal\search_api\SearchApiException;
-use Drupal\search_api_postgresql\PostgreSQL\VectorIndexManager;
-use Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder;
-use Drupal\search_api_postgresql\Service\OpenAIEmbeddingService;
-use Drupal\search_api_postgresql\Service\HuggingFaceEmbeddingService;
-use Drupal\search_api_postgresql\Service\LocalEmbeddingService;
-use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\search_api_postgresql\Traits\SecureKeyManagementTrait;
 
 /**
  * PostgreSQL backend with flexible vector search support.
  *
  * @SearchApiBackend(
  *   id = "postgresql_vector",
- *   label = @Translation("PostgreSQL with Vector Search"),
- *   description = @Translation("PostgreSQL backend with vector search capabilities and multiple embedding provider support")
+ *   label = @Translation("PostgreSQL with Multi-Provider Vector Search"),
+ *   description = @Translation("PostgreSQL backend supporting multiple AI embedding providers (OpenAI, Hugging Face, Local models).")
  * )
  */
 class PostgreSQLVectorBackend extends PostgreSQLBackend {
 
-  /**
-   * The embedding service.
-   *
-   * @var \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface
-   */
-  protected $embeddingService;
+  use SecureKeyManagementTrait;
 
   /**
    * {@inheritdoc}
    */
   public function defaultConfiguration() {
-    return parent::defaultConfiguration() + [
-      'vector_search' => [
-        'enabled' => FALSE,
-        'provider' => 'openai',
-        'openai' => [
-          'api_key' => '',
-          'api_key_name' => '',
-          'model' => 'text-embedding-3-small',
-          'dimension' => 1536,
-          'organization' => '',
-          'base_url' => 'https://api.openai.com/v1',
-        ],
-        'huggingface' => [
-          'api_key' => '',
-          'api_key_name' => '',
-          'model' => 'sentence-transformers/all-MiniLM-L6-v2',
-          'dimension' => 384,
-        ],
-        'local' => [
-          'model_path' => '',
-          'model_type' => 'sentence_transformers',
-          'dimension' => 384,
-        ],
-        'batch_size' => 25,
-        'rate_limit_delay' => 100,
-        'max_retries' => 3,
-        'timeout' => 30,
-        'enable_cache' => TRUE,
-        'cache_ttl' => 604800,
+    $config = parent::defaultConfiguration();
+    
+    // Remove the Azure-specific ai_embeddings config
+    unset($config['ai_embeddings']);
+    
+    // Add flexible vector search configuration
+    $config['vector_search'] = [
+      'enabled' => FALSE,
+      'provider' => 'openai',
+      'openai' => [
+        'api_key' => '',
+        'api_key_name' => '',
+        'model' => 'text-embedding-3-small',
+        'organization' => '',
+        'base_url' => 'https://api.openai.com/v1',
+        'dimension' => 1536,
       ],
-      'vector_index' => [
-        'method' => 'hnsw',
-        'ivfflat_lists' => 100,
-        'hnsw_m' => 16,
-        'hnsw_ef_construction' => 64,
-        'distance_function' => 'cosine',
+      'huggingface' => [
+        'api_key' => '',
+        'api_key_name' => '',
+        'model' => 'sentence-transformers/all-MiniLM-L6-v2',
+        'dimension' => 384,
       ],
-      'hybrid_search' => [
-        'enabled' => TRUE,
-        'text_weight' => 0.7,
-        'vector_weight' => 0.3,
-        'similarity_threshold' => 0.1,
-        'boost_exact_matches' => TRUE,
-        'normalize_scores' => TRUE,
+      'local' => [
+        'model_path' => '',
+        'model_type' => 'sentence_transformers',
+        'dimension' => 384,
       ],
+      'batch_size' => 25,
+      'rate_limit_delay' => 100,
+      'max_retries' => 3,
+      'timeout' => 30,
+      'enable_cache' => TRUE,
+      'cache_ttl' => 3600,
     ];
-  }
 
-  /**
-   * {@inheritdoc}
-   */
-  protected function connect() {
-    if (!$this->connector) {
-      parent::connect();
-      
-      // Initialize embedding service if enabled
-      if ($this->configuration['vector_search']['enabled']) {
-        $this->initializeEmbeddingService();
-      }
-      
-      // Use vector-enhanced managers
-      $this->indexManager = new VectorIndexManager(
-        $this->connector, 
-        $this->fieldMapper, 
-        $this->configuration,
-        $this->embeddingService
-      );
-      
-      $this->queryBuilder = new VectorQueryBuilder(
-        $this->connector, 
-        $this->fieldMapper, 
-        $this->configuration,
-        $this->embeddingService
-      );
-    }
-  }
+    $config['vector_index'] = [
+      'method' => 'ivfflat',
+      'lists' => 100,
+      'probes' => 10,
+      'distance' => 'cosine',
+    ];
 
-  /**
-   * Initializes the embedding service based on configuration.
-   */
-  protected function initializeEmbeddingService() {
-    $config = $this->configuration['vector_search'];
-    $provider = $config['provider'] ?? 'openai';
+    $config['hybrid_search'] = [
+      'enabled' => TRUE,
+      'text_weight' => 0.6,
+      'vector_weight' => 0.4,
+      'similarity_threshold' => 0.15,
+    ];
 
-    switch ($provider) {
-      case 'openai':
-        $api_key = $this->getProviderApiKey('openai');
-        $openai_config = $config['openai'];
-        
-        $this->embeddingService = new OpenAIEmbeddingService(
-          $api_key,
-          $openai_config['model'] ?? 'text-embedding-3-small',
-          $openai_config['organization'] ?? '',
-          $openai_config['base_url'] ?? 'https://api.openai.com/v1'
-        );
-        break;
-        
-      case 'huggingface':
-        $api_key = $this->getProviderApiKey('huggingface');
-        $hf_config = $config['huggingface'];
-        
-        $this->embeddingService = new HuggingFaceEmbeddingService(
-          $api_key,
-          $hf_config['model'] ?? 'sentence-transformers/all-MiniLM-L6-v2'
-        );
-        break;
-        
-      case 'local':
-        $local_config = $config['local'];
-        $this->embeddingService = new LocalEmbeddingService(
-          $local_config['model_path'] ?? '',
-          $local_config['model_type'] ?? 'sentence_transformers'
-        );
-        break;
-        
-      default:
-        throw new SearchApiException('Unsupported embedding provider: ' . $provider);
-    }
-
-    // Configure common service options
-    if (method_exists($this->embeddingService, 'setBatchSize')) {
-      $this->embeddingService->setBatchSize($config['batch_size'] ?? 25);
-    }
-    
-    if (method_exists($this->embeddingService, 'setRateLimit')) {
-      $this->embeddingService->setRateLimit($config['rate_limit_delay'] ?? 100);
-    }
-    
-    if (method_exists($this->embeddingService, 'setMaxRetries')) {
-      $this->embeddingService->setMaxRetries($config['max_retries'] ?? 3);
-    }
-    
-    if (method_exists($this->embeddingService, 'setTimeout')) {
-      $this->embeddingService->setTimeout($config['timeout'] ?? 30);
-    }
-    
-    if ($config['enable_cache'] ?? TRUE) {
-      if (method_exists($this->embeddingService, 'enableCache')) {
-        $this->embeddingService->enableCache($config['cache_ttl'] ?? 604800);
-      }
-    }
-  }
-
-  /**
-   * Gets API key for a specific provider.
-   */
-  protected function getProviderApiKey($provider) {
-    $config = $this->configuration['vector_search'][$provider] ?? [];
-    $api_key_name = $config['api_key_name'] ?? '';
-    $direct_key = $config['api_key'] ?? '';
-
-    // Try key module first
-    if (!empty($api_key_name) && $this->keyRepository) {
-      $key = $this->keyRepository->getKey($api_key_name);
-      if ($key) {
-        $key_value = $key->getKeyValue();
-        if (!empty($key_value)) {
-          return $key_value;
-        }
-      }
-      // Log warning but don't throw exception - allow fallback
-      \Drupal::logger('search_api_postgresql')->warning('@provider API key "@key" not found or empty. Falling back to direct key.', [
-        '@provider' => ucfirst($provider),
-        '@key' => $api_key_name,
-      ]);
-    }
-
-    return $direct_key;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getSupportedFeatures() {
-    $features = parent::getSupportedFeatures();
-    
-    if ($this->configuration['vector_search']['enabled']) {
-      $features[] = 'search_api_vector_search';
-      $features[] = 'search_api_semantic_search';
-      $features[] = 'search_api_hybrid_search';
-      $features[] = 'search_api_multi_provider_embeddings';
-    }
-    
-    return $features;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function addIndex(IndexInterface $index) {
-    // Check if pgvector extension is installed
-    $this->checkPgVectorExtension();
-    
-    return parent::addIndex($index);
-  }
-
-  /**
-   * Checks if pgvector extension is available.
-   */
-  protected function checkPgVectorExtension() {
-    if (!$this->configuration['vector_search']['enabled']) {
-      return;
-    }
-
-    try {
-      $this->connect();
-      $sql = "SELECT 1 FROM pg_extension WHERE extname = 'vector'";
-      $result = $this->connector->executeQuery($sql);
-      
-      if (!$result->fetchColumn()) {
-        // Try to create the extension
-        $this->connector->executeQuery("CREATE EXTENSION IF NOT EXISTS vector");
-        $this->logger->info('pgvector extension created successfully.');
-      }
-    }
-    catch (\Exception $e) {
-      throw new SearchApiException('pgvector extension is required for vector search: ' . $e->getMessage());
-    }
+    return $config;
   }
 
   /**
    * {@inheritdoc}
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
-    // Get base form from parent
+    // Get base form from parent but remove AI embeddings
     $form = parent::buildConfigurationForm($form, $form_state);
-
-    // Replace AI embeddings section with flexible vector search configuration
     unset($form['ai_embeddings']);
+
+    // Ensure we have default configuration
+    $this->configuration = $this->configuration + $this->defaultConfiguration();
 
     // Vector search configuration
     $form['vector_search'] = [
@@ -351,7 +174,21 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
       '#type' => 'checkbox',
       '#title' => $this->t('Enable Embedding Cache'),
       '#default_value' => $this->configuration['vector_search']['enable_cache'] ?? TRUE,
-      '#description' => $this->t('Cache embeddings to improve performance and reduce costs.'),
+      '#description' => $this->t('Cache embeddings to reduce API calls and improve performance.'),
+    ];
+
+    $form['vector_search']['common']['cache_ttl'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Cache TTL (seconds)'),
+      '#default_value' => $this->configuration['vector_search']['cache_ttl'] ?? 3600,
+      '#min' => 300,
+      '#max' => 86400,
+      '#description' => $this->t('How long to cache embeddings.'),
+      '#states' => [
+        'visible' => [
+          ':input[name="backend_config[vector_search][common][enable_cache]"]' => ['checked' => TRUE],
+        ],
+      ],
     ];
 
     // Vector Index Configuration
@@ -359,7 +196,7 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
       '#type' => 'details',
       '#title' => $this->t('Vector Index Configuration'),
       '#open' => FALSE,
-      '#description' => $this->t('Advanced settings for vector search performance and accuracy.'),
+      '#description' => $this->t('Configure pgvector indexing for optimal performance.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
@@ -371,62 +208,32 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
       '#type' => 'select',
       '#title' => $this->t('Index Method'),
       '#options' => [
-        'ivfflat' => $this->t('IVFFlat (Faster indexing, good for large datasets)'),
-        'hnsw' => $this->t('HNSW (Better accuracy, recommended)'),
+        'ivfflat' => $this->t('IVFFlat (Recommended)'),
+        'hnsw' => $this->t('HNSW (Hierarchical Navigable Small World)'),
       ],
-      '#default_value' => $this->configuration['vector_index']['method'] ?? 'hnsw',
-      '#description' => $this->t('Vector indexing algorithm for similarity search.'),
+      '#default_value' => $this->configuration['vector_index']['method'] ?? 'ivfflat',
+      '#description' => $this->t('Vector indexing method. IVFFlat is recommended for most use cases.'),
     ];
 
-    $form['vector_index']['distance_function'] = [
+    $form['vector_index']['distance'] = [
       '#type' => 'select',
       '#title' => $this->t('Distance Function'),
       '#options' => [
-        'cosine' => $this->t('Cosine Distance (Recommended)'),
-        'l2' => $this->t('Euclidean Distance (L2)'),
+        'cosine' => $this->t('Cosine (Recommended for embeddings)'),
+        'l2' => $this->t('Euclidean (L2)'),
         'inner_product' => $this->t('Inner Product'),
       ],
-      '#default_value' => $this->configuration['vector_index']['distance_function'] ?? 'cosine',
-      '#description' => $this->t('Distance function for similarity calculations.'),
+      '#default_value' => $this->configuration['vector_index']['distance'] ?? 'cosine',
+      '#description' => $this->t('Distance function for vector similarity. Cosine is recommended for most embedding models.'),
     ];
 
-    // HNSW specific settings
-    $form['vector_index']['hnsw_m'] = [
+    $form['vector_index']['lists'] = [
       '#type' => 'number',
-      '#title' => $this->t('HNSW M Parameter'),
-      '#default_value' => $this->configuration['vector_index']['hnsw_m'] ?? 16,
-      '#min' => 2,
-      '#max' => 100,
-      '#description' => $this->t('Number of connections for HNSW. Higher values = better accuracy, more memory.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_index][method]"]' => ['value' => 'hnsw'],
-        ],
-      ],
-    ];
-
-    $form['vector_index']['hnsw_ef_construction'] = [
-      '#type' => 'number',
-      '#title' => $this->t('HNSW ef_construction'),
-      '#default_value' => $this->configuration['vector_index']['hnsw_ef_construction'] ?? 64,
+      '#title' => $this->t('Lists (IVFFlat)'),
+      '#default_value' => $this->configuration['vector_index']['lists'] ?? 100,
       '#min' => 1,
       '#max' => 1000,
-      '#description' => $this->t('Size of dynamic candidate list for HNSW construction.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_index][method]"]' => ['value' => 'hnsw'],
-        ],
-      ],
-    ];
-
-    // IVFFlat specific settings
-    $form['vector_index']['ivfflat_lists'] = [
-      '#type' => 'number',
-      '#title' => $this->t('IVFFlat Lists'),
-      '#default_value' => $this->configuration['vector_index']['ivfflat_lists'] ?? 100,
-      '#min' => 1,
-      '#max' => 10000,
-      '#description' => $this->t('Number of lists for IVFFlat index. Should be around sqrt(total_rows).'),
+      '#description' => $this->t('Number of lists for IVFFlat index. Generally set to rows/1000.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_index][method]"]' => ['value' => 'ivfflat'],
@@ -437,9 +244,9 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
     // Hybrid Search Configuration
     $form['hybrid_search'] = [
       '#type' => 'details',
-      '#title' => $this->t('Hybrid Search Settings'),
-      '#open' => FALSE,
-      '#description' => $this->t('Combine traditional full-text search with vector similarity search.'),
+      '#title' => $this->t('Hybrid Search Configuration'),
+      '#open' => TRUE,
+      '#description' => $this->t('Configure hybrid search combining traditional full-text and vector search.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
@@ -451,17 +258,17 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
       '#type' => 'checkbox',
       '#title' => $this->t('Enable Hybrid Search'),
       '#default_value' => $this->configuration['hybrid_search']['enabled'] ?? TRUE,
-      '#description' => $this->t('Combine text and vector search for best results.'),
+      '#description' => $this->t('Combine traditional full-text search with vector similarity search.'),
     ];
 
     $form['hybrid_search']['text_weight'] = [
       '#type' => 'number',
       '#title' => $this->t('Text Search Weight'),
-      '#default_value' => $this->configuration['hybrid_search']['text_weight'] ?? 0.7,
+      '#default_value' => $this->configuration['hybrid_search']['text_weight'] ?? 0.6,
       '#min' => 0,
       '#max' => 1,
-      '#step' => 0.05,
-      '#description' => $this->t('Weight for traditional full-text search.'),
+      '#step' => 0.1,
+      '#description' => $this->t('Weight for traditional full-text search (0-1).'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[hybrid_search][enabled]"]' => ['checked' => TRUE],
@@ -472,11 +279,11 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
     $form['hybrid_search']['vector_weight'] = [
       '#type' => 'number',
       '#title' => $this->t('Vector Search Weight'),
-      '#default_value' => $this->configuration['hybrid_search']['vector_weight'] ?? 0.3,
+      '#default_value' => $this->configuration['hybrid_search']['vector_weight'] ?? 0.4,
       '#min' => 0,
       '#max' => 1,
-      '#step' => 0.05,
-      '#description' => $this->t('Weight for vector similarity search.'),
+      '#step' => 0.1,
+      '#description' => $this->t('Weight for vector similarity search (0-1).'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[hybrid_search][enabled]"]' => ['checked' => TRUE],
@@ -484,47 +291,13 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
       ],
     ];
 
-    // Test vector configuration
-    $form['vector_test'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Test Vector Configuration'),
-      '#open' => FALSE,
-      '#description' => $this->t('Test your vector search configuration.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
-        ],
-      ],
-    ];
-
-    $form['vector_test']['test_button'] = [
-      '#type' => 'button',
-      '#value' => $this->t('Test Vector Configuration'),
-      '#ajax' => [
-        'callback' => '::testVectorConfiguration',
-        'wrapper' => 'vector-test-result',
-      ],
-    ];
-
-    $form['vector_test']['result'] = [
-      '#type' => 'container',
-      '#attributes' => ['id' => 'vector-test-result'],
-    ];
-
     return $form;
   }
 
   /**
-   * Adds provider-specific settings to the form.
+   * Add provider-specific settings to the form.
    */
   protected function addProviderSpecificSettings(array &$form, $provider) {
-    $keys = [];
-    if (!empty($this->keyRepository)) {
-      foreach ($this->keyRepository->getKeys() as $key) {
-        $keys[$key->id()] = $key->label();
-      }
-    }
-
     switch ($provider) {
       case 'openai':
         $form['vector_search']['provider_settings']['openai'] = [
@@ -533,41 +306,20 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
           '#open' => TRUE,
         ];
 
-        if (!empty($keys)) {
-          $form['vector_search']['provider_settings']['openai']['api_key_name'] = [
-            '#type' => 'select',
-            '#title' => $this->t('API Key (Key Module)'),
-            '#options' => $keys,
-            '#empty_option' => $this->t('- Select a key -'),
-            '#default_value' => $this->configuration['vector_search']['openai']['api_key_name'] ?? '',
-            '#description' => $this->t('Select a key containing your OpenAI API key.'),
-          ];
-
-          $form['vector_search']['provider_settings']['openai']['api_key'] = [
-            '#type' => 'password',
-            '#title' => $this->t('Direct API Key (Fallback)'),
-            '#description' => $this->t('Direct API key entry. Only used if no key is selected above.'),
-            '#states' => [
-              'visible' => [
-                ':input[name="backend_config[vector_search][provider_settings][openai][api_key_name]"]' => ['value' => ''],
-              ],
-            ],
-          ];
-        } else {
-          $form['vector_search']['provider_settings']['openai']['api_key'] = [
-            '#type' => 'password',
-            '#title' => $this->t('OpenAI API Key'),
-            '#description' => $this->t('Your OpenAI API key. Installing Key module is recommended.'),
-          ];
-        }
+        // Add API key fields using the trait method
+        $this->addApiKeyFields(
+          $form['vector_search']['provider_settings']['openai'],
+          'vector_search][provider_settings][openai',
+          'vector_search.openai'
+        );
 
         $form['vector_search']['provider_settings']['openai']['model'] = [
           '#type' => 'select',
           '#title' => $this->t('Model'),
           '#options' => [
-            'text-embedding-3-small' => $this->t('text-embedding-3-small (1536 dimensions, cost-effective)'),
-            'text-embedding-3-large' => $this->t('text-embedding-3-large (3072 dimensions, highest quality)'),
-            'text-embedding-ada-002' => $this->t('text-embedding-ada-002 (1536 dimensions, legacy)'),
+            'text-embedding-3-small' => $this->t('text-embedding-3-small (1536 dimensions)'),
+            'text-embedding-3-large' => $this->t('text-embedding-3-large (3072 dimensions)'),
+            'text-embedding-ada-002' => $this->t('text-embedding-ada-002 (1536 dimensions)'),
           ],
           '#default_value' => $this->configuration['vector_search']['openai']['model'] ?? 'text-embedding-3-small',
           '#description' => $this->t('OpenAI embedding model to use.'),
@@ -575,9 +327,16 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
 
         $form['vector_search']['provider_settings']['openai']['organization'] = [
           '#type' => 'textfield',
-          '#title' => $this->t('Organization ID (Optional)'),
+          '#title' => $this->t('Organization (Optional)'),
           '#default_value' => $this->configuration['vector_search']['openai']['organization'] ?? '',
-          '#description' => $this->t('Optional OpenAI organization ID.'),
+          '#description' => $this->t('Your OpenAI organization ID (optional).'),
+        ];
+
+        $form['vector_search']['provider_settings']['openai']['base_url'] = [
+          '#type' => 'url',
+          '#title' => $this->t('Base URL'),
+          '#default_value' => $this->configuration['vector_search']['openai']['base_url'] ?? 'https://api.openai.com/v1',
+          '#description' => $this->t('OpenAI API base URL. Change for Azure OpenAI or custom endpoints.'),
         ];
         break;
 
@@ -588,33 +347,12 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
           '#open' => TRUE,
         ];
 
-        if (!empty($keys)) {
-          $form['vector_search']['provider_settings']['huggingface']['api_key_name'] = [
-            '#type' => 'select',
-            '#title' => $this->t('API Key (Key Module)'),
-            '#options' => $keys,
-            '#empty_option' => $this->t('- Select a key -'),
-            '#default_value' => $this->configuration['vector_search']['huggingface']['api_key_name'] ?? '',
-            '#description' => $this->t('Select a key containing your Hugging Face API key.'),
-          ];
-
-          $form['vector_search']['provider_settings']['huggingface']['api_key'] = [
-            '#type' => 'password',
-            '#title' => $this->t('Direct API Key (Fallback)'),
-            '#description' => $this->t('Direct API key entry. Only used if no key is selected above.'),
-            '#states' => [
-              'visible' => [
-                ':input[name="backend_config[vector_search][provider_settings][huggingface][api_key_name]"]' => ['value' => ''],
-              ],
-            ],
-          ];
-        } else {
-          $form['vector_search']['provider_settings']['huggingface']['api_key'] = [
-            '#type' => 'password',
-            '#title' => $this->t('Hugging Face API Key'),
-            '#description' => $this->t('Your Hugging Face API key.'),
-          ];
-        }
+        // Add API key fields using the trait method
+        $this->addApiKeyFields(
+          $form['vector_search']['provider_settings']['huggingface'],
+          'vector_search][provider_settings][huggingface',
+          'vector_search.huggingface'
+        );
 
         $form['vector_search']['provider_settings']['huggingface']['model'] = [
           '#type' => 'textfield',
@@ -664,140 +402,50 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
   }
 
   /**
-   * AJAX callback to test vector configuration.
-   */
-  public function testVectorConfiguration(array &$form, FormStateInterface $form_state) {
-    try {
-      // Test pgvector extension first
-      $this->connect();
-      $sql = "SELECT extversion FROM pg_extension WHERE extname = 'vector'";
-      $result = $this->connector->executeQuery($sql);
-      $version = $result->fetchColumn();
-      
-      if (!$version) {
-        throw new \Exception('pgvector extension not found. Please install pgvector.');
-      }
-
-      $messages = [];
-      $messages[] = "✅ pgvector extension is available (version {$version})";
-
-      // Test embedding service if provider is configured
-      $values = $form_state->getValues();
-      $vector_config = $values['vector_search'];
-      
-      if (!empty($vector_config['enabled'])) {
-        // Create temporary embedding service for testing
-        $provider = $vector_config['provider'] ?? 'openai';
-        
-        switch ($provider) {
-          case 'openai':
-            $api_key = $this->getTestApiKey($vector_config, 'openai');
-            if (!empty($api_key)) {
-              $model = $vector_config['provider_settings']['openai']['model'] ?? 'text-embedding-3-small';
-              $service = new OpenAIEmbeddingService($api_key, $model);
-              
-              $test_text = "This is a test sentence for OpenAI embedding generation.";
-              $embedding = $service->generateEmbedding($test_text);
-              
-              if (is_array($embedding) && count($embedding) > 0) {
-                $messages[] = "✅ OpenAI embedding service working ({$model}, " . count($embedding) . " dimensions)";
-              }
-            } else {
-              $messages[] = "⚠️ OpenAI API key not configured for testing";
-            }
-            break;
-            
-          case 'huggingface':
-            $api_key = $this->getTestApiKey($vector_config, 'huggingface');
-            if (!empty($api_key)) {
-              $model = $vector_config['provider_settings']['huggingface']['model'] ?? 'sentence-transformers/all-MiniLM-L6-v2';
-              $service = new HuggingFaceEmbeddingService($api_key, $model);
-              
-              $test_text = "This is a test sentence for Hugging Face embedding generation.";
-              $embedding = $service->generateEmbedding($test_text);
-              
-              if (is_array($embedding) && count($embedding) > 0) {
-                $messages[] = "✅ Hugging Face embedding service working ({$model}, " . count($embedding) . " dimensions)";
-              }
-            } else {
-              $messages[] = "⚠️ Hugging Face API key not configured for testing";
-            }
-            break;
-            
-          case 'local':
-            $messages[] = "⚠️ Local model testing requires actual model files";
-            break;
-        }
-      }
-
-      $form['vector_test']['result']['#markup'] = 
-        '<div class="messages messages--status">' . 
-        implode('<br>', $messages) . 
-        '</div>';
-    }
-    catch (\Exception $e) {
-      $form['vector_test']['result']['#markup'] = 
-        '<div class="messages messages--error">' . 
-        $this->t('❌ Vector search test failed: @message', ['@message' => $e->getMessage()]) . 
-        '</div>';
-    }
-    
-    return $form['vector_test']['result'];
-  }
-
-  /**
-   * Gets API key for testing from form values.
-   */
-  protected function getTestApiKey(array $config, $provider) {
-    $provider_config = $config['provider_settings'][$provider] ?? [];
-    $api_key_name = $provider_config['api_key_name'] ?? '';
-    $direct_key = $provider_config['api_key'] ?? '';
-
-    if (!empty($api_key_name) && $this->keyRepository) {
-      $key = $this->keyRepository->getKey($api_key_name);
-      if ($key) {
-        return $key->getKeyValue();
-      }
-    }
-
-    return $direct_key;
-  }
-
-  /**
    * {@inheritdoc}
    */
   public function validateConfigurationForm(array &$form, FormStateInterface $form_state) {
     parent::validateConfigurationForm($form, $form_state);
 
     $values = $form_state->getValues();
-    
+
+    // Validate vector search configuration
     if (!empty($values['vector_search']['enabled'])) {
-      $provider = $values['vector_search']['provider'] ?? 'openai';
-      $provider_config = $values['vector_search']['provider_settings'][$provider] ?? [];
+      $provider = $values['vector_search']['provider'] ?? '';
       
-      // Validate API key for external providers
-      if (in_array($provider, ['openai', 'huggingface'])) {
-        $api_key_name = $provider_config['api_key_name'] ?? '';
-        $direct_api_key = $provider_config['api_key'] ?? '';
-        
-        if (empty($api_key_name) && empty($direct_api_key)) {
-          $form_state->setErrorByName("vector_search][provider_settings][{$provider}][api_key_name", 
-            $this->t('@provider API key is required.', ['@provider' => ucfirst($provider)]));
-        }
+      switch ($provider) {
+        case 'openai':
+          $api_key_name = $values['vector_search']['provider_settings']['openai']['api_key_name'] ?? '';
+          $direct_api_key = $values['vector_search']['provider_settings']['openai']['api_key'] ?? '';
+          
+          if (empty($api_key_name) && empty($direct_api_key)) {
+            $form_state->setErrorByName('vector_search][provider_settings][openai][api_key', 
+              $this->t('OpenAI API key is required.'));
+          }
+          break;
+
+        case 'huggingface':
+          $api_key_name = $values['vector_search']['provider_settings']['huggingface']['api_key_name'] ?? '';
+          $direct_api_key = $values['vector_search']['provider_settings']['huggingface']['api_key'] ?? '';
+          
+          if (empty($api_key_name) && empty($direct_api_key)) {
+            $form_state->setErrorByName('vector_search][provider_settings][huggingface][api_key', 
+              $this->t('Hugging Face API key is required.'));
+          }
+          break;
+
+        case 'local':
+          if (empty($values['vector_search']['provider_settings']['local']['model_path'])) {
+            $form_state->setErrorByName('vector_search][provider_settings][local][model_path', 
+              $this->t('Local model path is required.'));
+          }
+          break;
       }
 
-      // Validate local model path
-      if ($provider === 'local') {
-        if (empty($provider_config['model_path'])) {
-          $form_state->setErrorByName('vector_search][provider_settings][local][model_path', 
-            $this->t('Model path is required for local embedding provider.'));
-        }
-      }
-
-      // Validate hybrid search weights if enabled
+      // Validate hybrid search weights
       if (!empty($values['hybrid_search']['enabled'])) {
-        $text_weight = (float) ($values['hybrid_search']['text_weight'] ?? 0.7);
-        $vector_weight = (float) ($values['hybrid_search']['vector_weight'] ?? 0.3);
+        $text_weight = (float) ($values['hybrid_search']['text_weight'] ?? 0.6);
+        $vector_weight = (float) ($values['hybrid_search']['vector_weight'] ?? 0.4);
         
         if (abs(($text_weight + $vector_weight) - 1.0) > 0.01) {
           $form_state->setErrorByName('hybrid_search][text_weight', 
@@ -816,25 +464,28 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
     parent::submitConfigurationForm($form, $form_state);
 
     $values = $form_state->getValues();
-    
+
     // Save vector search configuration
     if (isset($values['vector_search'])) {
-      // Merge provider-specific settings into main config
-      $provider = $values['vector_search']['provider'] ?? 'openai';
-      if (isset($values['vector_search']['provider_settings'][$provider])) {
-        $this->configuration['vector_search'][$provider] = $values['vector_search']['provider_settings'][$provider];
+      // Save provider settings
+      if (isset($values['vector_search']['provider_settings'])) {
+        $provider = $values['vector_search']['provider'];
+        if (isset($values['vector_search']['provider_settings'][$provider])) {
+          $this->configuration['vector_search'][$provider] = $values['vector_search']['provider_settings'][$provider];
+        }
       }
-      
+
       // Save common settings
-      $this->configuration['vector_search']['enabled'] = $values['vector_search']['enabled'];
-      $this->configuration['vector_search']['provider'] = $provider;
-      
       if (isset($values['vector_search']['common'])) {
         $this->configuration['vector_search'] = array_merge(
           $this->configuration['vector_search'],
           $values['vector_search']['common']
         );
       }
+
+      // Save basic settings
+      $this->configuration['vector_search']['enabled'] = !empty($values['vector_search']['enabled']);
+      $this->configuration['vector_search']['provider'] = $values['vector_search']['provider'];
     }
 
     // Save vector index configuration
@@ -846,9 +497,86 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
     if (isset($values['hybrid_search'])) {
       $this->configuration['hybrid_search'] = $values['hybrid_search'];
     }
+  }
+
+  /**
+   * Get API key for the specified provider.
+   */
+  protected function getApiKey($provider, $config = []) {
+    if (empty($config)) {
+      $config = $this->configuration['vector_search'][$provider] ?? [];
+    }
+
+    $api_key_name = $config['api_key_name'] ?? '';
+    $direct_key = $config['api_key'] ?? '';
+
+    // Try key module first
+    if (!empty($api_key_name) && $this->keyRepository) {
+      $key = $this->keyRepository->getKey($api_key_name);
+      if ($key) {
+        $key_value = $key->getKeyValue();
+        if (!empty($key_value)) {
+          return $key_value;
+        }
+      }
+      // Log warning but don't throw exception - allow fallback
+      \Drupal::logger('search_api_postgresql')->warning('@provider API key "@key" not found or empty. Falling back to direct key.', [
+        '@provider' => ucfirst($provider),
+        '@key' => $api_key_name,
+      ]);
+    }
+
+    return $direct_key;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getSupportedFeatures() {
+    $features = parent::getSupportedFeatures();
     
-    // Clear embedding service to force reinitialization
-    $this->embeddingService = NULL;
+    if ($this->configuration['vector_search']['enabled']) {
+      $features[] = 'search_api_vector_search';
+      $features[] = 'search_api_semantic_search';
+      $features[] = 'search_api_hybrid_search';
+      $features[] = 'search_api_multi_provider_embeddings';
+    }
+    
+    return $features;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function addIndex(\Drupal\search_api\IndexInterface $index) {
+    // Check if pgvector extension is installed
+    $this->checkPgVectorExtension();
+    
+    return parent::addIndex($index);
+  }
+
+  /**
+   * Checks if pgvector extension is available.
+   */
+  protected function checkPgVectorExtension() {
+    if (!$this->configuration['vector_search']['enabled']) {
+      return;
+    }
+
+    try {
+      $this->connect();
+      $sql = "SELECT 1 FROM pg_extension WHERE extname = 'vector'";
+      $result = $this->connector->executeQuery($sql);
+      
+      if (!$result->fetchColumn()) {
+        // Try to create the extension
+        $this->connector->executeQuery("CREATE EXTENSION IF NOT EXISTS vector");
+        $this->logger->info('pgvector extension created successfully.');
+      }
+    }
+    catch (\Exception $e) {
+      throw new SearchApiException('pgvector extension is required for vector search: ' . $e->getMessage());
+    }
   }
 
 }

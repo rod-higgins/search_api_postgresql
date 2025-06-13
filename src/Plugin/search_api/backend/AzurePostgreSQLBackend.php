@@ -3,28 +3,26 @@
 namespace Drupal\search_api_postgresql\Plugin\search_api\backend;
 
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\search_api\IndexInterface;
 use Drupal\search_api\SearchApiException;
-use Drupal\search_api_postgresql\PostgreSQL\VectorIndexManager;
-use Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder;
-use Drupal\search_api_postgresql\Service\AzureOpenAIEmbeddingService;
-use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\search_api_postgresql\Traits\SecureKeyManagementTrait;
 
 /**
- * Azure PostgreSQL backend with AI vector search support.
+ * Azure PostgreSQL search backend with optimized AI vector search.
  *
  * @SearchApiBackend(
  *   id = "postgresql_azure",
  *   label = @Translation("PostgreSQL with Azure AI Vector Search"),
- *   description = @Translation("Azure-optimized PostgreSQL backend with hybrid text and semantic vector search capabilities")
+ *   description = @Translation("Optimized PostgreSQL backend for Azure Database with Azure OpenAI integration.")
  * )
  */
 class AzurePostgreSQLBackend extends PostgreSQLBackend {
 
+  use SecureKeyManagementTrait;
+
   /**
-   * The embedding service.
+   * The Azure embedding service.
    *
-   * @var \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface
+   * @var \Drupal\search_api_postgresql\Service\AzureEmbeddingService
    */
   protected $embeddingService;
 
@@ -32,208 +30,90 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
    * {@inheritdoc}
    */
   public function defaultConfiguration() {
-    return parent::defaultConfiguration() + [
-      'azure_embedding' => [
-        'enabled' => FALSE,
-        'endpoint' => '',
-        'api_key' => '',
-        'api_key_name' => '',
-        'deployment_name' => '',
-        'model' => 'text-embedding-ada-002',
-        'dimension' => 1536,
-        'batch_size' => 50,
-        'rate_limit_delay' => 100,
-        'max_retries' => 3,
-        'timeout' => 30,
-        'enable_cache' => TRUE,
-        'cache_ttl' => 604800, // 7 days
-        'enable_queue' => TRUE,
-        'priority' => 0,
-      ],
-      'vector_index' => [
-        'method' => 'ivfflat',
-        'ivfflat_lists' => 100,
-        'hnsw_m' => 16,
-        'hnsw_ef_construction' => 64,
-        'distance_function' => 'cosine',
-      ],
-      'hybrid_search' => [
-        'enabled' => TRUE,
-        'text_weight' => 0.6,
-        'vector_weight' => 0.4,
-        'similarity_threshold' => 0.15,
-        'boost_exact_matches' => TRUE,
-        'normalize_scores' => TRUE,
-      ],
-      'performance' => [
-        'connection_pooling' => TRUE,
-        'max_connections' => 10,
-        'connection_timeout' => 30,
-        'query_timeout' => 60,
-      ],
+    $config = parent::defaultConfiguration();
+    
+    // Override defaults for Azure optimization
+    $config['connection']['ssl_mode'] = 'require';
+    $config['connection']['port'] = 5432;
+    
+    // Azure-specific configuration
+    $config['azure_embedding'] = [
+      'enabled' => FALSE,
+      'endpoint' => '',
+      'api_key' => '',
+      'api_key_name' => '',
+      'deployment_name' => '',
+      'model' => 'text-embedding-3-small',
+      'dimension' => 1536,
+      'batch_size' => 25,
+      'rate_limit_delay' => 100,
+      'max_retries' => 3,
+      'timeout' => 30,
+      'enable_cache' => TRUE,
+      'cache_ttl' => 3600,
     ];
-  }
 
-  /**
-   * {@inheritdoc}
-   */
-  protected function connect() {
-    if (!$this->connector) {
-      parent::connect();
-      
-      // Initialize embedding service if enabled
-      if ($this->configuration['azure_embedding']['enabled']) {
-        $this->initializeEmbeddingService();
-      }
-      
-      // Use vector-enhanced managers
-      $this->indexManager = new VectorIndexManager(
-        $this->connector, 
-        $this->fieldMapper, 
-        $this->configuration,
-        $this->embeddingService
-      );
-      
-      $this->queryBuilder = new VectorQueryBuilder(
-        $this->connector, 
-        $this->fieldMapper, 
-        $this->configuration,
-        $this->embeddingService
-      );
-    }
-  }
+    $config['vector_index'] = [
+      'method' => 'ivfflat',
+      'lists' => 100,
+      'probes' => 10,
+    ];
 
-  /**
-   * Initializes the Azure OpenAI embedding service.
-   */
-  protected function initializeEmbeddingService() {
-    $config = $this->configuration['azure_embedding'];
-    
-    // Get API key from key module or direct configuration
-    $api_key = $this->getAzureApiKey();
-    
-    if (empty($api_key)) {
-      throw new SearchApiException('Azure API key is required for embedding service.');
-    }
+    $config['hybrid_search'] = [
+      'enabled' => TRUE,
+      'text_weight' => 0.6,
+      'vector_weight' => 0.4,
+      'similarity_threshold' => 0.15,
+      'max_results' => 1000,
+    ];
 
-    $this->embeddingService = new AzureOpenAIEmbeddingService(
-      $config['endpoint'],
-      $api_key,
-      $config['deployment_name'],
-      $config['model'] ?? 'text-embedding-ada-002'
-    );
+    $config['performance'] = [
+      'connection_pool_size' => 10,
+      'statement_timeout' => 30000,
+      'work_mem' => '256MB',
+      'effective_cache_size' => '2GB',
+    ];
 
-    // Configure service options
-    $this->embeddingService->setBatchSize($config['batch_size'] ?? 50);
-    $this->embeddingService->setRateLimit($config['rate_limit_delay'] ?? 100);
-    $this->embeddingService->setMaxRetries($config['max_retries'] ?? 3);
-    $this->embeddingService->setTimeout($config['timeout'] ?? 30);
-    
-    if ($config['enable_cache'] ?? TRUE) {
-      $this->embeddingService->enableCache($config['cache_ttl'] ?? 604800);
-    }
-  }
+    // Remove the generic ai_embeddings config
+    unset($config['ai_embeddings']);
 
-  /**
-   * Gets Azure API key from key module or direct configuration.
-   */
-  protected function getAzureApiKey() {
-    $config = $this->configuration['azure_embedding'];
-    $api_key_name = $config['api_key_name'] ?? '';
-    $direct_key = $config['api_key'] ?? '';
-
-    // Try key module first
-    if (!empty($api_key_name) && $this->keyRepository) {
-      $key = $this->keyRepository->getKey($api_key_name);
-      if ($key) {
-        $key_value = $key->getKeyValue();
-        if (!empty($key_value)) {
-          return $key_value;
-        }
-      }
-      // Log warning but don't throw exception - allow fallback to direct key
-      \Drupal::logger('search_api_postgresql')->warning('Azure API key "@key" not found or empty. Falling back to direct key.', [
-        '@key' => $api_key_name,
-      ]);
-    }
-
-    // Fall back to direct key
-    return $direct_key;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getSupportedFeatures() {
-    $features = parent::getSupportedFeatures();
-    
-    if ($this->configuration['azure_embedding']['enabled']) {
-      $features[] = 'search_api_azure_vector_search';
-      $features[] = 'search_api_semantic_search';
-      $features[] = 'search_api_hybrid_search';
-      $features[] = 'search_api_azure_ai';
-    }
-    
-    return $features;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function addIndex(IndexInterface $index) {
-    // Check if pgvector extension is installed
-    $this->checkPgVectorExtension();
-    
-    return parent::addIndex($index);
-  }
-
-  /**
-   * Checks if pgvector extension is available and creates it if needed.
-   */
-  protected function checkPgVectorExtension() {
-    if (!$this->configuration['azure_embedding']['enabled']) {
-      return;
-    }
-
-    try {
-      $this->connect();
-      $sql = "SELECT 1 FROM pg_extension WHERE extname = 'vector'";
-      $result = $this->connector->executeQuery($sql);
-      
-      if (!$result->fetchColumn()) {
-        // Try to create the extension
-        $this->connector->executeQuery("CREATE EXTENSION IF NOT EXISTS vector");
-        $this->logger->info('pgvector extension created successfully.');
-      }
-    }
-    catch (\Exception $e) {
-      throw new SearchApiException('pgvector extension is required for Azure vector search: ' . $e->getMessage());
-    }
+    return $config;
   }
 
   /**
    * {@inheritdoc}
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
-    // Get base form from parent
+    // Get base form from parent but modify for Azure specifics
     $form = parent::buildConfigurationForm($form, $form_state);
 
-    // Replace AI embeddings section with Azure-specific configuration
+    // Remove the generic AI embeddings section
     unset($form['ai_embeddings']);
+
+    // Ensure we have default configuration
+    $this->configuration = $this->configuration + $this->defaultConfiguration();
+
+    // Modify connection section for Azure
+    $form['connection']['#description'] = $this->t('Configure Azure Database for PostgreSQL connection. SSL is required for Azure.');
+
+    // Force SSL requirement for Azure
+    $form['connection']['ssl_mode']['#default_value'] = 'require';
+    $form['connection']['ssl_mode']['#disabled'] = TRUE;
+    $form['connection']['ssl_mode']['#description'] = $this->t('SSL is required for Azure Database for PostgreSQL.');
 
     // Azure AI Embeddings configuration
     $form['azure_embedding'] = [
       '#type' => 'details',
       '#title' => $this->t('Azure AI Embeddings'),
       '#open' => !empty($this->configuration['azure_embedding']['enabled']),
-      '#description' => $this->t('Configure Azure OpenAI Service for semantic vector search.'),
+      '#description' => $this->t('Configure Azure OpenAI Service for semantic vector search. Optimized for Azure Database for PostgreSQL.'),
     ];
 
     $form['azure_embedding']['enabled'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Enable Azure AI Vector Search'),
       '#default_value' => $this->configuration['azure_embedding']['enabled'] ?? FALSE,
-      '#description' => $this->t('Enable semantic search using Azure OpenAI embeddings.'),
+      '#description' => $this->t('Enable semantic search using Azure OpenAI embeddings with pgvector extension.'),
     ];
 
     // Azure OpenAI Service Configuration
@@ -253,85 +133,34 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#title' => $this->t('Azure OpenAI Endpoint'),
       '#default_value' => $this->configuration['azure_embedding']['endpoint'] ?? '',
       '#description' => $this->t('Your Azure OpenAI service endpoint (e.g., https://your-resource.openai.azure.com/).'),
-      '#states' => [
-        'required' => [
-          ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
-        ],
-      ],
+      '#placeholder' => 'https://your-resource.openai.azure.com/',
     ];
 
-    // Add API key fields
-    if (!empty($this->keyRepository)) {
-      $keys = [];
-      foreach ($this->keyRepository->getKeys() as $key) {
-        $keys[$key->id()] = $key->label();
-      }
-
-      $form['azure_embedding']['service']['api_key_name'] = [
-        '#type' => 'select',
-        '#title' => $this->t('Azure API Key (Key Module)'),
-        '#options' => $keys,
-        '#empty_option' => $this->t('- Select a key -'),
-        '#default_value' => $this->configuration['azure_embedding']['api_key_name'] ?? '',
-        '#description' => $this->t('Select a key that contains your Azure OpenAI API key. Recommended approach for security.'),
-        '#states' => [
-          'visible' => [
-            ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
-          ],
-        ],
-      ];
-
-      $form['azure_embedding']['service']['api_key'] = [
-        '#type' => 'password',
-        '#title' => $this->t('Direct API Key (Fallback)'),
-        '#description' => $this->t('Direct API key entry. Only used if no key is selected above. Not recommended for production.'),
-        '#states' => [
-          'visible' => [
-            ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
-            ':input[name="backend_config[azure_embedding][service][api_key_name]"]' => ['value' => ''],
-          ],
-        ],
-      ];
-    } else {
-      $form['azure_embedding']['service']['api_key'] = [
-        '#type' => 'password',
-        '#title' => $this->t('Azure API Key'),
-        '#description' => $this->t('Azure OpenAI API key. Installing the Key module is recommended for secure storage.'),
-        '#states' => [
-          'required' => [
-            ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
-          ],
-        ],
-      ];
-    }
+    // Add API key fields using the trait method
+    $this->addApiKeyFields(
+      $form['azure_embedding']['service'],
+      'azure_embedding][service',
+      'azure_embedding'
+    );
 
     $form['azure_embedding']['service']['deployment_name'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Deployment Name'),
       '#default_value' => $this->configuration['azure_embedding']['deployment_name'] ?? '',
-      '#description' => $this->t('The name of your embedding model deployment in Azure OpenAI.'),
-      '#states' => [
-        'required' => [
-          ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
-        ],
-      ],
+      '#description' => $this->t('Azure OpenAI deployment name for the embedding model.'),
+      '#placeholder' => 'my-embedding-deployment',
     ];
 
     $form['azure_embedding']['service']['model'] = [
       '#type' => 'select',
       '#title' => $this->t('Embedding Model'),
       '#options' => [
-        'text-embedding-ada-002' => $this->t('text-embedding-ada-002 (1536 dimensions) - Most compatible'),
-        'text-embedding-3-small' => $this->t('text-embedding-3-small (1536 dimensions) - Better performance'),
-        'text-embedding-3-large' => $this->t('text-embedding-3-large (3072 dimensions) - Highest accuracy'),
+        'text-embedding-ada-002' => $this->t('text-embedding-ada-002 (1536 dimensions)'),
+        'text-embedding-3-small' => $this->t('text-embedding-3-small (1536 dimensions)'),
+        'text-embedding-3-large' => $this->t('text-embedding-3-large (3072 dimensions)'),
       ],
-      '#default_value' => $this->configuration['azure_embedding']['model'] ?? 'text-embedding-ada-002',
-      '#description' => $this->t('The embedding model to use. Must match your Azure deployment.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
-        ],
-      ],
+      '#default_value' => $this->configuration['azure_embedding']['model'] ?? 'text-embedding-3-small',
+      '#description' => $this->t('Choose the embedding model. Newer models provide better semantic understanding.'),
     ];
 
     // Vector Index Configuration
@@ -339,7 +168,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#type' => 'details',
       '#title' => $this->t('Vector Index Configuration'),
       '#open' => FALSE,
-      '#description' => $this->t('Advanced settings for vector search performance and accuracy.'),
+      '#description' => $this->t('Configure pgvector indexing for optimal performance.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
@@ -351,31 +180,47 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#type' => 'select',
       '#title' => $this->t('Index Method'),
       '#options' => [
-        'ivfflat' => $this->t('IVFFlat (Faster indexing, good recall)'),
-        'hnsw' => $this->t('HNSW (Better accuracy, slower indexing)'),
+        'ivfflat' => $this->t('IVFFlat (Recommended for most use cases)'),
+        'hnsw' => $this->t('HNSW (Better for high-dimensional vectors)'),
       ],
       '#default_value' => $this->configuration['vector_index']['method'] ?? 'ivfflat',
-      '#description' => $this->t('Vector indexing algorithm. HNSW generally provides better search quality.'),
+      '#description' => $this->t('Vector indexing method. IVFFlat is recommended for most use cases.'),
     ];
 
-    $form['vector_index']['distance_function'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Distance Function'),
-      '#options' => [
-        'cosine' => $this->t('Cosine Distance (Recommended for embeddings)'),
-        'l2' => $this->t('Euclidean Distance (L2)'),
-        'inner_product' => $this->t('Inner Product'),
+    $form['vector_index']['lists'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Lists (IVFFlat)'),
+      '#default_value' => $this->configuration['vector_index']['lists'] ?? 100,
+      '#min' => 1,
+      '#max' => 1000,
+      '#description' => $this->t('Number of lists for IVFFlat index. Generally set to rows/1000.'),
+      '#states' => [
+        'visible' => [
+          ':input[name="backend_config[vector_index][method]"]' => ['value' => 'ivfflat'],
+        ],
       ],
-      '#default_value' => $this->configuration['vector_index']['distance_function'] ?? 'cosine',
-      '#description' => $this->t('Distance function for similarity calculations.'),
+    ];
+
+    $form['vector_index']['probes'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Probes (IVFFlat)'),
+      '#default_value' => $this->configuration['vector_index']['probes'] ?? 10,
+      '#min' => 1,
+      '#max' => 100,
+      '#description' => $this->t('Number of probes for query time. Higher values = better recall, slower queries.'),
+      '#states' => [
+        'visible' => [
+          ':input[name="backend_config[vector_index][method]"]' => ['value' => 'ivfflat'],
+        ],
+      ],
     ];
 
     // Hybrid Search Configuration
     $form['hybrid_search'] = [
       '#type' => 'details',
-      '#title' => $this->t('Hybrid Search Settings'),
-      '#open' => FALSE,
-      '#description' => $this->t('Configure how traditional full-text search and AI vector search are combined.'),
+      '#title' => $this->t('Hybrid Search Configuration'),
+      '#open' => TRUE,
+      '#description' => $this->t('Configure hybrid search combining traditional full-text and AI vector search.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
@@ -387,7 +232,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#type' => 'checkbox',
       '#title' => $this->t('Enable Hybrid Search'),
       '#default_value' => $this->configuration['hybrid_search']['enabled'] ?? TRUE,
-      '#description' => $this->t('Combine traditional text search with vector similarity search for best results.'),
+      '#description' => $this->t('Combine traditional full-text search with vector similarity search.'),
     ];
 
     $form['hybrid_search']['text_weight'] = [
@@ -396,7 +241,7 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#default_value' => $this->configuration['hybrid_search']['text_weight'] ?? 0.6,
       '#min' => 0,
       '#max' => 1,
-      '#step' => 0.05,
+      '#step' => 0.1,
       '#description' => $this->t('Weight for traditional full-text search (0-1).'),
       '#states' => [
         'visible' => [
@@ -411,8 +256,8 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#default_value' => $this->configuration['hybrid_search']['vector_weight'] ?? 0.4,
       '#min' => 0,
       '#max' => 1,
-      '#step' => 0.05,
-      '#description' => $this->t('Weight for AI vector search (0-1). Should sum to 1.0 with text weight.'),
+      '#step' => 0.1,
+      '#description' => $this->t('Weight for vector similarity search (0-1).'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[hybrid_search][enabled]"]' => ['checked' => TRUE],
@@ -426,8 +271,8 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#default_value' => $this->configuration['hybrid_search']['similarity_threshold'] ?? 0.15,
       '#min' => 0,
       '#max' => 1,
-      '#step' => 0.01,
-      '#description' => $this->t('Minimum similarity score for vector results (0-1). Lower values include more results.'),
+      '#step' => 0.05,
+      '#description' => $this->t('Minimum similarity score for vector results (0-1). Lower = more results.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[hybrid_search][enabled]"]' => ['checked' => TRUE],
@@ -435,12 +280,12 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       ],
     ];
 
-    // Performance Settings
+    // Performance Configuration
     $form['performance'] = [
       '#type' => 'details',
-      '#title' => $this->t('Performance & Reliability'),
+      '#title' => $this->t('Performance Configuration'),
       '#open' => FALSE,
-      '#description' => $this->t('Azure-optimized performance settings.'),
+      '#description' => $this->t('Optimize performance for Azure Database for PostgreSQL.'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
@@ -451,10 +296,10 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     $form['performance']['batch_size'] = [
       '#type' => 'number',
       '#title' => $this->t('Embedding Batch Size'),
-      '#default_value' => $this->configuration['azure_embedding']['batch_size'] ?? 50,
+      '#default_value' => $this->configuration['azure_embedding']['batch_size'] ?? 25,
       '#min' => 1,
       '#max' => 100,
-      '#description' => $this->t('Number of texts to send to Azure API in each batch. Higher values are more efficient but may hit rate limits.'),
+      '#description' => $this->t('Number of texts to process in each API batch. Lower values reduce memory usage.'),
     ];
 
     $form['performance']['rate_limit_delay'] = [
@@ -466,25 +311,38 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       '#description' => $this->t('Delay between API requests to avoid rate limiting.'),
     ];
 
+    $form['performance']['max_retries'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Max Retries'),
+      '#default_value' => $this->configuration['azure_embedding']['max_retries'] ?? 3,
+      '#min' => 0,
+      '#max' => 10,
+      '#description' => $this->t('Maximum retries for failed API calls.'),
+    ];
+
+    $form['performance']['timeout'] = [
+      '#type' => 'number',
+      '#title' => $this->t('API Timeout (seconds)'),
+      '#default_value' => $this->configuration['azure_embedding']['timeout'] ?? 30,
+      '#min' => 5,
+      '#max' => 300,
+      '#description' => $this->t('API request timeout.'),
+    ];
+
     $form['performance']['enable_cache'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Enable Embedding Cache'),
       '#default_value' => $this->configuration['azure_embedding']['enable_cache'] ?? TRUE,
-      '#description' => $this->t('Cache embeddings to reduce API costs and improve performance.'),
+      '#description' => $this->t('Cache embeddings to reduce API calls and improve performance.'),
     ];
 
     $form['performance']['cache_ttl'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Cache Duration'),
-      '#options' => [
-        3600 => $this->t('1 hour'),
-        86400 => $this->t('1 day'),
-        604800 => $this->t('1 week'),
-        2592000 => $this->t('1 month'),
-        -1 => $this->t('Never expire'),
-      ],
-      '#default_value' => $this->configuration['azure_embedding']['cache_ttl'] ?? 604800,
-      '#description' => $this->t('How long to cache embeddings.'),
+      '#type' => 'number',
+      '#title' => $this->t('Cache TTL (seconds)'),
+      '#default_value' => $this->configuration['azure_embedding']['cache_ttl'] ?? 3600,
+      '#min' => 300,
+      '#max' => 86400,
+      '#description' => $this->t('How long to cache embeddings (300 seconds to 24 hours).'),
       '#states' => [
         'visible' => [
           ':input[name="backend_config[performance][enable_cache]"]' => ['checked' => TRUE],
@@ -492,90 +350,10 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
       ],
     ];
 
-    // Test Azure Connection
-    $form['azure_test'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Test Azure Connection'),
-      '#open' => FALSE,
-      '#description' => $this->t('Test your Azure OpenAI configuration.'),
-      '#states' => [
-        'visible' => [
-          ':input[name="backend_config[azure_embedding][enabled]"]' => ['checked' => TRUE],
-        ],
-      ],
-    ];
-
-    $form['azure_test']['test_button'] = [
-      '#type' => 'button',
-      '#value' => $this->t('Test Azure AI Connection'),
-      '#ajax' => [
-        'callback' => '::testAzureConnection',
-        'wrapper' => 'azure-test-result',
-      ],
-    ];
-
-    $form['azure_test']['result'] = [
-      '#type' => 'container',
-      '#attributes' => ['id' => 'azure-test-result'],
-    ];
+    // Azure-specific test connection
+    $form['test_connection']['#description'] = $this->t('Test connection to Azure Database for PostgreSQL and verify pgvector extension.');
 
     return $form;
-  }
-
-  /**
-   * AJAX callback to test Azure connection.
-   */
-  public function testAzureConnection(array &$form, FormStateInterface $form_state) {
-    try {
-      $values = $form_state->getValues();
-      $azure_config = $values['azure_embedding'];
-      
-      // Get API key
-      $api_key = '';
-      if (!empty($azure_config['service']['api_key_name']) && $this->keyRepository) {
-        $key = $this->keyRepository->getKey($azure_config['service']['api_key_name']);
-        if ($key) {
-          $api_key = $key->getKeyValue();
-        }
-      } else {
-        $api_key = $azure_config['service']['api_key'] ?? '';
-      }
-      
-      if (empty($api_key)) {
-        throw new \Exception('API key is required for testing.');
-      }
-      
-      // Create temporary embedding service
-      $service = new AzureOpenAIEmbeddingService(
-        $azure_config['service']['endpoint'],
-        $api_key,
-        $azure_config['service']['deployment_name'],
-        $azure_config['service']['model'] ?? 'text-embedding-ada-002'
-      );
-      
-      // Test with sample text
-      $test_text = "This is a test sentence for Azure OpenAI embedding generation.";
-      $embedding = $service->generateEmbedding($test_text);
-      
-      if (is_array($embedding) && count($embedding) > 0) {
-        $form['azure_test']['result']['#markup'] = 
-          '<div class="messages messages--status">' . 
-          $this->t('✅ Azure AI connection successful! Generated embedding with @dims dimensions. API is working correctly.', [
-            '@dims' => count($embedding),
-          ]) . 
-          '</div>';
-      } else {
-        throw new \Exception('Azure API returned invalid embedding data.');
-      }
-    }
-    catch (\Exception $e) {
-      $form['azure_test']['result']['#markup'] = 
-        '<div class="messages messages--error">' . 
-        $this->t('❌ Azure AI connection failed: @message', ['@message' => $e->getMessage()]) . 
-        '</div>';
-    }
-    
-    return $form['azure_test']['result'];
   }
 
   /**
@@ -585,26 +363,26 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     parent::validateConfigurationForm($form, $form_state);
 
     $values = $form_state->getValues();
-    
+
+    // Validate Azure embedding configuration
     if (!empty($values['azure_embedding']['enabled'])) {
-      // Validate Azure configuration
       if (empty($values['azure_embedding']['service']['endpoint'])) {
         $form_state->setErrorByName('azure_embedding][service][endpoint', 
-          $this->t('Azure OpenAI endpoint is required when Azure embeddings are enabled.'));
-      }
-      
-      if (empty($values['azure_embedding']['service']['deployment_name'])) {
-        $form_state->setErrorByName('azure_embedding][service][deployment_name', 
-          $this->t('Deployment name is required when Azure embeddings are enabled.'));
+          $this->t('Azure OpenAI endpoint is required when embeddings are enabled.'));
       }
 
-      // Validate API key
+      // Validate API key (either from key module or direct)
       $api_key_name = $values['azure_embedding']['service']['api_key_name'] ?? '';
       $direct_api_key = $values['azure_embedding']['service']['api_key'] ?? '';
       
       if (empty($api_key_name) && empty($direct_api_key)) {
         $form_state->setErrorByName('azure_embedding][service][api_key_name', 
           $this->t('Azure API key is required. Use Key module or direct entry.'));
+      }
+
+      if (empty($values['azure_embedding']['service']['deployment_name'])) {
+        $form_state->setErrorByName('azure_embedding][service][deployment_name', 
+          $this->t('Deployment name is required for Azure OpenAI.'));
       }
 
       // Validate hybrid search weights if enabled
@@ -664,6 +442,55 @@ class AzurePostgreSQLBackend extends PostgreSQLBackend {
     
     // Clear embedding service to force reinitialization
     $this->embeddingService = NULL;
+  }
+
+  /**
+   * Check if pgvector extension is available.
+   */
+  protected function checkPgVectorExtension() {
+    if (!$this->configuration['azure_embedding']['enabled']) {
+      return;
+    }
+
+    try {
+      $this->connect();
+      $sql = "SELECT 1 FROM pg_extension WHERE extname = 'vector'";
+      $result = $this->connector->executeQuery($sql);
+      
+      if (!$result->fetchColumn()) {
+        // Try to create the extension
+        $this->connector->executeQuery("CREATE EXTENSION IF NOT EXISTS vector");
+        $this->logger->info('pgvector extension created successfully.');
+      }
+    }
+    catch (\Exception $e) {
+      throw new SearchApiException('pgvector extension is required for Azure vector search: ' . $e->getMessage());
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getSupportedFeatures() {
+    $features = parent::getSupportedFeatures();
+    
+    if (!empty($this->configuration['azure_embedding']['enabled'])) {
+      $features[] = 'search_api_azure_ai';
+      $features[] = 'search_api_vector_similarity';
+      $features[] = 'search_api_hybrid_ranking';
+    }
+    
+    return $features;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function addIndex(\Drupal\search_api\IndexInterface $index) {
+    // Check if pgvector extension is installed
+    $this->checkPgVectorExtension();
+    
+    return parent::addIndex($index);
   }
 
 }
