@@ -168,60 +168,8 @@ trait SecureKeyManagementTrait {
         '#options' => $keys,
         '#empty_option' => $this->t('- Select a key or leave empty -'),
         '#default_value' => $this->configuration['connection']['password_key'] ?? '',
-        '#description' => $this->t('Optional: Select a key that contains the database password. If not selected, the direct password field below will be used. Both can be empty for passwordless connections (e.g., Lando development).'),
-        '#weight' => isset($form['connection']['password']['#weight']) ? $form['connection']['password']['#weight'] - 1 : -1,
+        '#description' => $this->t('Select a key to use for the database password. This field is hidden when a key is selected above.'),
       ];
-
-      // Update password field to show/hide based on key selection
-      $form['connection']['password']['#states'] = [
-        'visible' => [
-          ':input[name="backend_config[connection][password_key]"]' => ['value' => ''],
-        ],
-      ];
-      
-      $form['connection']['password']['#description'] = $this->t('Direct password entry (optional). Leave empty for passwordless connections. Using Key module is recommended for production security. This field is hidden when a password key is selected above.');
-      $form['connection']['password']['#required'] = FALSE;
-    }
-  }
-
-  /**
-   * Adds Azure AI API key fields to form.
-   *
-   * @param array &$form
-   *   The form array to add fields to.
-   */
-  protected function addAzureKeyFieldsToForm(array &$form) {
-    $key_repository = $this->getKeyRepository();
-    if (!$key_repository) {
-      return;
-    }
-
-    // Get available keys
-    $keys = [];
-    foreach ($key_repository->getKeys() as $key) {
-      $keys[$key->id()] = $key->label();
-    }
-
-    // Azure API key field
-    if (isset($form['ai_embeddings']['azure_ai']['api_key'])) {
-      $form['ai_embeddings']['azure_ai']['api_key_key'] = [
-        '#type' => 'select',
-        '#title' => $this->t('Azure API Key (Key Module)'),
-        '#options' => $keys,
-        '#empty_option' => $this->t('- Select a key or use direct entry -'),
-        '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['api_key_key'] ?? '',
-        '#description' => $this->t('Select a key that contains the Azure API key. Using Key module is recommended for security.'),
-        '#weight' => isset($form['ai_embeddings']['azure_ai']['api_key']['#weight']) ? $form['ai_embeddings']['azure_ai']['api_key']['#weight'] - 1 : -1,
-      ];
-
-      // Update API key field to show/hide based on key selection
-      $form['ai_embeddings']['azure_ai']['api_key']['#states'] = [
-        'visible' => [
-          ':input[name="backend_config[ai_embeddings][azure_ai][api_key_key]"]' => ['value' => ''],
-        ],
-      ];
-      
-      $form['ai_embeddings']['azure_ai']['api_key']['#description'] = $this->t('Direct API key entry. This field is hidden when a key is selected above.');
     }
   }
 
