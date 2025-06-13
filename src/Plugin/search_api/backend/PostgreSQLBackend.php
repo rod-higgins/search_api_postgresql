@@ -571,7 +571,6 @@ class PostgreSQLBackend extends BackendPluginBase implements PluginFormInterface
       try {
         $config = $values['connection'];
         $test_connector = new PostgreSQLConnector($config, $this->getLogger());
-        $test_connector->connect();
         \Drupal::messenger()->addStatus($this->t('Successfully connected to PostgreSQL database.'));
       }
       catch (\Exception $e) {
