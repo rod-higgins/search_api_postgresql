@@ -24,10 +24,10 @@ search_api.backend.plugin.postgresql:
         password:
           type: string
           label: 'Password (optional)'
-          # Note: This field is optional - no 'required' constraint
+          # UPDATED: Password is now explicitly optional - no 'required' constraint
         password_key:
           type: string
-          label: 'Password key reference (Key module)'
+          label: 'Password key reference (Key module) - optional'
         ssl_mode:
           type: string
           label: 'SSL Mode'
@@ -67,122 +67,24 @@ search_api.backend.plugin.postgresql:
               label: 'Azure OpenAI endpoint'
             api_key:
               type: string
-              label: 'API key (deprecated - use api_key_name)'
+              label: 'API key (deprecated - use api_key_name instead)'
             api_key_name:
               type: string
-              label: 'API key reference (Key module)'
+              label: 'API key name (Key module)'
             deployment_name:
               type: string
               label: 'Deployment name'
-            api_version:
-              type: string
-              label: 'API version'
             model:
               type: string
-              label: 'Model name'
-            dimensions:
+              label: 'Embedding model'
+            dimension:
               type: integer
-              label: 'Vector dimensions'
-            batch_size:
-              type: integer
-              label: 'Batch size'
-            timeout:
-              type: integer
-              label: 'Request timeout'
-            retry_attempts:
-              type: integer
-              label: 'Retry attempts'
-            retry_delay:
-              type: integer
-              label: 'Retry delay in milliseconds'
+              label: 'Vector dimension'
 
-# Azure-optimized PostgreSQL backend configuration
+# Azure PostgreSQL backend configuration
 search_api.backend.plugin.postgresql_azure:
   type: config_object
-  label: 'PostgreSQL with Azure AI Vector Search'
-  mapping:
-    connection:
-      type: mapping
-      label: 'Database connection'
-      mapping:
-        host:
-          type: string
-          label: 'Host (format: servername.postgres.database.azure.com)'
-        port:
-          type: integer
-          label: 'The port'
-        database:
-          type: string
-          label: 'Database name'
-        username:
-          type: string
-          label: 'Username (format: username@servername)'
-        password:
-          type: string
-          label: 'Password (optional)'
-          # Note: This field is optional - no 'required' constraint
-        password_key:
-          type: string
-          label: 'Password key reference (Key module)'
-        ssl_mode:
-          type: string
-          label: 'SSL Mode (require recommended for Azure)'
-        ssl_ca:
-          type: string
-          label: 'Path to SSL certificate'
-        options:
-          type: sequence
-          label: 'Additional PDO options'
-          sequence:
-            type: string
-    index_prefix:
-      type: string
-      label: 'Index table prefix'
-    fts_configuration:
-      type: string
-      label: 'PostgreSQL FTS configuration'
-    debug:
-      type: boolean
-      label: 'Debug mode'
-    batch_size:
-      type: integer
-      label: 'Indexing batch size'
-    azure_embedding:
-      type: mapping
-      label: 'Azure Embedding Service Configuration'
-      mapping:
-        enabled:
-          type: boolean
-          label: 'Enable Azure embeddings'
-        endpoint:
-          type: string
-          label: 'Azure OpenAI endpoint'
-        api_key:
-          type: string
-          label: 'API key (deprecated - use api_key_name)'
-        api_key_name:
-          type: string
-          label: 'API key reference (Key module)'
-        deployment_name:
-          type: string
-          label: 'Deployment name'
-        api_version:
-          type: string
-          label: 'API version'
-        dimension:
-          type: integer
-          label: 'Vector dimension'
-        timeout:
-          type: integer
-          label: 'Request timeout in seconds'
-        retry_count:
-          type: integer
-          label: 'Number of retries on failure'
-
-# PostgreSQL with vector search backend configuration  
-search_api.backend.plugin.postgresql_vector:
-  type: config_object
-  label: 'PostgreSQL with Vector Search'
+  label: 'Azure PostgreSQL search backend'
   mapping:
     connection:
       type: mapping
@@ -203,13 +105,16 @@ search_api.backend.plugin.postgresql_vector:
         password:
           type: string
           label: 'Password (optional)'
-          # Note: This field is optional - no 'required' constraint
+          # UPDATED: Password is optional for all backend types
         password_key:
           type: string
-          label: 'Password key reference (Key module)'
+          label: 'Password key reference (Key module) - optional'
         ssl_mode:
           type: string
           label: 'SSL Mode'
+        ssl_ca:
+          type: string
+          label: 'Path to SSL certificate'
         options:
           type: sequence
           label: 'Additional PDO options'
@@ -229,32 +134,139 @@ search_api.backend.plugin.postgresql_vector:
       label: 'Indexing batch size'
     vector_search:
       type: mapping
-      label: 'Vector Search Configuration'
+      label: 'Vector search configuration'
       mapping:
         enabled:
           type: boolean
           label: 'Enable vector search'
         provider:
           type: string
-          label: 'Embedding provider'
+          label: 'Vector provider'
+        api_key:
+          type: string
+          label: 'API key (deprecated)'
+        api_key_name:
+          type: string
+          label: 'API key name (Key module)'
+        model:
+          type: string
+          label: 'Embedding model'
+        dimension:
+          type: integer
+          label: 'Vector dimension'
+    vector_index:
+      type: mapping
+      label: 'Vector index configuration'
+      mapping:
+        method:
+          type: string
+          label: 'Index method'
+        ivfflat_lists:
+          type: integer
+          label: 'IVFFlat lists'
+        hnsw_m:
+          type: integer
+          label: 'HNSW M parameter'
+        hnsw_ef_construction:
+          type: integer
+          label: 'HNSW ef_construction parameter'
+    hybrid_search:
+      type: mapping
+      label: 'Hybrid search configuration'
+      mapping:
+        text_weight:
+          type: float
+          label: 'Text search weight'
+        vector_weight:
+          type: float
+          label: 'Vector search weight'
+        similarity_threshold:
+          type: float
+          label: 'Similarity threshold'
+
+# Vector PostgreSQL backend configuration
+search_api.backend.plugin.postgresql_vector:
+  type: config_object
+  label: 'PostgreSQL Vector search backend'
+  mapping:
+    connection:
+      type: mapping
+      label: 'Database connection'
+      mapping:
+        host:
+          type: string
+          label: 'Host'
+        port:
+          type: integer
+          label: 'Port'
+        database:
+          type: string
+          label: 'Database name'
+        username:
+          type: string
+          label: 'Username'
+        password:
+          type: string
+          label: 'Password (optional)'
+          # UPDATED: Password is optional for all backend types
+        password_key:
+          type: string
+          label: 'Password key reference (Key module) - optional'
+        ssl_mode:
+          type: string
+          label: 'SSL Mode'
+        ssl_ca:
+          type: string
+          label: 'Path to SSL certificate'
+        options:
+          type: sequence
+          label: 'Additional PDO options'
+          sequence:
+            type: string
+    index_prefix:
+      type: string
+      label: 'Index table prefix'
+    fts_configuration:
+      type: string
+      label: 'PostgreSQL FTS configuration'
+    debug:
+      type: boolean
+      label: 'Debug mode'
+    batch_size:
+      type: integer
+      label: 'Indexing batch size'
+    vector_search:
+      type: mapping
+      label: 'Vector search configuration'
+      mapping:
+        enabled:
+          type: boolean
+          label: 'Enable vector search'
+        provider:
+          type: string
+          label: 'Vector provider (openai, huggingface, etc.)'
         api_key:
           type: string
           label: 'API key (deprecated - use api_key_name)'
         api_key_name:
           type: string
-          label: 'API key reference (Key module)'
+          label: 'API key name (Key module)'
         model:
           type: string
           label: 'Embedding model'
-        dimensions:
+        dimension:
           type: integer
-          label: 'Vector dimensions'
-        similarity_threshold:
-          type: float
-          label: 'Similarity threshold'
-        index_method:
+          label: 'Vector dimension'
+        api_base:
           type: string
-          label: 'Vector index method'
+          label: 'API base URL (for custom endpoints)'
+    vector_index:
+      type: mapping
+      label: 'Vector index configuration'
+      mapping:
+        method:
+          type: string
+          label: 'Index method (ivfflat, hnsw)'
         ivfflat_lists:
           type: integer
           label: 'IVFFlat lists parameter'
@@ -264,66 +276,25 @@ search_api.backend.plugin.postgresql_vector:
         hnsw_ef_construction:
           type: integer
           label: 'HNSW ef_construction parameter'
-
-# Queue settings configuration
-search_api_postgresql.queue_settings:
-  type: config_object
-  label: 'Search API PostgreSQL Queue Settings'
-  mapping:
-    enabled:
-      type: boolean
-      label: 'Enable queue processing globally'
-    default_enabled:
-      type: boolean
-      label: 'Enable queue processing by default for new servers'
-    batch_size:
-      type: integer
-      label: 'Default batch size for queue processing'
-    max_processing_time:
-      type: integer
-      label: 'Maximum processing time per cron run (seconds)'
-    retry_attempts:
-      type: integer
-      label: 'Number of retry attempts for failed items'
-    retry_delay:
-      type: integer
-      label: 'Delay between retries (seconds)'
-
-# Settings configuration
-search_api_postgresql.settings:
-  type: config_object
-  label: 'Search API PostgreSQL Settings'
-  mapping:
-    connection_timeout:
-      type: integer
-      label: 'Database connection timeout'
-    query_timeout:
-      type: integer
-      label: 'Query execution timeout'
-    enable_query_logging:
-      type: boolean
-      label: 'Enable query logging'
-    log_slow_queries:
-      type: boolean
-      label: 'Log slow queries'
-    slow_query_threshold:
-      type: integer
-      label: 'Slow query threshold (milliseconds)'
-    enable_performance_monitoring:
-      type: boolean
-      label: 'Enable performance monitoring'
-    cache_embedding_results:
-      type: boolean
-      label: 'Cache embedding results'
-    embedding_cache_lifetime:
-      type: integer
-      label: 'Embedding cache lifetime (seconds)'
-    enable_analytics:
-      type: boolean
-      label: 'Enable search analytics'
-    analytics_retention_days:
-      type: integer
-      label: 'Analytics data retention (days)'
-    maintenance_mode:
-      type: boolean
-      label: 'Maintenance mode'
+        hnsw_ef_search:
+          type: integer
+          label: 'HNSW ef_search parameter'
+    hybrid_search:
+      type: mapping
+      label: 'Hybrid search configuration'
+      mapping:
+        enabled:
+          type: boolean
+          label: 'Enable hybrid search'
+        text_weight:
+          type: float
+          label: 'Text search weight (0.0-1.0)'
+        vector_weight:
+          type: float
+          label: 'Vector search weight (0.0-1.0)'
+        similarity_threshold:
+          type: float
+          label: 'Minimum similarity threshold'
+        rerank:
+          type: boolean
+          label: 'Enable result reranking'

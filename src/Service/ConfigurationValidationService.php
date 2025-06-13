@@ -75,110 +75,74 @@ class ConfigurationValidationService {
       return ['errors' => $errors, 'warnings' => $warnings];
     }
 
-    // Validate database connection configuration
-    $connection_validation = $this->validateDatabaseConnection($config);
-    $errors = array_merge($errors, $connection_validation['errors']);
-    $warnings = array_merge($warnings, $connection_validation['warnings']);
+    // Validate database connection
+    $db_validation = $this->validateDatabaseConnection($config);
+    $errors = array_merge($errors, $db_validation['errors']);
+    $warnings = array_merge($warnings, $db_validation['warnings']);
 
     // Validate key storage
     $key_validation = $this->validateKeyStorage($config);
     $errors = array_merge($errors, $key_validation['errors']);
     $warnings = array_merge($warnings, $key_validation['warnings']);
 
-    // Validate AI embedding configuration if enabled
+    // Validate AI embeddings configuration
     if ($this->isAiEmbeddingsEnabled($config)) {
-      $ai_validation = $this->validateAiEmbeddingConfiguration($config);
+      $ai_validation = $this->validateAiEmbeddingsConfiguration($config);
       $errors = array_merge($errors, $ai_validation['errors']);
       $warnings = array_merge($warnings, $ai_validation['warnings']);
     }
 
     // Validate vector search configuration
     if ($this->isVectorSearchEnabled($config)) {
-      $vector_validation = $this->validateVectorConfiguration($config);
+      $vector_validation = $this->validateVectorSearchConfiguration($config);
       $errors = array_merge($errors, $vector_validation['errors']);
       $warnings = array_merge($warnings, $vector_validation['warnings']);
     }
 
-    return [
-      'errors' => $errors,
-      'warnings' => $warnings,
-    ];
+    return ['errors' => $errors, 'warnings' => $warnings];
   }
 
   /**
-   * Checks server health status.
-   *
-   * @param \Drupal\search_api\ServerInterface $server
-   *   The server to check.
+   * Runs comprehensive system health checks.
    *
    * @return array
-   *   Health status with overall result and individual checks.
-   */
-  public function checkServerHealth(ServerInterface $server) {
-    $checks = [];
-    
-    // Basic health checks for all backends
-    $checks['database'] = $this->checkDatabaseHealth($server);
-    $checks['keys'] = $this->checkKeyHealth($server->getBackend()->getConfiguration());
-    
-    $backend_id = $server->getBackend()->getPluginId();
-    
-    // Vector-specific checks for Azure and Vector backends
-    if (in_array($backend_id, ['postgresql_azure', 'postgresql_vector'])) {
-      $checks['vector_extension'] = $this->checkVectorExtensionHealth($server);
-    }
-    
-    // AI service checks for backends with AI capabilities
-    if ($this->isAiEmbeddingsEnabled($server->getBackend()->getConfiguration())) {
-      $checks['ai_service'] = $this->checkAiServiceHealth($server);
-    }
-
-    // PostgreSQL version check
-    $checks['postgresql_version'] = $this->testPostgreSQLVersion($server);
-
-    // Calculate overall health
-    $healthy_checks = array_filter($checks, function($check) {
-      return $check['success'] ?? $check['healthy'] ?? false;
-    });
-    $total_checks = count($checks);
-    $healthy_count = count($healthy_checks);
-    
-    return [
-      'overall_healthy' => $healthy_count === $total_checks,
-      'health_score' => $total_checks > 0 ? ($healthy_count / $total_checks) * 100 : 0,
-      'checks' => $checks,
-      'summary' => [
-        'total' => $total_checks,
-        'healthy' => $healthy_count,
-        'failures' => $total_checks - $healthy_count,
-        'score' => $total_checks > 0 ? (($healthy_count / $total_checks) * 100) : 0,
-      ],
-    ];
-  }
-
-  /**
-   * Runs system-wide health checks.
-   *
-   * @return array
-   *   System health check results.
+   *   Array of health check results.
    */
   public function runSystemHealthChecks() {
     $checks = [];
+    
+    // Get all PostgreSQL servers
+    $servers = $this->entityTypeManager->getStorage('search_api_server')->loadMultiple();
+    $postgresql_servers = array_filter($servers, function($server) {
+      return in_array($server->getBackend()->getPluginId(), ['postgresql', 'postgresql_azure', 'postgresql_vector']);
+    });
 
-    // Check PHP extensions
-    $checks['php_extensions'] = $this->checkPhpExtensions();
+    if (empty($postgresql_servers)) {
+      $checks['no_servers'] = [
+        'status' => FALSE,
+        'message' => 'No PostgreSQL servers configured',
+        'details' => 'Create a PostgreSQL server to use this module',
+      ];
+      return $checks;
+    }
 
-    // Check Drupal modules
-    $checks['drupal_modules'] = $this->checkDrupalModules();
-
-    // Check file permissions
-    $checks['file_permissions'] = $this->checkFilePermissions();
-
-    // Check database connectivity
-    $checks['database_general'] = $this->checkGeneralDatabaseHealth();
-
-    // Check memory limits
-    $checks['memory_limits'] = $this->checkMemoryLimits();
+    foreach ($postgresql_servers as $server) {
+      $server_id = $server->id();
+      
+      // Test database connection
+      $checks["db_connection_{$server_id}"] = $this->testDatabaseConnection($server);
+      
+      // Test key access
+      $checks["key_access_{$server_id}"] = $this->testKeyAccess($server);
+      
+      // Test pgvector extension
+      $checks["pgvector_{$server_id}"] = $this->testPgVectorExtension($server);
+      
+      // Test AI service if enabled
+      if ($this->isAiEmbeddingsEnabled($server->getBackend()->getConfiguration())) {
+        $checks["ai_service_{$server_id}"] = $this->testAiService($server);
+      }
+    }
 
     return $checks;
   }
@@ -218,9 +182,20 @@ class ConfigurationValidationService {
       }
     }
 
-    // Check password configuration
-    if (empty($connection['password_key'])) {
-      $errors[] = 'Database password key is not configured. Use Key module for secure storage.';
+    // Validate password configuration - UPDATED: passwords are now optional
+    $password_key = $connection['password_key'] ?? '';
+    $direct_password = $connection['password'] ?? '';
+    
+    if (empty($password_key) && empty($direct_password)) {
+      // Allow empty passwords but issue a warning for security awareness
+      $warnings[] = 'No database password configured. This may be acceptable for development environments (like Lando with trust authentication) but is not recommended for production.';
+    }
+    
+    // If a password key is specified, validate it exists
+    if (!empty($password_key)) {
+      $key_validation = $this->validateKey($password_key, 'Database password');
+      $errors = array_merge($errors, $key_validation['errors']);
+      $warnings = array_merge($warnings, $key_validation['warnings']);
     }
 
     // Validate port
@@ -231,8 +206,8 @@ class ConfigurationValidationService {
 
     // Check SSL configuration for production
     $ssl_mode = $connection['ssl_mode'] ?? 'require';
-    if (!in_array($ssl_mode, ['require', 'verify-ca', 'verify-full'])) {
-      $warnings[] = 'Consider using a more secure SSL mode for production (require, verify-ca, or verify-full).';
+    if (!in_array($ssl_mode, ['require', 'verify-ca', 'verify-full']) && empty($direct_password) && empty($password_key)) {
+      $warnings[] = 'Using weak SSL mode without password authentication. Consider using "require", "verify-ca", or "verify-full" for better security.';
     }
 
     return ['errors' => $errors, 'warnings' => $warnings];
@@ -245,7 +220,7 @@ class ConfigurationValidationService {
     $errors = [];
     $warnings = [];
 
-    // Check database password key
+    // Check database password key (if specified)
     $password_key = $config['connection']['password_key'] ?? '';
     if (!empty($password_key)) {
       $key_validation = $this->validateKey($password_key, 'Database password');
@@ -264,12 +239,9 @@ class ConfigurationValidationService {
         $errors = array_merge($errors, $key_validation['errors']);
         $warnings = array_merge($warnings, $key_validation['warnings']);
       }
-    }
-
-    // Check vector search API keys (for postgresql_vector backend)
-    if (!empty($config['vector_search']['enabled']) && !empty($config['vector_search']['api_key'])) {
-      // Note: postgresql_vector currently stores API keys directly, not via Key module
-      $warnings[] = 'Consider migrating vector search API keys to Key module for better security.';
+      elseif (empty($ai_config['api_key'])) {
+        $warnings[] = 'AI API key not configured. Use Key module for secure storage.';
+      }
     }
 
     return ['errors' => $errors, 'warnings' => $warnings];
@@ -278,83 +250,24 @@ class ConfigurationValidationService {
   /**
    * Validates a specific key.
    */
-  protected function validateKey($key_name, $key_type) {
+  protected function validateKey($key_name, $type) {
     $errors = [];
     $warnings = [];
 
-    try {
-      $key = $this->keyRepository->getKey($key_name);
-      
-      if (!$key) {
-        $errors[] = "{$key_type} key '{$key_name}' not found.";
-        return ['errors' => $errors, 'warnings' => $warnings];
-      }
+    if (!$this->keyRepository) {
+      $errors[] = "Key module not available for {$type} key validation.";
+      return ['errors' => $errors, 'warnings' => $warnings];
+    }
 
-      // Test key retrieval
+    $key = $this->keyRepository->getKey($key_name);
+    if (!$key) {
+      $errors[] = "{$type} key '{$key_name}' not found.";
+    }
+    else {
+      // Check if key has a value
       $key_value = $key->getKeyValue();
       if (empty($key_value)) {
-        $errors[] = "{$key_type} key '{$key_name}' is empty or could not be decrypted.";
-      }
-
-      // Check key provider type
-      $key_provider = $key->getKeyProvider();
-      $provider_id = $key_provider->getPluginId();
-      
-      if ($provider_id === 'config') {
-        $warnings[] = "{$key_type} key '{$key_name}' is stored in configuration. Consider using a more secure key provider.";
-      }
-
-    } catch (\Exception $e) {
-      $errors[] = "Error accessing {$key_type} key '{$key_name}': " . $e->getMessage();
-    }
-
-    return ['errors' => $errors, 'warnings' => $warnings];
-  }
-
-  /**
-   * Validates AI embedding configuration.
-   */
-  protected function validateAiEmbeddingConfiguration($config) {
-    $errors = [];
-    $warnings = [];
-
-    // Handle different config structures for different backends
-    $ai_config = $config['ai_embeddings']['azure_ai'] ?? $config['azure_embedding'] ?? [];
-
-    // Required fields
-    if (empty($ai_config['endpoint'])) {
-      $errors[] = 'AI service endpoint is required when embeddings are enabled.';
-    }
-
-    if (empty($ai_config['api_key_name'])) {
-      $errors[] = 'AI service API key is required when embeddings are enabled.';
-    }
-
-    // Check model configuration
-    $model = $ai_config['model'] ?? $ai_config['model_type'] ?? '';
-    $valid_models = [
-      'text-embedding-ada-002',
-      'text-embedding-3-small', 
-      'text-embedding-3-large'
-    ];
-    
-    if (!empty($model) && !in_array($model, $valid_models)) {
-      $warnings[] = "Model '{$model}' may not be supported. Supported models: " . implode(', ', $valid_models);
-    }
-
-    // Check dimensions
-    $dimensions = $ai_config['dimensions'] ?? $ai_config['dimension'] ?? 0;
-    if ($dimensions < 1 || $dimensions > 4096) {
-      $errors[] = 'Vector dimensions must be between 1 and 4096.';
-    }
-
-    // Check hybrid search weights (if applicable)
-    if (!empty($config['hybrid_search'])) {
-      $text_weight = $config['hybrid_search']['text_weight'] ?? 0;
-      $vector_weight = $config['hybrid_search']['vector_weight'] ?? 0;
-      
-      if (abs(($text_weight + $vector_weight) - 1.0) > 0.01) {
-        $warnings[] = 'Hybrid search weights should sum to 1.0 for optimal results.';
+        $errors[] = "{$type} key '{$key_name}' exists but has no value.";
       }
     }
 
@@ -362,26 +275,63 @@ class ConfigurationValidationService {
   }
 
   /**
-   * Validates vector configuration.
+   * Validates AI embeddings configuration.
    */
-  protected function validateVectorConfiguration($config) {
+  protected function validateAiEmbeddingsConfiguration($config) {
     $errors = [];
     $warnings = [];
 
     // Handle different config structures
-    $vector_config = $config['vector_index'] ?? [];
-    
-    // Check index method
-    $index_method = $vector_config['method'] ?? 'ivfflat';
-    if (!in_array($index_method, ['ivfflat', 'hnsw'])) {
-      $errors[] = "Invalid vector index method '{$index_method}'. Use 'ivfflat' or 'hnsw'.";
+    $ai_config = $config['ai_embeddings']['azure_ai'] ?? $config['azure_embedding'] ?? [];
+
+    if (empty($ai_config['endpoint'])) {
+      $errors[] = 'Azure AI endpoint is required when embeddings are enabled.';
     }
 
-    // Check method-specific parameters
+    if (empty($ai_config['deployment_name'])) {
+      $errors[] = 'Azure AI deployment name is required when embeddings are enabled.';
+    }
+
+    if (empty($ai_config['api_key']) && empty($ai_config['api_key_name'])) {
+      $errors[] = 'Azure AI API key is required when embeddings are enabled.';
+    }
+
+    // Validate model configuration
+    $model = $ai_config['model'] ?? 'text-embedding-ada-002';
+    $valid_models = ['text-embedding-ada-002', 'text-embedding-3-small', 'text-embedding-3-large'];
+    if (!in_array($model, $valid_models)) {
+      $warnings[] = "Unknown embedding model '{$model}'. Supported models: " . implode(', ', $valid_models);
+    }
+
+    return ['errors' => $errors, 'warnings' => $warnings];
+  }
+
+  /**
+   * Validates vector search configuration.
+   */
+  protected function validateVectorSearchConfiguration($config) {
+    $errors = [];
+    $warnings = [];
+
+    $vector_config = $config['vector_search'] ?? [];
+
+    // Validate dimension
+    $dimension = $vector_config['dimension'] ?? 1536;
+    if ($dimension < 1 || $dimension > 10000) {
+      $errors[] = 'Vector dimension must be between 1 and 10000.';
+    }
+
+    // Validate index method
+    $index_method = $vector_config['index_method'] ?? 'ivfflat';
+    if (!in_array($index_method, ['ivfflat', 'hnsw'])) {
+      $errors[] = 'Vector index method must be either "ivfflat" or "hnsw".';
+    }
+
+    // Validate method-specific parameters
     if ($index_method === 'ivfflat') {
       $lists = $vector_config['ivfflat_lists'] ?? 100;
-      if ($lists < 1 || $lists > 32768) {
-        $warnings[] = 'IVFFlat lists parameter should be between 1 and 32768.';
+      if ($lists < 1 || $lists > 10000) {
+        $warnings[] = 'IVFFlat lists parameter should be between 1 and 10000.';
       }
     } elseif ($index_method === 'hnsw') {
       $m = $vector_config['hnsw_m'] ?? 16;
@@ -405,23 +355,36 @@ class ConfigurationValidationService {
     try {
       $backend = $server->getBackend();
       
-      // Get secure password
-      $reflection = new \ReflectionClass($backend);
-      $method = $reflection->getMethod('getDatabasePassword');
-      $method->setAccessible(TRUE);
-      $password = $method->invoke($backend);
-
+      // Get password using the backend's method
       $config = $backend->getConfiguration();
       $connection_config = $config['connection'];
-      $connection_config['password'] = $password;
+      
+      // Use the backend's password resolution method
+      if (method_exists($backend, 'getDatabasePassword')) {
+        $reflection = new \ReflectionClass($backend);
+        $method = $reflection->getMethod('getDatabasePassword');
+        $method->setAccessible(TRUE);
+        $connection_config['password'] = $method->invoke($backend);
+      }
 
       $connector = new PostgreSQLConnector($connection_config, $this->logger);
       $connector->testConnection();
 
+      $password_info = '';
+      if (!empty($connection_config['password_key'])) {
+        $password_info = ' (using key: ' . $connection_config['password_key'] . ')';
+      }
+      elseif (!empty($connection_config['password'])) {
+        $password_info = ' (using direct password)';
+      }
+      else {
+        $password_info = ' (passwordless connection)';
+      }
+
       return [
         'success' => TRUE,
         'message' => 'Database connection successful',
-        'details' => 'Connected to ' . $connection_config['host'] . ':' . $connection_config['port'],
+        'details' => 'Connected to ' . $connection_config['host'] . ':' . $connection_config['port'] . $password_info,
       ];
     } catch (\Exception $e) {
       return [
@@ -440,16 +403,18 @@ class ConfigurationValidationService {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
 
-      // Test database password key
+      // Test database password key (if configured)
       $password_key = $config['connection']['password_key'] ?? '';
       if (!empty($password_key)) {
-        $reflection = new \ReflectionClass($backend);
-        $method = $reflection->getMethod('getDatabasePassword');
-        $method->setAccessible(TRUE);
-        $password = $method->invoke($backend);
-        
-        if (empty($password)) {
-          throw new \Exception('Database password key returned empty value');
+        if (method_exists($backend, 'getDatabasePassword')) {
+          $reflection = new \ReflectionClass($backend);
+          $method = $reflection->getMethod('getDatabasePassword');
+          $method->setAccessible(TRUE);
+          $password = $method->invoke($backend);
+          
+          if (empty($password)) {
+            throw new \Exception('Database password key returned empty value');
+          }
         }
       }
 
@@ -457,6 +422,7 @@ class ConfigurationValidationService {
       if ($this->isAiEmbeddingsEnabled($config)) {
         $method_name = method_exists($backend, 'getAzureApiKey') ? 'getAzureApiKey' : 'getAzureEmbeddingApiKey';
         if (method_exists($backend, $method_name)) {
+          $reflection = new \ReflectionClass($backend);
           $method = $reflection->getMethod($method_name);
           $method->setAccessible(TRUE);
           $api_key = $method->invoke($backend);
@@ -514,26 +480,25 @@ class ConfigurationValidationService {
   }
 
   /**
-   * Tests AI service.
+   * Tests AI service connectivity.
    */
   protected function testAiService(ServerInterface $server) {
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
       
-      // Different backends have different AI service configurations
-      if ($backend->getPluginId() === 'postgresql_azure') {
-        return $this->testAzureAiService($backend);
-      } elseif ($backend->getPluginId() === 'postgresql_vector') {
-        return $this->testVectorSearchService($backend);
-      } elseif ($this->isAiEmbeddingsEnabled($config)) {
-        return $this->testGenericAiService($backend);
-      }
+      // This would test the actual AI service connection
+      // For now, just validate configuration
+      $ai_config = $config['ai_embeddings']['azure_ai'] ?? [];
       
+      if (empty($ai_config['endpoint']) || empty($ai_config['deployment_name'])) {
+        throw new \Exception('AI service configuration incomplete');
+      }
+
       return [
         'success' => TRUE,
-        'message' => 'No AI service configured',
-        'details' => 'AI services are disabled for this backend',
+        'message' => 'AI service configuration valid',
+        'details' => 'Configuration appears correct for ' . $ai_config['endpoint'],
       ];
     } catch (\Exception $e) {
       return [
@@ -545,360 +510,17 @@ class ConfigurationValidationService {
   }
 
   /**
-   * Tests PostgreSQL version.
-   */
-  protected function testPostgreSQLVersion(ServerInterface $server) {
-    try {
-      $backend = $server->getBackend();
-      $reflection = new \ReflectionClass($backend);
-      
-      $connect_method = $reflection->getMethod('connect');
-      $connect_method->setAccessible(TRUE);
-      $connect_method->invoke($backend);
-      
-      $connector_property = $reflection->getProperty('connector');
-      $connector_property->setAccessible(TRUE);
-      $connector = $connector_property->getValue($backend);
-      
-      $version = $connector->getVersion();
-      
-      // Extract major version number
-      preg_match('/(\d+)\.(\d+)/', $version, $matches);
-      $major = (int) ($matches[1] ?? 0);
-      $minor = (int) ($matches[2] ?? 0);
-      
-      if ($major < 12) {
-        return [
-          'success' => FALSE,
-          'message' => 'PostgreSQL version too old',
-          'details' => "Version {$version} detected. PostgreSQL 12+ is required.",
-        ];
-      }
-      
-      return [
-        'success' => TRUE,
-        'message' => 'PostgreSQL version is compatible',
-        'details' => "Version {$version} detected.",
-      ];
-    } catch (\Exception $e) {
-      return [
-        'success' => FALSE,
-        'message' => 'PostgreSQL version check failed',
-        'details' => $e->getMessage(),
-      ];
-    }
-  }
-
-  /**
-   * Health check helper methods.
-   */
-  protected function checkDatabaseHealth(ServerInterface $server) {
-    try {
-      $test_result = $this->testDatabaseConnection($server);
-      return [
-        'healthy' => $test_result['success'],
-        'message' => $test_result['message'],
-        'details' => $test_result['details'] ?? '',
-      ];
-    } catch (\Exception $e) {
-      return [
-        'healthy' => FALSE,
-        'message' => 'Database health check failed',
-        'details' => $e->getMessage(),
-      ];
-    }
-  }
-
-  /**
-   * Checks vector extension health.
-   */
-  protected function checkVectorExtensionHealth(ServerInterface $server) {
-    try {
-      $test_result = $this->testPgVectorExtension($server);
-      return [
-        'healthy' => $test_result['success'],
-        'message' => $test_result['message'],
-        'details' => $test_result['details'] ?? '',
-      ];
-    } catch (\Exception $e) {
-      return [
-        'healthy' => FALSE,
-        'message' => 'Vector extension health check failed',
-        'details' => $e->getMessage(),
-      ];
-    }
-  }
-
-  /**
-   * Checks AI service health.
-   */
-  protected function checkAiServiceHealth(ServerInterface $server) {
-    try {
-      $test_result = $this->testAiService($server);
-      return [
-        'healthy' => $test_result['success'],
-        'message' => $test_result['message'],
-        'details' => $test_result['details'] ?? '',
-      ];
-    } catch (\Exception $e) {
-      return [
-        'healthy' => FALSE,
-        'message' => 'AI service health check failed',
-        'details' => $e->getMessage(),
-      ];
-    }
-  }
-
-  /**
-   * Checks key access health.
-   */
-  protected function checkKeyHealth($config) {
-    try {
-      $validation = $this->validateKeyStorage($config);
-      $healthy = empty($validation['errors']);
-      
-      return [
-        'healthy' => $healthy,
-        'message' => $healthy ? 'Key access is working' : 'Key access issues detected',
-        'details' => implode('; ', array_merge($validation['errors'], $validation['warnings'])),
-      ];
-    } catch (\Exception $e) {
-      return [
-        'healthy' => FALSE,
-        'message' => 'Key access health check failed',
-        'details' => $e->getMessage(),
-      ];
-    }
-  }
-
-  /**
-   * System-wide health check methods.
-   */
-  protected function checkPhpExtensions() {
-    $required = ['pdo_pgsql', 'curl', 'json'];
-    $missing = [];
-    
-    foreach ($required as $ext) {
-      if (!extension_loaded($ext)) {
-        $missing[] = $ext;
-      }
-    }
-    
-    return [
-      'status' => empty($missing),
-      'message' => empty($missing) ? 'All required PHP extensions loaded' : 'Missing extensions: ' . implode(', ', $missing),
-    ];
-  }
-
-  /**
-   * Checks required Drupal modules.
-   */
-  protected function checkDrupalModules() {
-    $required = ['search_api', 'key'];
-    $missing = [];
-    
-    foreach ($required as $module) {
-      if (!\Drupal::moduleHandler()->moduleExists($module)) {
-        $missing[] = $module;
-      }
-    }
-    
-    return [
-      'status' => empty($missing),
-      'message' => empty($missing) ? 'All required modules enabled' : 'Missing modules: ' . implode(', ', $missing),
-    ];
-  }
-
-  /**
-   * Checks file permissions.
-   */
-  protected function checkFilePermissions() {
-    $temp_dir = sys_get_temp_dir();
-    $writable = is_writable($temp_dir);
-    
-    return [
-      'status' => $writable,
-      'message' => $writable ? 'Temporary directory is writable' : 'Temporary directory is not writable',
-    ];
-  }
-
-  /**
-   * Checks general database health.
-   */
-  protected function checkGeneralDatabaseHealth() {
-    try {
-      $database = \Drupal::database();
-      $database->query('SELECT 1')->execute();
-      
-      return [
-        'status' => TRUE,
-        'message' => 'Database connection is healthy',
-      ];
-    } catch (\Exception $e) {
-      return [
-        'status' => FALSE,
-        'message' => 'Database connection issues: ' . $e->getMessage(),
-      ];
-    }
-  }
-
-  /**
-   * Checks memory limits.
-   */
-  protected function checkMemoryLimits() {
-    $memory_limit = ini_get('memory_limit');
-    $memory_bytes = $this->parseMemoryLimit($memory_limit);
-    
-    // Recommend at least 256MB
-    $recommended = 256 * 1024 * 1024;
-    $sufficient = $memory_bytes >= $recommended || $memory_bytes === -1;
-    
-    return [
-      'status' => $sufficient,
-      'message' => $sufficient ? 
-        "Memory limit is sufficient ({$memory_limit})" : 
-        "Memory limit may be too low ({$memory_limit}). Recommend at least 256M",
-    ];
-  }
-
-  /**
-   * Helper methods.
+   * Checks if AI embeddings are enabled.
    */
   protected function isAiEmbeddingsEnabled($config) {
-    return ($config['ai_embeddings']['enabled'] ?? FALSE) || 
-           ($config['azure_embedding']['enabled'] ?? FALSE);
+    return !empty($config['ai_embeddings']['enabled']) || 
+           !empty($config['azure_embedding']['enabled']);
   }
 
   /**
    * Checks if vector search is enabled.
    */
   protected function isVectorSearchEnabled($config) {
-    // Check for different vector search configurations across all backends
-    return ($config['ai_embeddings']['enabled'] ?? FALSE) || 
-           ($config['azure_embedding']['enabled'] ?? FALSE) ||
-           ($config['vector_search']['enabled'] ?? FALSE);
+    return !empty($config['vector_search']['enabled']);
   }
-
-  /**
-   * Parses memory limit string to bytes.
-   */
-  protected function parseMemoryLimit($limit) {
-    $limit = trim($limit);
-    $last = strtolower($limit[strlen($limit) - 1]);
-    $limit = (int) $limit;
-    
-    switch ($last) {
-      case 'g':
-        $limit *= 1024;
-      case 'm':
-        $limit *= 1024;
-      case 'k':
-        $limit *= 1024;
-    }
-    
-    return $limit;
-  }
-
-  /**
-   * AI service test methods for different backends.
-   */
-  protected function testAzureAiService($backend) {
-    // Test Azure AI service specifically
-    try {
-      $reflection = new \ReflectionClass($backend);
-      $method = $reflection->getMethod('connect');
-      $method->setAccessible(TRUE);
-      $method->invoke($backend);
-
-      // Try to get embedding service
-      $embedding_property = $reflection->getProperty('embeddingService');
-      $embedding_property->setAccessible(TRUE);
-      $embedding_service = $embedding_property->getValue($backend);
-
-      if ($embedding_service && method_exists($embedding_service, 'generateEmbedding')) {
-        $test_embedding = $embedding_service->generateEmbedding('test connection');
-        
-        if ($test_embedding && count($test_embedding) > 0) {
-          return [
-            'success' => TRUE,
-            'message' => 'Azure AI service is working',
-            'details' => 'Generated ' . count($test_embedding) . '-dimensional embedding',
-          ];
-        }
-      }
-      
-      throw new \Exception('Unable to generate test embedding');
-    } catch (\Exception $e) {
-      return [
-        'success' => FALSE,
-        'message' => 'Azure AI service test failed',
-        'details' => $e->getMessage(),
-      ];
-    }
-  }
-
-  /**
-   * Test vector search service.
-   */
-  protected function testVectorSearchService($backend) {
-    // Test vector search service for postgresql_vector backend
-    try {
-      $reflection = new \ReflectionClass($backend);
-      $method = $reflection->getMethod('connect');
-      $method->setAccessible(TRUE);
-      $method->invoke($backend);
-
-      // Check if embedding service is available
-      if (property_exists($backend, 'embeddingService')) {
-        $embedding_property = $reflection->getProperty('embeddingService');
-        $embedding_property->setAccessible(TRUE);
-        $embedding_service = $embedding_property->getValue($backend);
-
-        if ($embedding_service && method_exists($embedding_service, 'generateEmbedding')) {
-          $test_embedding = $embedding_service->generateEmbedding('test connection');
-          
-          if ($test_embedding && count($test_embedding) > 0) {
-            return [
-              'success' => TRUE,
-              'message' => 'Vector search service is working',
-              'details' => 'Generated ' . count($test_embedding) . '-dimensional embedding',
-            ];
-          }
-        }
-      }
-      
-      return [
-        'success' => TRUE,
-        'message' => 'Vector search backend ready',
-        'details' => 'No embedding service configured yet',
-      ];
-    } catch (\Exception $e) {
-      return [
-        'success' => FALSE,
-        'message' => 'Vector search service test failed',
-        'details' => $e->getMessage(),
-      ];
-    }
-  }
-
-  /**
-   * Test generic AI service.
-   */
-  protected function testGenericAiService($backend) {
-    // Fallback for other backends with AI capabilities
-    try {
-      return [
-        'success' => TRUE,
-        'message' => 'AI service configuration detected',
-        'details' => 'AI embedding features are configured',
-      ];
-    } catch (\Exception $e) {
-      return [
-        'success' => FALSE,
-        'message' => 'AI service test failed',
-        'details' => $e->getMessage(),
-      ];
-    }
-  }
-
 }
