@@ -3,23 +3,28 @@
 namespace Drupal\search_api_postgresql\Plugin\search_api\backend;
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
 use Drupal\search_api\Backend\BackendPluginBase;
 use Drupal\search_api\IndexInterface;
+use Drupal\search_api\SearchApiException;
 use Drupal\search_api\Query\QueryInterface;
-use Drupal\search_api\Item\ItemInterface;
+use Drupal\search_api\Query\ResultSetInterface;
 use Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector;
 use Drupal\search_api_postgresql\PostgreSQL\FieldMapper;
 use Drupal\search_api_postgresql\PostgreSQL\IndexManager;
 use Drupal\search_api_postgresql\PostgreSQL\QueryBuilder;
-use Drupal\search_api_postgresql\Service\EmbeddingService;
+use Drupal\search_api_postgresql\Plugin\search_api\backend\SecureKeyManagementTrait;
+use Drupal\key\KeyRepositoryInterface;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * PostgreSQL Search API backend.
+ * PostgreSQL backend for Search API.
  *
  * @SearchApiBackend(
  *   id = "postgresql",
  *   label = @Translation("PostgreSQL"),
- *   description = @Translation("PostgreSQL database backend with full-text search and optional AI embeddings")
+ *   description = @Translation("High-performance PostgreSQL backend with full-text search capabilities and optional AI embeddings")
  * )
  */
 class PostgreSQLBackend extends BackendPluginBase {
@@ -55,11 +60,34 @@ class PostgreSQLBackend extends BackendPluginBase {
   protected $queryBuilder;
 
   /**
-   * The embedding service.
+   * The logger.
    *
-   * @var \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface
+   * @var \Psr\Log\LoggerInterface
    */
-  protected $embeddingService;
+  protected $logger;
+
+  /**
+   * The key repository.
+   *
+   * @var \Drupal\key\KeyRepositoryInterface
+   */
+  protected $keyRepository;
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+    $instance = new static($configuration, $plugin_id, $plugin_definition);
+    
+    $instance->logger = $container->get('logger.factory')->get('search_api_postgresql');
+    
+    // Key repository is optional
+    if ($container->has('key.repository')) {
+      $instance->keyRepository = $container->get('key.repository');
+    }
+
+    return $instance;
+  }
 
   /**
    * {@inheritdoc}
@@ -71,8 +99,8 @@ class PostgreSQLBackend extends BackendPluginBase {
         'port' => 5432,
         'database' => '',
         'username' => '',
-        'password' => '', // Optional - can be empty
-        'password_key' => '', // Optional - Key module integration
+        'password' => '',
+        'password_key' => '',
         'ssl_mode' => 'require',
         'ssl_ca' => '',
         'options' => [],
@@ -83,157 +111,32 @@ class PostgreSQLBackend extends BackendPluginBase {
       'batch_size' => 100,
       'ai_embeddings' => [
         'enabled' => FALSE,
+        'provider' => 'azure_ai',
         'azure_ai' => [
           'endpoint' => '',
-          'api_key' => '', // Deprecated: use api_key_name instead
-          'api_key_name' => '', // Key module integration
+          'api_key' => '',
+          'api_key_name' => '',
           'deployment_name' => '',
           'model' => 'text-embedding-ada-002',
           'dimension' => 1536,
+          'batch_size' => 50,
+          'rate_limit_delay' => 100,
+          'max_retries' => 3,
+          'timeout' => 30,
+        ],
+        'vector_index' => [
+          'method' => 'ivfflat',
+          'ivfflat_lists' => 100,
+          'hnsw_m' => 16,
+          'hnsw_ef_construction' => 64,
+        ],
+        'hybrid_search' => [
+          'text_weight' => 0.6,
+          'vector_weight' => 0.4,
+          'similarity_threshold' => 0.15,
         ],
       ],
     ];
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function postInsert() {
-    // Initialize connection on server creation
-    try {
-      $this->connect();
-      $this->connector->testConnection();
-    }
-    catch (\Exception $e) {
-      $this->getLogger()->warning('Failed to test connection during server creation: @message', [
-        '@message' => $e->getMessage(),
-      ]);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function addIndex(IndexInterface $index) {
-    try {
-      $this->connect();
-      $this->indexManager->createIndex($index);
-    }
-    catch (\Exception $e) {
-      $this->getLogger()->error('Failed to create index: @message', [
-        '@message' => $e->getMessage(),
-      ]);
-      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function updateIndex(IndexInterface $index) {
-    try {
-      $this->connect();
-      $this->indexManager->updateIndex($index);
-    }
-    catch (\Exception $e) {
-      $this->getLogger()->error('Failed to update index: @message', [
-        '@message' => $e->getMessage(),
-      ]);
-      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function removeIndex($index) {
-    try {
-      $this->connect();
-      $this->indexManager->dropIndex($index);
-    }
-    catch (\Exception $e) {
-      $this->getLogger()->error('Failed to remove index: @message', [
-        '@message' => $e->getMessage(),
-      ]);
-      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function indexItems(IndexInterface $index, array $items) {
-    try {
-      $this->connect();
-      return $this->indexManager->indexItems($index, $items);
-    }
-    catch (\Exception $e) {
-      $this->getLogger()->error('Failed to index items: @message', [
-        '@message' => $e->getMessage(),
-      ]);
-      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function deleteItems(IndexInterface $index, array $item_ids) {
-    try {
-      $this->connect();
-      $this->indexManager->deleteItems($index, $item_ids);
-    }
-    catch (\Exception $e) {
-      $this->getLogger()->error('Failed to delete items: @message', [
-        '@message' => $e->getMessage(),
-      ]);
-      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function deleteAllIndexItems(IndexInterface $index, $datasource_id = NULL) {
-    try {
-      $this->connect();
-      $this->indexManager->clearIndex($index, $datasource_id);
-    }
-    catch (\Exception $e) {
-      $this->getLogger()->error('Failed to clear index: @message', [
-        '@message' => $e->getMessage(),
-      ]);
-      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function search(QueryInterface $query) {
-    try {
-      $this->connect();
-      return $this->queryBuilder->buildSearchQuery($query);
-    }
-    catch (\Exception $e) {
-      $this->getLogger()->error('Search failed: @message', [
-        '@message' => $e->getMessage(),
-      ]);
-      throw new \Drupal\search_api\SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
-
-  /**
-   * Gets the table name for an index.
-   *
-   * @param \Drupal\search_api\IndexInterface $index
-   *   The index.
-   *
-   * @return string
-   *   The table name.
-   */
-  protected function getIndexTableName(IndexInterface $index) {
-    return $this->configuration['index_prefix'] . $index->id();
   }
 
   /**
@@ -245,36 +148,41 @@ class PostgreSQLBackend extends BackendPluginBase {
       '#type' => 'details',
       '#title' => $this->t('PostgreSQL Connection'),
       '#open' => TRUE,
+      '#description' => $this->t('Configure the database connection settings.'),
     ];
 
     $form['connection']['host'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Host'),
-      '#default_value' => $this->configuration['connection']['host'],
+      '#default_value' => $this->configuration['connection']['host'] ?? 'localhost',
       '#required' => TRUE,
+      '#description' => $this->t('Database server hostname or IP address.'),
     ];
 
     $form['connection']['port'] = [
       '#type' => 'number',
       '#title' => $this->t('Port'),
-      '#default_value' => $this->configuration['connection']['port'],
+      '#default_value' => $this->configuration['connection']['port'] ?? 5432,
       '#min' => 1,
       '#max' => 65535,
       '#required' => TRUE,
+      '#description' => $this->t('Database server port (typically 5432 for PostgreSQL).'),
     ];
 
     $form['connection']['database'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Database'),
-      '#default_value' => $this->configuration['connection']['database'],
+      '#default_value' => $this->configuration['connection']['database'] ?? '',
       '#required' => TRUE,
+      '#description' => $this->t('Name of the database to connect to.'),
     ];
 
     $form['connection']['username'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Username'),
-      '#default_value' => $this->configuration['connection']['username'],
+      '#default_value' => $this->configuration['connection']['username'] ?? '',
       '#required' => TRUE,
+      '#description' => $this->t('Database username for authentication.'),
     ];
 
     // Password fields - both optional
@@ -282,7 +190,7 @@ class PostgreSQLBackend extends BackendPluginBase {
       '#type' => 'password',
       '#title' => $this->t('Password'),
       '#description' => $this->t('Database password. Leave empty for passwordless connections (e.g., Lando development). Not shown when editing existing configuration.'),
-      '#required' => FALSE, // Password is optional
+      '#required' => FALSE,
     ];
 
     // Add key module fields for secure password storage if available
@@ -301,7 +209,7 @@ class PostgreSQLBackend extends BackendPluginBase {
         'verify-ca' => $this->t('Verify CA'),
         'verify-full' => $this->t('Verify Full'),
       ],
-      '#default_value' => $this->configuration['connection']['ssl_mode'],
+      '#default_value' => $this->configuration['connection']['ssl_mode'] ?? 'require',
       '#description' => $this->t('SSL connection mode. Use "require" or higher for production.'),
     ];
 
@@ -310,12 +218,13 @@ class PostgreSQLBackend extends BackendPluginBase {
       '#type' => 'details',
       '#title' => $this->t('Index Settings'),
       '#open' => TRUE,
+      '#description' => $this->t('Configure how search indexes are managed.'),
     ];
 
     $form['index_settings']['index_prefix'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Index table prefix'),
-      '#default_value' => $this->configuration['index_prefix'],
+      '#default_value' => $this->configuration['index_prefix'] ?? 'search_api_',
       '#description' => $this->t('Prefix for index tables in the database.'),
     ];
 
@@ -334,7 +243,7 @@ class PostgreSQLBackend extends BackendPluginBase {
         'chinese' => $this->t('Chinese'),
         'japanese' => $this->t('Japanese'),
       ],
-      '#default_value' => $this->configuration['fts_configuration'],
+      '#default_value' => $this->configuration['fts_configuration'] ?? 'english',
       '#description' => $this->t('PostgreSQL full-text search configuration to use.'),
     ];
 
@@ -343,38 +252,41 @@ class PostgreSQLBackend extends BackendPluginBase {
       '#type' => 'details',
       '#title' => $this->t('Advanced Settings'),
       '#open' => FALSE,
+      '#description' => $this->t('Advanced configuration options for debugging and performance.'),
     ];
 
     $form['advanced']['debug'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Enable debug mode'),
-      '#default_value' => $this->configuration['debug'],
-      '#description' => $this->t('Log queries and debug information.'),
+      '#default_value' => $this->configuration['debug'] ?? FALSE,
+      '#description' => $this->t('Log queries and debug information. Should be disabled in production.'),
     ];
 
     $form['advanced']['batch_size'] = [
       '#type' => 'number',
       '#title' => $this->t('Batch size'),
-      '#default_value' => $this->configuration['batch_size'],
+      '#default_value' => $this->configuration['batch_size'] ?? 100,
       '#min' => 1,
       '#max' => 1000,
-      '#description' => $this->t('Number of items to process in each batch.'),
+      '#description' => $this->t('Number of items to process in each batch during indexing.'),
     ];
 
     // AI Embeddings configuration
     $form['ai_embeddings'] = [
       '#type' => 'details',
       '#title' => $this->t('AI Embeddings (Azure OpenAI)'),
-      '#open' => FALSE,
+      '#open' => !empty($this->configuration['ai_embeddings']['enabled']),
+      '#description' => $this->t('Enable semantic search using AI text embeddings. Requires Azure OpenAI Service.'),
     ];
 
     $form['ai_embeddings']['enabled'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Enable AI embeddings'),
-      '#default_value' => $this->configuration['ai_embeddings']['enabled'],
+      '#default_value' => $this->configuration['ai_embeddings']['enabled'] ?? FALSE,
       '#description' => $this->t('Enable semantic search using Azure OpenAI embeddings.'),
     ];
 
+    // Azure AI configuration
     $form['ai_embeddings']['azure_ai'] = [
       '#type' => 'details',
       '#title' => $this->t('Azure OpenAI Configuration'),
@@ -389,8 +301,8 @@ class PostgreSQLBackend extends BackendPluginBase {
     $form['ai_embeddings']['azure_ai']['endpoint'] = [
       '#type' => 'url',
       '#title' => $this->t('Azure OpenAI Endpoint'),
-      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['endpoint'],
-      '#description' => $this->t('Your Azure OpenAI resource endpoint (e.g., https://your-resource.openai.azure.com/)'),
+      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['endpoint'] ?? '',
+      '#description' => $this->t('Your Azure OpenAI service endpoint (e.g., https://your-resource.openai.azure.com/).'),
       '#states' => [
         'required' => [
           ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
@@ -398,12 +310,10 @@ class PostgreSQLBackend extends BackendPluginBase {
       ],
     ];
 
-    // Add Azure AI key fields if Key module is available
+    // Add AI API key fields
     if (!empty($this->keyRepository)) {
-      $this->addAzureKeyFieldsToForm($form);
-    }
-    else {
-      // Fallback to direct API key field
+      $this->addAzureApiKeyFields($form);
+    } else {
       $form['ai_embeddings']['azure_ai']['api_key'] = [
         '#type' => 'password',
         '#title' => $this->t('API Key'),
@@ -419,7 +329,7 @@ class PostgreSQLBackend extends BackendPluginBase {
     $form['ai_embeddings']['azure_ai']['deployment_name'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Deployment Name'),
-      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['deployment_name'],
+      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['deployment_name'] ?? '',
       '#description' => $this->t('The name of your embedding model deployment in Azure OpenAI.'),
       '#states' => [
         'required' => [
@@ -436,7 +346,7 @@ class PostgreSQLBackend extends BackendPluginBase {
         'text-embedding-3-small' => $this->t('text-embedding-3-small (1536 dimensions)'),
         'text-embedding-3-large' => $this->t('text-embedding-3-large (3072 dimensions)'),
       ],
-      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['model'],
+      '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['model'] ?? 'text-embedding-ada-002',
       '#description' => $this->t('The embedding model to use.'),
       '#states' => [
         'required' => [
@@ -445,7 +355,124 @@ class PostgreSQLBackend extends BackendPluginBase {
       ],
     ];
 
+    // Vector index configuration
+    $form['ai_embeddings']['vector_index'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Vector Index Configuration'),
+      '#open' => FALSE,
+      '#description' => $this->t('Advanced settings for vector similarity search performance.'),
+      '#states' => [
+        'visible' => [
+          ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['ai_embeddings']['vector_index']['method'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Index Method'),
+      '#options' => [
+        'ivfflat' => $this->t('IVFFlat (Faster indexing, good for most cases)'),
+        'hnsw' => $this->t('HNSW (Better accuracy, slower indexing)'),
+      ],
+      '#default_value' => $this->configuration['ai_embeddings']['vector_index']['method'] ?? 'ivfflat',
+      '#description' => $this->t('Vector indexing algorithm for similarity search.'),
+    ];
+
+    // Hybrid search settings
+    $form['ai_embeddings']['hybrid_search'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Hybrid Search Settings'),
+      '#open' => FALSE,
+      '#description' => $this->t('Configure how traditional full-text search and vector similarity search are combined.'),
+      '#states' => [
+        'visible' => [
+          ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['ai_embeddings']['hybrid_search']['text_weight'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Text Search Weight'),
+      '#default_value' => $this->configuration['ai_embeddings']['hybrid_search']['text_weight'] ?? 0.6,
+      '#min' => 0,
+      '#max' => 1,
+      '#step' => 0.1,
+      '#description' => $this->t('Weight for traditional full-text search (0-1).'),
+    ];
+
+    $form['ai_embeddings']['hybrid_search']['vector_weight'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Vector Search Weight'),
+      '#default_value' => $this->configuration['ai_embeddings']['hybrid_search']['vector_weight'] ?? 0.4,
+      '#min' => 0,
+      '#max' => 1,
+      '#step' => 0.1,
+      '#description' => $this->t('Weight for vector similarity search (0-1). Should sum to 1.0 with text weight.'),
+    ];
+
+    // Connection test button
+    $form['test_connection'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Test Connection'),
+      '#open' => FALSE,
+      '#description' => $this->t('Test your database connection settings.'),
+    ];
+
+    $form['test_connection']['test_button'] = [
+      '#type' => 'button',
+      '#value' => $this->t('Test Connection'),
+      '#ajax' => [
+        'callback' => '::testConnection',
+        'wrapper' => 'connection-test-result',
+      ],
+    ];
+
+    $form['test_connection']['result'] = [
+      '#type' => 'container',
+      '#attributes' => ['id' => 'connection-test-result'],
+    ];
+
     return $form;
+  }
+
+  /**
+   * AJAX callback to test database connection.
+   */
+  public function testConnection(array &$form, FormStateInterface $form_state) {
+    try {
+      $values = $form_state->getValues();
+      $connection_config = $values['connection'];
+      
+      // Get password from key if specified
+      if (!empty($connection_config['password_key']) && $this->keyRepository) {
+        $key = $this->keyRepository->getKey($connection_config['password_key']);
+        if ($key) {
+          $connection_config['password'] = $key->getKeyValue();
+        }
+      }
+      
+      $connector = new PostgreSQLConnector($connection_config, $this->logger);
+      $connector->testConnection();
+      
+      $form['test_connection']['result']['#markup'] = 
+        '<div class="messages messages--status">' . 
+        $this->t('Connection successful! Connected to @host:@port/@database', [
+          '@host' => $connection_config['host'],
+          '@port' => $connection_config['port'],
+          '@database' => $connection_config['database'],
+        ]) . 
+        '</div>';
+    }
+    catch (\Exception $e) {
+      $form['test_connection']['result']['#markup'] = 
+        '<div class="messages messages--error">' . 
+        $this->t('Connection failed: @message', ['@message' => $e->getMessage()]) . 
+        '</div>';
+    }
+    
+    return $form['test_connection']['result'];
   }
 
   /**
@@ -464,13 +491,21 @@ class PostgreSQLBackend extends BackendPluginBase {
     }
 
     // Validate password configuration - both key and direct password are optional
-    // Only validate if both are empty AND we're not in a development environment
     $password_key = $values['connection']['password_key'] ?? '';
     $direct_password = $values['connection']['password'] ?? '';
     
     if (empty($password_key) && empty($direct_password)) {
-      // Allow empty passwords but show a warning for security
-      \Drupal::messenger()->addWarning($this->t('No database password configured. This may be acceptable for development environments (like Lando) but is not recommended for production.'));
+      // Allow empty passwords but show a warning for security awareness
+      \Drupal::messenger()->addWarning($this->t('No database password configured. This may be acceptable for development environments (like Lando with trust authentication) but is not recommended for production.'));
+    }
+    
+    // If a password key is specified, validate it exists (but don't fail if empty)
+    if (!empty($password_key) && $this->keyRepository) {
+      $key = $this->keyRepository->getKey($password_key);
+      if (!$key) {
+        $form_state->setErrorByName('connection][password_key', $this->t('The specified password key "@key" does not exist.', ['@key' => $password_key]));
+      }
+      // Note: We don't validate if the key has a value here, as empty keys are allowed for passwordless connections
     }
 
     // Validate AI embeddings if enabled
@@ -478,37 +513,38 @@ class PostgreSQLBackend extends BackendPluginBase {
       if (empty($values['ai_embeddings']['azure_ai']['endpoint'])) {
         $form_state->setErrorByName('ai_embeddings][azure_ai][endpoint', $this->t('Azure AI endpoint is required when embeddings are enabled.'));
       }
-
+      
       if (empty($values['ai_embeddings']['azure_ai']['deployment_name'])) {
         $form_state->setErrorByName('ai_embeddings][azure_ai][deployment_name', $this->t('Deployment name is required when embeddings are enabled.'));
       }
 
-      // Check that either API key or API key name is provided
-      $api_key = $values['ai_embeddings']['azure_ai']['api_key'] ?? '';
-      $api_key_name = $values['ai_embeddings']['azure_ai']['api_key_name'] ?? '';
+      // Validate hybrid search weights
+      $text_weight = (float) ($values['ai_embeddings']['hybrid_search']['text_weight'] ?? 0.6);
+      $vector_weight = (float) ($values['ai_embeddings']['hybrid_search']['vector_weight'] ?? 0.4);
       
-      if (empty($api_key) && empty($api_key_name)) {
-        $form_state->setErrorByName('ai_embeddings][azure_ai][api_key', $this->t('Azure AI API key is required when embeddings are enabled.'));
+      if (abs(($text_weight + $vector_weight) - 1.0) > 0.01) {
+        $form_state->setErrorByName('ai_embeddings][hybrid_search][text_weight', 
+          $this->t('Text and vector weights should sum to 1.0 (currently: @sum)', [
+            '@sum' => number_format($text_weight + $vector_weight, 2)
+          ]));
       }
     }
 
-    // Test connection if possible and no other errors
-    if (!$form_state->hasAnyErrors()) {
+    // Test connection if requested
+    if ($form_state->getTriggeringElement()['#value'] == $this->t('Test Connection')) {
       try {
-        $config = $values['connection'];
+        $connection_config = $values['connection'];
         
-        // Handle password resolution for testing
-        if (!empty($config['password_key']) && !empty($this->keyRepository)) {
-          $key = $this->keyRepository->getKey($config['password_key']);
+        // Get password from key if specified
+        if (!empty($connection_config['password_key']) && $this->keyRepository) {
+          $key = $this->keyRepository->getKey($connection_config['password_key']);
           if ($key) {
-            $config['password'] = $key->getKeyValue();
+            $connection_config['password'] = $key->getKeyValue();
           }
         }
         
-        $test_connector = new PostgreSQLConnector($config, $this->getLogger());
-        // No need to call connect() explicitly as constructor handles it
-        $test_connector->testConnection();
-        \Drupal::messenger()->addStatus($this->t('Successfully connected to PostgreSQL database.'));
+        $connector = new PostgreSQLConnector($connection_config, $this->logger);
+        $connector->testConnection();
       }
       catch (\Exception $e) {
         $form_state->setErrorByName('connection', $this->t('Failed to connect to database: @message', [
@@ -542,106 +578,44 @@ class PostgreSQLBackend extends BackendPluginBase {
       $this->configuration['connection']['password'] = $values['connection']['password'];
       $this->configuration['connection']['password_key'] = '';
     }
-    // If both are empty, preserve existing configuration or set empty
 
     // Save other configuration
     $this->configuration['index_prefix'] = $values['index_settings']['index_prefix'];
     $this->configuration['fts_configuration'] = $values['index_settings']['fts_configuration'];
-
     $this->configuration['debug'] = $values['advanced']['debug'];
     $this->configuration['batch_size'] = $values['advanced']['batch_size'];
 
+    // Save AI embeddings configuration
     $this->configuration['ai_embeddings'] = $values['ai_embeddings'];
   }
 
   /**
    * Establishes connection to the database.
-   *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If connection fails.
    */
   protected function connect() {
-    // Check if already initialized
-    if ($this->connector) {
-      return;
+    if (!$this->connector) {
+      $this->connector = new PostgreSQLConnector($this->configuration['connection'], $this->logger);
+      $this->fieldMapper = new FieldMapper($this->configuration);
+      $this->indexManager = new IndexManager($this->connector, $this->fieldMapper, $this->configuration);
+      $this->queryBuilder = new QueryBuilder($this->connector, $this->fieldMapper, $this->configuration);
     }
-
-    // Get connection configuration
-    $config = $this->configuration['connection'];
-    
-    // Resolve password from key if configured, otherwise use direct password
-    $config['password'] = $this->getDatabasePassword();
-
-    // Create connector - it connects automatically in constructor
-    $this->connector = new PostgreSQLConnector($config, $this->getLogger());
-
-    // Create field mapper with configuration
-    $this->fieldMapper = new FieldMapper($this->configuration);
-
-    // Create embedding service if AI embeddings are enabled
-    if (!empty($this->configuration['ai_embeddings']['enabled'])) {
-      $this->embeddingService = new EmbeddingService($this->configuration['ai_embeddings']);
-    }
-
-    // Create index manager with embedding service
-    $this->indexManager = new IndexManager(
-      $this->connector,
-      $this->fieldMapper,
-      $this->configuration,
-      $this->embeddingService
-    );
-
-    // Create query builder
-    $this->queryBuilder = new QueryBuilder(
-      $this->connector,
-      $this->fieldMapper,
-      $this->configuration
-    );
   }
 
   /**
-   * {@inheritdoc}
+   * Gets the database password from key or direct configuration.
    */
-  public function viewSettings() {
-    $info = [];
+  protected function getDatabasePassword() {
+    $password_key = $this->configuration['connection']['password_key'] ?? '';
+    $direct_password = $this->configuration['connection']['password'] ?? '';
 
-    $info[] = [
-      'label' => $this->t('Host'),
-      'info' => $this->configuration['connection']['host'] . ':' . $this->configuration['connection']['port'],
-    ];
+    if (!empty($password_key) && $this->keyRepository) {
+      $key = $this->keyRepository->getKey($password_key);
+      if ($key) {
+        return $key->getKeyValue();
+      }
+    }
 
-    $info[] = [
-      'label' => $this->t('Database'),
-      'info' => $this->configuration['connection']['database'],
-    ];
-
-    $info[] = [
-      'label' => $this->t('Table prefix'),
-      'info' => $this->configuration['index_prefix'],
-    ];
-
-    $info[] = [
-      'label' => $this->t('Full-text configuration'),
-      'info' => $this->configuration['fts_configuration'],
-    ];
-
-    $info[] = [
-      'label' => $this->t('Password Configuration'),
-      'info' => !empty($this->configuration['connection']['password_key']) 
-        ? $this->t('Using Key module (@key)', ['@key' => $this->configuration['connection']['password_key']])
-        : (!empty($this->configuration['connection']['password']) 
-          ? $this->t('Direct password (configured)')
-          : $this->t('No password (passwordless connection)')),
-    ];
-
-    $info[] = [
-      'label' => $this->t('AI Embeddings'),
-      'info' => $this->configuration['ai_embeddings']['enabled'] 
-        ? $this->t('Enabled (@model)', ['@model' => $this->configuration['ai_embeddings']['azure_ai']['model']])
-        : $this->t('Disabled'),
-    ];
-
-    return $info;
+    return $direct_password;
   }
 
   /**
@@ -651,21 +625,82 @@ class PostgreSQLBackend extends BackendPluginBase {
     return [
       'search_api_facets',
       'search_api_facets_operator_or',
-      'search_api_granular',
-      'search_api_grouping',
+      'search_api_autocomplete',
+      'search_api_spellcheck',
       'search_api_mlt',
       'search_api_random_sort',
-      'search_api_spellcheck',
+      'search_api_grouping',
     ];
   }
 
   /**
-   * Gets the logger for this backend.
-   *
-   * @return \Psr\Log\LoggerInterface
-   *   The logger.
+   * {@inheritdoc}
    */
-  public function getLogger() {
-    return \Drupal::logger('search_api_postgresql');
+  public function addIndex(IndexInterface $index) {
+    $this->connect();
+    return $this->indexManager->addIndex($index);
   }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function updateIndex(IndexInterface $index) {
+    $this->connect();
+    return $this->indexManager->updateIndex($index);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function removeIndex($index) {
+    $this->connect();
+    return $this->indexManager->removeIndex($index);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function indexItems(IndexInterface $index, array $items) {
+    $this->connect();
+    return $this->indexManager->indexItems($index, $items);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteItems(IndexInterface $index, array $ids) {
+    $this->connect();
+    return $this->indexManager->deleteItems($index, $ids);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteAllIndexItems(IndexInterface $index, $datasource_id = NULL) {
+    $this->connect();
+    return $this->indexManager->deleteAllIndexItems($index, $datasource_id);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function search(QueryInterface $query) {
+    $this->connect();
+    return $this->queryBuilder->search($query);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isAvailable() {
+    try {
+      $this->connect();
+      $this->connector->testConnection();
+      return TRUE;
+    }
+    catch (\Exception $e) {
+      return FALSE;
+    }
+  }
+
 }
