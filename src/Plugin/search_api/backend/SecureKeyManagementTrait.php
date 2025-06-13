@@ -62,7 +62,7 @@ trait SecureKeyManagementTrait {
       $direct_password = $this->configuration['connection']['password'] ?? '';
       
       if (empty($direct_password)) {
-        $this->getLogger()->warning('Key module not available and no direct password configured. Using passwordless connection.');
+        \Drupal::logger('search_api_postgresql')->warning('Key module not available and no direct password configured. Using passwordless connection.');
       }
       
       return $direct_password;
@@ -74,7 +74,7 @@ trait SecureKeyManagementTrait {
       
       // If key exists but has no value, log warning and fall back
       if (empty($key_value)) {
-        $this->getLogger()->warning('Database password key "@key" exists but has no value. Falling back to direct password.', [
+        \Drupal::logger('search_api_postgresql')->warning('Database password key "@key" exists but has no value. Falling back to direct password.', [
           '@key' => $password_key,
         ]);
         return $this->configuration['connection']['password'] ?? '';
@@ -84,7 +84,7 @@ trait SecureKeyManagementTrait {
     }
 
     // Key not found, fall back to direct password
-    $this->getLogger()->warning('Database password key "@key" not found. Falling back to direct password.', [
+    \Drupal::logger('search_api_postgresql')->warning('Database password key "@key" not found. Falling back to direct password.', [
       '@key' => $password_key,
     ]);
     return $this->configuration['connection']['password'] ?? '';
@@ -338,15 +338,5 @@ trait SecureKeyManagementTrait {
     }
     
     return FALSE;
-  }
-
-  /**
-   * Gets a logger instance.
-   *
-   * @return \Psr\Log\LoggerInterface
-   *   The logger.
-   */
-  protected function getLogger() {
-    return \Drupal::logger('search_api_postgresql');
   }
 }

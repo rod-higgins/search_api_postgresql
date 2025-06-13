@@ -665,7 +665,7 @@ class PostgreSQLBackend extends BackendPluginBase {
    * @return \Psr\Log\LoggerInterface
    *   The logger.
    */
-  protected function getLogger() {
+  public function getLogger() {
     return \Drupal::logger('search_api_postgresql');
   }
 }
