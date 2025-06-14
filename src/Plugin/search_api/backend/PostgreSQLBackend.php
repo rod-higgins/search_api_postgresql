@@ -122,6 +122,12 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    * {@inheritdoc}
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
+
+    \Drupal::logger('search_api_postgresql')->notice('buildConfigurationForm called for @class', [
+      '@class' => static::class
+    ]);
+    error_log('BACKEND DEBUG: buildConfigurationForm called for ' . static::class);
+
     // Ensure we have default configuration
     $this->configuration = $this->configuration + $this->defaultConfiguration();
 
@@ -292,26 +298,8 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       ],
     ];
 
-    // Add Azure AI API key fields using the trait method
-    if (!empty($this->keyRepository)) {
-      $this->addApiKeyFields(
-        $form['ai_embeddings']['service'],
-        'ai_embeddings][service',
-        'ai_embeddings.azure_ai'
-      );
-    } else {
-      $form['ai_embeddings']['service']['api_key'] = [
-        '#type' => 'password',
-        '#title' => $this->t('API Key'),
-        '#default_value' => '',
-        '#description' => $this->t('Your Azure OpenAI API key.'),
-        '#states' => [
-          'visible' => [
-            ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
-          ],
-        ],
-      ];
-    }
+    // Add Azure AI API key fields
+    $this->addAzureApiKeyFields($form['ai_embeddings']['service']);
 
     $form['ai_embeddings']['service']['deployment_name'] = [
       '#type' => 'textfield',
@@ -448,6 +436,59 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   }
 
   /**
+   * Add Azure API key fields to form section.
+   *
+   * @param array &$form_section
+   *   The form section to add fields to.
+   */
+  protected function addAzureApiKeyFields(array &$form_section) {
+    if (!empty($this->keyRepository)) {
+      // Get available keys
+      $keys = [];
+      foreach ($this->keyRepository->getKeys() as $key) {
+        $keys[$key->id()] = $key->label();
+      }
+
+      $form_section['api_key_name'] = [
+        '#type' => 'select',
+        '#title' => $this->t('API Key (Key Module)'),
+        '#options' => $keys,
+        '#empty_option' => $this->t('- Select a key or use direct entry below -'),
+        '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['api_key_name'] ?? '',
+        '#description' => $this->t('Select a key containing your Azure OpenAI API key.'),
+        '#states' => [
+          'visible' => [
+            ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
+          ],
+        ],
+      ];
+
+      $form_section['api_key'] = [
+        '#type' => 'password',
+        '#title' => $this->t('Direct API Key (Fallback)'),
+        '#description' => $this->t('Direct API key entry. Only used if no key is selected above.'),
+        '#states' => [
+          'visible' => [
+            ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
+            ':input[name="backend_config[ai_embeddings][service][api_key_name]"]' => ['value' => ''],
+          ],
+        ],
+      ];
+    } else {
+      $form_section['api_key'] = [
+        '#type' => 'password',
+        '#title' => $this->t('API Key'),
+        '#description' => $this->t('Your Azure OpenAI API key. Using Key module is recommended for production.'),
+        '#states' => [
+          'visible' => [
+            ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
+          ],
+        ],
+      ];
+    }
+  }
+
+  /**
    * AJAX callback to test database connection.
    */
   public function testConnection(array &$form, FormStateInterface $form_state) {
@@ -580,150 +621,16 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     }
   }
 
-  /**
-   * Adds API key fields for Azure AI to form.
-   */
-  protected function addAzureApiKeyFields(array &$form) {
-    if (!$this->keyRepository) {
-      return;
-    }
-
-    $this->addApiKeyFields(
-      $form['ai_embeddings']['service'],
-      'ai_embeddings][service',
-      'ai_embeddings.azure_ai'
-    );
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getSupportedFeatures() {
-    $features = [
-      'search_api_autocomplete',
-      'search_api_facets',
-      'search_api_grouping',
-      'search_api_mlt',
-      'search_api_random_sort',
-    ];
-
-    if (!empty($this->configuration['ai_embeddings']['enabled'])) {
-      $features[] = 'search_api_semantic_search';
-      $features[] = 'search_api_vector_search';
-      $features[] = 'search_api_hybrid_search';
-    }
-
-    return $features;
-  }
-
-  /**
-   * Connect to the database.
-   */
-  protected function connect() {
-    if (!$this->connector) {
-      $connection_config = $this->configuration['connection'];
-      
-      // Get password from key if specified
-      if (!empty($connection_config['password_key']) && $this->keyRepository) {
-        $key = $this->keyRepository->getKey($connection_config['password_key']);
-        if ($key) {
-          $connection_config['password'] = $key->getKeyValue();
-        }
-      }
-      
-      $this->connector = new PostgreSQLConnector($connection_config, $this->logger);
-    }
-    
-    return $this->connector;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function addIndex(IndexInterface $index) {
-    try {
-      $this->connect();
-      // Implementation for adding index
-      return TRUE;
-    }
-    catch (\Exception $e) {
-      throw new SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function updateIndex(IndexInterface $index) {
-    return $this->addIndex($index);
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function removeIndex($index) {
-    try {
-      $this->connect();
-      // Implementation for removing index
-    }
-    catch (\Exception $e) {
-      throw new SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
+  // Placeholder methods for interface compliance
   public function indexItems(IndexInterface $index, array $items) {
-    try {
-      $this->connect();
-      // Implementation for indexing items
-      return array_keys($items);
-    }
-    catch (\Exception $e) {
-      throw new SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
+    return [];
   }
 
-  /**
-   * {@inheritdoc}
-   */
-  public function deleteItems(IndexInterface $index, array $item_ids) {
-    try {
-      $this->connect();
-      // Implementation for deleting items
-    }
-    catch (\Exception $e) {
-      throw new SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
+  public function deleteItems(IndexInterface $index, array $item_ids) {}
 
-  /**
-   * {@inheritdoc}
-   */
-  public function deleteAllIndexItems(IndexInterface $index, $datasource_id = NULL) {
-    try {
-      $this->connect();
-      // Implementation for deleting all items
-    }
-    catch (\Exception $e) {
-      throw new SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
-  }
+  public function deleteAllIndexItems(IndexInterface $index, $datasource_id = NULL) {}
 
-  /**
-   * {@inheritdoc}
-   */
   public function search(QueryInterface $query) {
-    try {
-      $this->connect();
-      // Implementation for search
-      $results = $query->getResults();
-      return $results;
-    }
-    catch (\Exception $e) {
-      throw new SearchApiException($e->getMessage(), $e->getCode(), $e);
-    }
+    return $query->getResults();
   }
-
 }
