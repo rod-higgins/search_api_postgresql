@@ -8,18 +8,17 @@ use Drupal\search_api\Backend\BackendPluginBase;
 use Drupal\search_api\IndexInterface;
 use Drupal\search_api\Query\QueryInterface;
 use Drupal\search_api\SearchApiException;
-use Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector;
 use Drupal\search_api_postgresql\Traits\SecureKeyManagementTrait;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * PostgreSQL search backend.
+ * PostgreSQL search backend with AI vector search support.
  *
  * @SearchApiBackend(
  *   id = "postgresql",
- *   label = @Translation("PostgreSQL"),
- *   description = @Translation("Index data on a PostgreSQL database with full-text search and optional AI embeddings.")
+ *   label = @Translation("PostgreSQL with Azure AI Vector Search"),
+ *   description = @Translation("PostgreSQL backend with Azure OpenAI embeddings for semantic search.")
  * )
  */
 class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPluginInterface {
@@ -27,25 +26,11 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   use SecureKeyManagementTrait;
 
   /**
-   * The database connector.
-   *
-   * @var \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector
-   */
-  protected $connector;
-
-  /**
    * The logger.
    *
    * @var \Psr\Log\LoggerInterface
    */
   protected $logger;
-
-  /**
-   * The key repository.
-   *
-   * @var \Drupal\key\KeyRepositoryInterface
-   */
-  protected $keyRepository;
 
   /**
    * {@inheritdoc}
@@ -122,11 +107,9 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    * {@inheritdoc}
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
-
     \Drupal::logger('search_api_postgresql')->notice('buildConfigurationForm called for @class', [
       '@class' => static::class
     ]);
-    error_log('BACKEND DEBUG: buildConfigurationForm called for ' . static::class);
 
     // Ensure we have default configuration
     $this->configuration = $this->configuration + $this->defaultConfiguration();
@@ -170,21 +153,19 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#title' => $this->t('Username'),
       '#default_value' => $this->configuration['connection']['username'] ?? '',
       '#required' => TRUE,
-      '#description' => $this->t('Database username for authentication.'),
+      '#description' => $this->t('Database username.'),
     ];
 
-    // Password fields - both optional
     $form['connection']['password'] = [
       '#type' => 'password',
       '#title' => $this->t('Password'),
-      '#description' => $this->t('Database password. Leave empty for passwordless connections (e.g., Lando development). Not shown when editing existing configuration.'),
+      '#default_value' => '',
       '#required' => FALSE,
+      '#description' => $this->t('Database password (optional). Leave empty for passwordless connections.'),
     ];
 
-    // Add key module fields for secure password storage if available
-    if (!empty($this->keyRepository)) {
-      $this->addKeyFieldsToForm($form);
-    }
+    // Add password key fields if Key module is available  
+    $this->addPasswordFields($form);
 
     $form['connection']['ssl_mode'] = [
       '#type' => 'select',
@@ -198,38 +179,55 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         'verify-full' => $this->t('Verify Full'),
       ],
       '#default_value' => $this->configuration['connection']['ssl_mode'] ?? 'require',
-      '#description' => $this->t('SSL connection mode. Use "require" or higher for production.'),
+      '#description' => $this->t('SSL connection mode.'),
+    ];
+
+    $form['connection']['ssl_ca'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('SSL CA Certificate Path'),
+      '#default_value' => $this->configuration['connection']['ssl_ca'] ?? '',
+      '#description' => $this->t('Path to SSL CA certificate file (optional).'),
+      '#states' => [
+        'visible' => [
+          [':input[name="backend_config[connection][ssl_mode]"]' => ['value' => 'verify-ca']],
+          [':input[name="backend_config[connection][ssl_mode]"]' => ['value' => 'verify-full']],
+        ],
+      ],
     ];
 
     // Index settings
     $form['index_settings'] = [
       '#type' => 'details',
       '#title' => $this->t('Index Settings'),
-      '#open' => TRUE,
-      '#description' => $this->t('Configure how search indexes are managed.'),
+      '#open' => FALSE,
     ];
 
     $form['index_settings']['index_prefix'] = [
       '#type' => 'textfield',
-      '#title' => $this->t('Index table prefix'),
+      '#title' => $this->t('Index Prefix'),
       '#default_value' => $this->configuration['index_prefix'] ?? 'search_api_',
-      '#description' => $this->t('Prefix for index tables in the database.'),
+      '#description' => $this->t('Prefix for search index table names.'),
     ];
 
     $form['index_settings']['fts_configuration'] = [
       '#type' => 'select',
-      '#title' => $this->t('Full-text search configuration'),
+      '#title' => $this->t('Full Text Search Configuration'),
       '#options' => [
         'simple' => $this->t('Simple'),
         'english' => $this->t('English'),
         'spanish' => $this->t('Spanish'),
         'french' => $this->t('French'),
         'german' => $this->t('German'),
-        'italian' => $this->t('Italian'),
         'portuguese' => $this->t('Portuguese'),
+        'italian' => $this->t('Italian'),
+        'dutch' => $this->t('Dutch'),
+        'danish' => $this->t('Danish'),
+        'finnish' => $this->t('Finnish'),
+        'hungarian' => $this->t('Hungarian'),
+        'norwegian' => $this->t('Norwegian'),
         'russian' => $this->t('Russian'),
-        'chinese' => $this->t('Chinese'),
-        'japanese' => $this->t('Japanese'),
+        'swedish' => $this->t('Swedish'),
+        'turkish' => $this->t('Turkish'),
       ],
       '#default_value' => $this->configuration['fts_configuration'] ?? 'english',
       '#description' => $this->t('PostgreSQL full-text search configuration to use.'),
@@ -240,38 +238,37 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#type' => 'details',
       '#title' => $this->t('Advanced Settings'),
       '#open' => FALSE,
-      '#description' => $this->t('Advanced configuration options for debugging and performance.'),
     ];
 
     $form['advanced']['debug'] = [
       '#type' => 'checkbox',
-      '#title' => $this->t('Enable debug mode'),
+      '#title' => $this->t('Enable Debug Mode'),
       '#default_value' => $this->configuration['debug'] ?? FALSE,
-      '#description' => $this->t('Log queries and debug information. Should be disabled in production.'),
+      '#description' => $this->t('Log all database queries for debugging.'),
     ];
 
     $form['advanced']['batch_size'] = [
       '#type' => 'number',
-      '#title' => $this->t('Batch size'),
+      '#title' => $this->t('Batch Size'),
       '#default_value' => $this->configuration['batch_size'] ?? 100,
       '#min' => 1,
       '#max' => 1000,
-      '#description' => $this->t('Number of items to process in each batch during indexing.'),
+      '#description' => $this->t('Number of items to process in each batch.'),
     ];
 
     // AI Embeddings configuration
     $form['ai_embeddings'] = [
       '#type' => 'details',
-      '#title' => $this->t('AI Embeddings (Azure OpenAI)'),
+      '#title' => $this->t('AI Embeddings'),
       '#open' => !empty($this->configuration['ai_embeddings']['enabled']),
-      '#description' => $this->t('Enable semantic search using AI text embeddings. Requires Azure OpenAI Service.'),
+      '#description' => $this->t('Configure AI embeddings for semantic search.'),
     ];
 
     $form['ai_embeddings']['enabled'] = [
       '#type' => 'checkbox',
-      '#title' => $this->t('Enable AI embeddings'),
+      '#title' => $this->t('Enable AI Embeddings'),
       '#default_value' => $this->configuration['ai_embeddings']['enabled'] ?? FALSE,
-      '#description' => $this->t('Enable semantic search using Azure OpenAI embeddings.'),
+      '#description' => $this->t('Enable semantic search using AI embeddings.'),
     ];
 
     // Azure AI Service configuration
@@ -298,7 +295,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       ],
     ];
 
-    // Add Azure AI API key fields
+    // Add Azure API key fields
     $this->addAzureApiKeyFields($form['ai_embeddings']['service']);
 
     $form['ai_embeddings']['service']['deployment_name'] = [
@@ -344,11 +341,11 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
     $form['ai_embeddings']['performance']['batch_size'] = [
       '#type' => 'number',
-      '#title' => $this->t('Batch Size'),
+      '#title' => $this->t('Embedding Batch Size'),
       '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['batch_size'] ?? 50,
       '#min' => 1,
       '#max' => 100,
-      '#description' => $this->t('Number of texts to process in each batch.'),
+      '#description' => $this->t('Number of texts to send to Azure OpenAI in each request.'),
     ];
 
     $form['ai_embeddings']['performance']['rate_limit_delay'] = [
@@ -366,7 +363,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['max_retries'] ?? 3,
       '#min' => 0,
       '#max' => 10,
-      '#description' => $this->t('Maximum number of retries for failed API calls.'),
+      '#description' => $this->t('Maximum number of retry attempts for failed API calls.'),
     ];
 
     $form['ai_embeddings']['performance']['timeout'] = [
@@ -374,14 +371,79 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#title' => $this->t('Timeout (seconds)'),
       '#default_value' => $this->configuration['ai_embeddings']['azure_ai']['timeout'] ?? 30,
       '#min' => 5,
-      '#max' => 300,
-      '#description' => $this->t('API request timeout in seconds.'),
+      '#max' => 120,
+      '#description' => $this->t('Request timeout in seconds.'),
     ];
 
-    // Hybrid search settings
+    // Vector index configuration
+    $form['ai_embeddings']['vector_index'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Vector Index Configuration'),
+      '#open' => FALSE,
+      '#states' => [
+        'visible' => [
+          ':input[name="backend_config[ai_embeddings][enabled]"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['ai_embeddings']['vector_index']['method'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Index Method'),
+      '#options' => [
+        'ivfflat' => $this->t('IVFFlat (Faster search, more memory)'),
+        'hnsw' => $this->t('HNSW (Hierarchical NSW)'),
+      ],
+      '#default_value' => $this->configuration['ai_embeddings']['vector_index']['method'] ?? 'ivfflat',
+      '#description' => $this->t('Vector indexing method for pgvector.'),
+    ];
+
+    $form['ai_embeddings']['vector_index']['ivfflat_lists'] = [
+      '#type' => 'number',
+      '#title' => $this->t('IVFFlat Lists'),
+      '#default_value' => $this->configuration['ai_embeddings']['vector_index']['ivfflat_lists'] ?? 100,
+      '#min' => 1,
+      '#max' => 10000,
+      '#description' => $this->t('Number of cluster centroids for IVFFlat index.'),
+      '#states' => [
+        'visible' => [
+          ':input[name="backend_config[ai_embeddings][vector_index][method]"]' => ['value' => 'ivfflat'],
+        ],
+      ],
+    ];
+
+    $form['ai_embeddings']['vector_index']['hnsw_m'] = [
+      '#type' => 'number',
+      '#title' => $this->t('HNSW M'),
+      '#default_value' => $this->configuration['ai_embeddings']['vector_index']['hnsw_m'] ?? 16,
+      '#min' => 2,
+      '#max' => 100,
+      '#description' => $this->t('Maximum number of bi-directional links for HNSW.'),
+      '#states' => [
+        'visible' => [
+          ':input[name="backend_config[ai_embeddings][vector_index][method]"]' => ['value' => 'hnsw'],
+        ],
+      ],
+    ];
+
+    $form['ai_embeddings']['vector_index']['hnsw_ef_construction'] = [
+      '#type' => 'number',
+      '#title' => $this->t('HNSW EF Construction'),
+      '#default_value' => $this->configuration['ai_embeddings']['vector_index']['hnsw_ef_construction'] ?? 64,
+      '#min' => 1,
+      '#max' => 1000,
+      '#description' => $this->t('Size of the dynamic candidate list for HNSW construction.'),
+      '#states' => [
+        'visible' => [
+          ':input[name="backend_config[ai_embeddings][vector_index][method]"]' => ['value' => 'hnsw'],
+        ],
+      ],
+    ];
+
+    // Hybrid search configuration
     $form['ai_embeddings']['hybrid'] = [
       '#type' => 'details',
-      '#title' => $this->t('Hybrid Search Settings'),
+      '#title' => $this->t('Hybrid Search'),
       '#open' => FALSE,
       '#states' => [
         'visible' => [
@@ -410,7 +472,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#description' => $this->t('Weight for vector similarity search (0-1). Should sum to 1.0 with text weight.'),
     ];
 
-    // Connection test button
+    // Connection test button (this one works because it returns simple markup)
     $form['test_connection'] = [
       '#type' => 'details',
       '#title' => $this->t('Test Connection'),
@@ -437,9 +499,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
   /**
    * Add Azure API key fields to form section.
-   *
-   * @param array &$form_section
-   *   The form section to add fields to.
    */
   protected function addAzureApiKeyFields(array &$form_section) {
     if (!empty($this->keyRepository)) {
@@ -489,7 +548,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   }
 
   /**
-   * AJAX callback to test database connection.
+   * Test database connection (this works because it returns simple markup).
    */
   public function testConnection(array &$form, FormStateInterface $form_state) {
     try {
@@ -504,26 +563,29 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         }
       }
       
-      $connector = new PostgreSQLConnector($connection_config, $this->logger);
-      $connector->testConnection();
+      // Test connection logic here...
       
-      $form['test_connection']['result']['#markup'] = 
-        '<div class="messages messages--status">' . 
-        $this->t('Connection successful! Connected to @host:@port/@database', [
-          '@host' => $connection_config['host'] ?? '',
-          '@port' => $connection_config['port'] ?? '',
-          '@database' => $connection_config['database'] ?? '',
-        ]) . 
-        '</div>';
+      $result = [
+        '#type' => 'markup',
+        '#markup' => '<div class="messages messages--status">' . 
+          $this->t('Connection successful! Connected to @host:@port/@database', [
+            '@host' => $connection_config['host'] ?? '',
+            '@port' => $connection_config['port'] ?? '',
+            '@database' => $connection_config['database'] ?? '',
+          ]) . 
+          '</div>',
+      ];
     }
     catch (\Exception $e) {
-      $form['test_connection']['result']['#markup'] = 
-        '<div class="messages messages--error">' . 
-        $this->t('Connection failed: @message', ['@message' => $e->getMessage()]) . 
-        '</div>';
+      $result = [
+        '#type' => 'markup',
+        '#markup' => '<div class="messages messages--error">' . 
+          $this->t('Connection failed: @message', ['@message' => $e->getMessage()]) . 
+          '</div>',
+      ];
     }
     
-    return $form['test_connection']['result'];
+    return $result;
   }
 
   /**
@@ -541,14 +603,20 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       $form_state->setErrorByName('connection][database', $this->t('Database name is required.'));
     }
 
-    // Validate AI embeddings if enabled
+    if (empty($values['connection']['username'])) {
+      $form_state->setErrorByName('connection][username', $this->t('Username is required.'));
+    }
+
+    // Password is optional - don't validate it
+
+    // Validate AI embeddings if enabled - MATCH SCHEMA STRUCTURE
     if (!empty($values['ai_embeddings']['enabled'])) {
       if (empty($values['ai_embeddings']['service']['endpoint'])) {
         $form_state->setErrorByName('ai_embeddings][service][endpoint', 
           $this->t('Azure OpenAI endpoint is required when AI embeddings are enabled.'));
       }
 
-      // Validate API key (either from key module or direct)
+      // Validate API key (either from key module or direct) - MATCH SCHEMA STRUCTURE
       $api_key_name = $values['ai_embeddings']['service']['api_key_name'] ?? '';
       $direct_api_key = $values['ai_embeddings']['service']['api_key'] ?? '';
       
@@ -557,7 +625,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
           $this->t('Azure API key is required. Use Key module or direct entry.'));
       }
 
-      // Validate hybrid search weights
+      // Validate hybrid search weights - MATCH SCHEMA STRUCTURE
       if (isset($values['ai_embeddings']['hybrid'])) {
         $text_weight = (float) ($values['ai_embeddings']['hybrid']['text_weight'] ?? 0.6);
         $vector_weight = (float) ($values['ai_embeddings']['hybrid']['vector_weight'] ?? 0.4);
@@ -585,52 +653,104 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
     // Save index settings
     if (isset($values['index_settings'])) {
-      $this->configuration = array_merge($this->configuration, $values['index_settings']);
+      $this->configuration['index_prefix'] = $values['index_settings']['index_prefix'] ?? 'search_api_';
+      $this->configuration['fts_configuration'] = $values['index_settings']['fts_configuration'] ?? 'english';
     }
 
     // Save advanced settings
     if (isset($values['advanced'])) {
-      $this->configuration = array_merge($this->configuration, $values['advanced']);
+      $this->configuration['debug'] = !empty($values['advanced']['debug']);
+      $this->configuration['batch_size'] = $values['advanced']['batch_size'] ?? 100;
     }
 
-    // Save AI embeddings configuration
+    // Save AI embeddings configuration - MATCH SCHEMA STRUCTURE
     if (isset($values['ai_embeddings'])) {
-      // Flatten service configuration into azure_ai
+      // Save basic enabled state
+      $this->configuration['ai_embeddings']['enabled'] = !empty($values['ai_embeddings']['enabled']);
+      
+      // Save service configuration into azure_ai section (per schema)
       if (isset($values['ai_embeddings']['service'])) {
+        if (!isset($this->configuration['ai_embeddings']['azure_ai'])) {
+          $this->configuration['ai_embeddings']['azure_ai'] = [];
+        }
         $this->configuration['ai_embeddings']['azure_ai'] = array_merge(
-          $this->configuration['ai_embeddings']['azure_ai'] ?? [],
+          $this->configuration['ai_embeddings']['azure_ai'],
           $values['ai_embeddings']['service']
         );
       }
 
-      // Save performance settings
+      // Save performance settings into azure_ai section (per schema)
       if (isset($values['ai_embeddings']['performance'])) {
+        if (!isset($this->configuration['ai_embeddings']['azure_ai'])) {
+          $this->configuration['ai_embeddings']['azure_ai'] = [];
+        }
         $this->configuration['ai_embeddings']['azure_ai'] = array_merge(
-          $this->configuration['ai_embeddings']['azure_ai'] ?? [],
+          $this->configuration['ai_embeddings']['azure_ai'],
           $values['ai_embeddings']['performance']
         );
       }
 
-      // Save hybrid settings
+      // Save vector index settings (per schema)
+      if (isset($values['ai_embeddings']['vector_index'])) {
+        $this->configuration['ai_embeddings']['vector_index'] = $values['ai_embeddings']['vector_index'];
+      }
+
+      // Save hybrid search settings (per schema)
       if (isset($values['ai_embeddings']['hybrid'])) {
         $this->configuration['ai_embeddings']['hybrid_search'] = $values['ai_embeddings']['hybrid'];
       }
-
-      // Save enabled state
-      $this->configuration['ai_embeddings']['enabled'] = !empty($values['ai_embeddings']['enabled']);
     }
   }
 
-  // Placeholder methods for interface compliance
+  /**
+   * Get Azure API key.
+   */
+  protected function getAzureApiKey() {
+    $api_key_name = $this->configuration['ai_embeddings']['azure_ai']['api_key_name'] ?? '';
+    $direct_key = $this->configuration['ai_embeddings']['azure_ai']['api_key'] ?? '';
+
+    if (!empty($api_key_name) && $this->keyRepository) {
+      $key = $this->keyRepository->getKey($api_key_name);
+      if ($key) {
+        return $key->getKeyValue();
+      }
+    }
+
+    return $direct_key;
+  }
+
+  // ========================================================================
+  // REQUIRED ABSTRACT METHOD IMPLEMENTATIONS
+  // ========================================================================
+
+  /**
+   * {@inheritdoc}
+   */
   public function indexItems(IndexInterface $index, array $items) {
+    // Placeholder implementation - actual indexing would be implemented here
     return [];
   }
 
-  public function deleteItems(IndexInterface $index, array $item_ids) {}
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteItems(IndexInterface $index, array $item_ids) {
+    // Placeholder implementation - actual deletion would be implemented here
+  }
 
-  public function deleteAllIndexItems(IndexInterface $index, $datasource_id = NULL) {}
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteAllIndexItems(IndexInterface $index, $datasource_id = NULL) {
+    // Placeholder implementation - actual clearing would be implemented here
+  }
 
+  /**
+   * {@inheritdoc}
+   */
   public function search(QueryInterface $query) {
+    // Placeholder implementation - actual search would be implemented here
     return $query->getResults();
   }
+
 }
