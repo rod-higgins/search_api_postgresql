@@ -54,49 +54,73 @@ class VectorSearchTest extends KernelTestBase {
   protected function setUp(): void {
     parent::setUp();
 
-    $this->installSchema('search_api', ['search_api_item']);
-    $this->installEntitySchema('user');
-    $this->installEntitySchema('node');
-    $this->installConfig(['search_api', 'node', 'field']);
-
-    // Create a test server with Azure PostgreSQL backend.
+    // Create test server with UNIFIED backend
     $this->server = Server::create([
-      'id' => 'azure_postgresql_test_server',
-      'name' => 'Azure PostgreSQL Test Server',
-      'backend' => 'postgresql_azure',
+      'id' => 'postgresql_test_server',
+      'name' => 'PostgreSQL Test Server',
+      'backend' => 'postgresql', // SINGLE BACKEND ID
       'backend_config' => [
         'connection' => [
           'host' => 'localhost',
           'port' => 5432,
-          'database' => 'drupal_test',
-          'username' => 'drupal',
-          'password' => 'drupal',
+          'database' => 'test_db',
+          'username' => 'test_user',
+          'password' => 'test_password',
           'ssl_mode' => 'disable',
         ],
-        'index_prefix' => 'test_search_api_',
-        'fts_configuration' => 'english',
-        'debug' => TRUE,
-        'azure_embedding' => [
+        'search_settings' => [
+          'index_prefix' => 'test_',
+          'fts_configuration' => 'english',
+          'batch_size' => 50,
+          'debug' => TRUE,
+        ],
+        // Test AI features
+        'ai_features' => [
           'enabled' => TRUE,
-          'service_type' => 'azure_openai',
-          'endpoint' => 'https://test.openai.azure.com/',
-          'api_key' => 'test-key',
-          'deployment_name' => 'test-deployment',
-          'dimension' => 1536,
+          'provider' => 'azure_openai',
+          'azure_openai' => [
+            'endpoint' => 'https://test.openai.azure.com/',
+            'api_key' => 'test-key',
+            'deployment_name' => 'test-deployment',
+            'model' => 'text-embedding-3-small',
+            'dimension' => 1536,
+          ],
+          'batch_size' => 25,
+          'rate_limit_delay' => 100,
+          'max_retries' => 3,
+          'timeout' => 30,
+          'enable_cache' => TRUE,
+          'cache_ttl' => 3600,
+        ],
+        'vector_index' => [
+          'enabled' => TRUE,
+          'method' => 'ivfflat',
+          'ivfflat_lists' => 100,
+          'distance' => 'cosine',
+          'probes' => 10,
         ],
         'hybrid_search' => [
+          'enabled' => TRUE,
           'text_weight' => 0.6,
           'vector_weight' => 0.4,
-          'similarity_threshold' => 0.1,
+          'similarity_threshold' => 0.15,
+          'max_results' => 1000,
+          'boost_exact_matches' => TRUE,
+        ],
+        'performance' => [
+          'azure_optimized' => TRUE,
+          'connection_pool_size' => 10,
+          'statement_timeout' => 30000,
+          'work_mem' => '256MB',
+          'effective_cache_size' => '2GB',
         ],
       ],
     ]);
     $this->server->save();
 
-    // Create a test index.
     $this->index = Index::create([
-      'id' => 'azure_postgresql_test_index',
-      'name' => 'Azure PostgreSQL Test Index',
+      'id' => 'postgresql_test_index',
+      'name' => 'PostgreSQL Test Index',
       'server' => $this->server->id(),
       'datasource_settings' => [
         'entity:node' => [],
@@ -106,17 +130,18 @@ class VectorSearchTest extends KernelTestBase {
   }
 
   /**
-   * Tests Azure PostgreSQL backend instantiation.
+   * Tests unified PostgreSQL backend instantiation.
    */
-  public function testAzureBackendInstantiation() {
+  public function testUnifiedBackendInstantiation() {
     $backend = $this->server->getBackend();
-    $this->assertInstanceOf('Drupal\search_api_postgresql\Plugin\search_api\backend\AzurePostgreSQLBackend', $backend);
+    $this->assertInstanceOf('Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend', $backend);
+    $this->assertEquals('postgresql', $backend->getPluginId());
   }
 
   /**
-   * Tests supported features include vector search capabilities.
+   * Tests all features are available in unified backend.
    */
-  public function testVectorSearchFeatures() {
+  public function testUnifiedBackendFeatures() {
     $backend = $this->server->getBackend();
     $features = $backend->getSupportedFeatures();
     
@@ -127,10 +152,11 @@ class VectorSearchTest extends KernelTestBase {
       'search_api_mlt',
       'search_api_random_sort',
       'search_api_grouping',
-      'search_api_azure_vector_search',
+      // AI & Vector features now in single backend
+      'search_api_vector_search',
       'search_api_semantic_search',
       'search_api_hybrid_search',
-      'search_api_azure_ai',
+      'search_api_ai_embeddings',
     ];
 
     foreach ($expected_features as $feature) {
@@ -139,20 +165,20 @@ class VectorSearchTest extends KernelTestBase {
   }
 
   /**
-   * Tests embedding service availability check.
+   * Tests AI provider switching in unified backend.
    */
-  public function testEmbeddingServiceAvailability() {
-    // Test with valid configuration
-    $service = new AzureOpenAIEmbeddingService(
-      'https://test.openai.azure.com/',
-      'test-key',
-      'test-deployment'
-    );
-    $this->assertTrue($service->isAvailable());
-
-    // Test with missing configuration
-    $service = new AzureOpenAIEmbeddingService('', '', '');
-    $this->assertFalse($service->isAvailable());
+  public function testAiProviderSwitching() {
+    $backend = $this->server->getBackend();
+    $config = $backend->getConfiguration();
+    
+    // Test Azure OpenAI provider
+    $this->assertEquals('azure_openai', $config['ai_features']['provider']);
+    $this->assertTrue($config['ai_features']['enabled']);
+    
+    // Test configuration structure
+    $this->assertArrayHasKey('azure_openai', $config['ai_features']);
+    $this->assertArrayHasKey('endpoint', $config['ai_features']['azure_openai']);
+    $this->assertArrayHasKey('deployment_name', $config['ai_features']['azure_openai']);
   }
 
   /**

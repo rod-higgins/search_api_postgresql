@@ -63,40 +63,107 @@ class ConfigurationValidationService {
    * @return array
    *   Validation results with 'errors' and 'warnings' arrays.
    */
-  public function validateServerConfiguration(ServerInterface $server) {
-    $errors = [];
-    $warnings = [];
-    $backend = $server->getBackend();
-    $config = $backend->getConfiguration();
+  /**
+ * Validates a server's configuration.
+ *
+ * @param \Drupal\search_api\ServerInterface $server
+ *   The server to validate.
+ *
+ * @return array
+ *   Validation results with 'errors' and 'warnings' arrays.
+ */
+public function validateServerConfiguration(ServerInterface $server) {
+  $errors = [];
+  $warnings = [];
+  $backend = $server->getBackend();
+  $config = $backend->getConfiguration();
 
-    // Check if it's a PostgreSQL backend - now includes all three backends
-    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure', 'postgresql_vector'])) {
-      $errors[] = 'Server is not using a PostgreSQL backend.';
-      return ['errors' => $errors, 'warnings' => $warnings];
-    }
+  // Check if it's a PostgreSQL backend - NOW ONLY ONE BACKEND
+  if ($backend->getPluginId() !== 'postgresql') {
+    $errors[] = 'Server is not using the PostgreSQL backend.';
+    return ['errors' => $errors, 'warnings' => $warnings];
+  }
 
-    // Validate database connection
-    $db_validation = $this->validateDatabaseConnection($config);
-    $errors = array_merge($errors, $db_validation['errors']);
-    $warnings = array_merge($warnings, $db_validation['warnings']);
+  // Validate database connection
+  $db_validation = $this->validateDatabaseConnection($config);
+  $errors = array_merge($errors, $db_validation['errors']);
+  $warnings = array_merge($warnings, $db_validation['warnings']);
 
-    // Validate key storage
-    $key_validation = $this->validateKeyStorage($config);
-    $errors = array_merge($errors, $key_validation['errors']);
-    $warnings = array_merge($warnings, $key_validation['warnings']);
+  // Validate key storage
+  $key_validation = $this->validateKeyStorage($config);
+  $errors = array_merge($errors, $key_validation['errors']);
+  $warnings = array_merge($warnings, $key_validation['warnings']);
 
-    // Validate AI embeddings configuration
-    if ($this->isAiEmbeddingsEnabled($config)) {
-      $ai_validation = $this->validateAiEmbeddingsConfiguration($config);
-      $errors = array_merge($errors, $ai_validation['errors']);
-      $warnings = array_merge($warnings, $ai_validation['warnings']);
-    }
+  // Validate AI features configuration (NEW UNIFIED STRUCTURE)
+  if ($this->isAiFeaturesEnabled($config)) {
+    $ai_validation = $this->validateAiFeaturesConfiguration($config);
+    $errors = array_merge($errors, $ai_validation['errors']);
+    $warnings = array_merge($warnings, $ai_validation['warnings']);
+  }
 
-    // Validate vector search configuration
-    if ($this->isVectorSearchEnabled($config)) {
-      $vector_validation = $this->validateVectorSearchConfiguration($config);
-      $errors = array_merge($errors, $vector_validation['errors']);
-      $warnings = array_merge($warnings, $vector_validation['warnings']);
+  return ['errors' => $errors, 'warnings' => $warnings];
+}
+
+/**
+ * Check if AI features are enabled (NEW METHOD).
+ */
+private function isAiFeaturesEnabled(array $config) {
+  return !empty($config['ai_features']['enabled']);
+}
+
+/**
+ * Validate AI features configuration (REPLACES OLD METHODS).
+ */
+private function validateAiFeaturesConfiguration(array $config) {
+  $errors = [];
+  $warnings = [];
+  
+  $ai_config = $config['ai_features'] ?? [];
+  $provider = $ai_config['provider'] ?? '';
+  
+  if (empty($provider)) {
+    $errors[] = 'AI provider must be selected when AI features are enabled.';
+    return ['errors' => $errors, 'warnings' => $warnings];
+  }
+
+  // Validate provider-specific configuration
+  switch ($provider) {
+    case 'openai':
+      $provider_config = $ai_config['openai'] ?? [];
+      if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
+        $errors[] = 'OpenAI API key is required.';
+      }
+      break;
+
+    case 'azure_openai':
+      $provider_config = $ai_config['azure_openai'] ?? [];
+      if (empty($provider_config['endpoint'])) {
+        $errors[] = 'Azure OpenAI endpoint is required.';
+      }
+      if (empty($provider_config['deployment_name'])) {
+        $errors[] = 'Azure OpenAI deployment name is required.';
+      }
+      if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
+        $errors[] = 'Azure OpenAI API key is required.';
+      }
+      break;
+
+    case 'huggingface':
+      $provider_config = $ai_config['huggingface'] ?? [];
+      if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
+        $errors[] = 'Hugging Face API key is required.';
+      }
+      break;
+
+    case 'local':
+      $provider_config = $ai_config['local'] ?? [];
+      if (empty($provider_config['model_path'])) {
+        $errors[] = 'Local model path is required.';
+      }
+      break;
+
+      default:
+        $errors[] = "Unknown AI provider: {$provider}";
     }
 
     return ['errors' => $errors, 'warnings' => $warnings];

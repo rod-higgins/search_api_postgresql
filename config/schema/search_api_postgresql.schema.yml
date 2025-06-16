@@ -1,6 +1,8 @@
+# config/schema/search_api_postgresql.schema.yml
+
 search_api.backend.plugin.postgresql:
   type: config_object
-  label: 'PostgreSQL search backend'
+  label: 'PostgreSQL search backend with AI features'
   mapping:
     connection:
       type: mapping
@@ -23,7 +25,7 @@ search_api.backend.plugin.postgresql:
           label: 'Password (optional)'
         password_key:
           type: string
-          label: 'Password key reference (Key module) - optional'
+          label: 'Password key reference (Key module)'
         ssl_mode:
           type: string
           label: 'SSL Mode'
@@ -35,35 +37,66 @@ search_api.backend.plugin.postgresql:
           label: 'Additional PDO options'
           sequence:
             type: string
-    index_prefix:
-      type: string
-      label: 'Index table prefix'
-    fts_configuration:
-      type: string
-      label: 'PostgreSQL FTS configuration'
-    debug:
-      type: boolean
-      label: 'Debug mode'
-    batch_size:
-      type: integer
-      label: 'Indexing batch size'
-    ai_embeddings:
+    
+    search_settings:
       type: mapping
-      label: 'AI Embeddings configuration (optional)'
+      label: 'Search settings'
+      mapping:
+        index_prefix:
+          type: string
+          label: 'Index table prefix'
+        fts_configuration:
+          type: string
+          label: 'PostgreSQL FTS configuration'
+        batch_size:
+          type: integer
+          label: 'Indexing batch size'
+        debug:
+          type: boolean
+          label: 'Debug mode'
+    
+    ai_features:
+      type: mapping
+      label: 'AI Features configuration'
       mapping:
         enabled:
           type: boolean
-          label: 'Enable AI embeddings'
-        azure_ai:
+          label: 'Enable AI features'
+        provider:
+          type: string
+          label: 'AI provider'
+        openai:
           type: mapping
-          label: 'Azure AI configuration'
+          label: 'OpenAI configuration'
+          mapping:
+            api_key:
+              type: string
+              label: 'API key (deprecated)'
+            api_key_name:
+              type: string
+              label: 'API key name (Key module)'
+            model:
+              type: string
+              label: 'Embedding model'
+            organization:
+              type: string
+              label: 'Organization'
+            base_url:
+              type: string
+              label: 'Base URL'
+            dimension:
+              type: integer
+              label: 'Vector dimension'
+        azure_openai:
+          type: mapping
+          label: 'Azure OpenAI configuration'
           mapping:
             endpoint:
               type: string
               label: 'Azure OpenAI endpoint'
             api_key:
               type: string
-              label: 'API key (deprecated - use api_key_name)'
+              label: 'API key (deprecated)'
             api_key_name:
               type: string
               label: 'API key name (Key module)'
@@ -76,119 +109,83 @@ search_api.backend.plugin.postgresql:
             dimension:
               type: integer
               label: 'Vector dimension'
-
-# Azure PostgreSQL backend configuration
-search_api.backend.plugin.postgresql_azure:
-  type: config_object
-  label: 'Azure PostgreSQL search backend'
-  mapping:
-    connection:
-      type: mapping
-      label: 'Database connection'
-      mapping:
-        host:
-          type: string
-          label: 'Host'
-        port:
-          type: integer
-          label: 'Port'
-        database:
-          type: string
-          label: 'Database name'
-        username:
-          type: string
-          label: 'Username'
-        password:
-          type: string
-          label: 'Password (optional)'
-        password_key:
-          type: string
-          label: 'Password key reference (Key module) - optional'
-        ssl_mode:
-          type: string
-          label: 'SSL Mode (forced to require for Azure)'
-        ssl_ca:
-          type: string
-          label: 'Path to SSL certificate'
-        options:
-          type: sequence
-          label: 'Additional PDO options'
-          sequence:
-            type: string
-    index_prefix:
-      type: string
-      label: 'Index table prefix'
-    fts_configuration:
-      type: string
-      label: 'PostgreSQL FTS configuration'
-    debug:
-      type: boolean
-      label: 'Debug mode'
-    batch_size:
-      type: integer
-      label: 'Indexing batch size'
-    azure_embedding:
-      type: mapping
-      label: 'Azure embedding configuration'
-      mapping:
-        enabled:
-          type: boolean
-          label: 'Enable Azure embeddings'
-        endpoint:
-          type: string
-          label: 'Azure OpenAI endpoint'
-        api_key:
-          type: string
-          label: 'API key (deprecated - use api_key_name)'
-        api_key_name:
-          type: string
-          label: 'API key name (Key module)'
-        deployment_name:
-          type: string
-          label: 'Deployment name'
-        model:
-          type: string
-          label: 'Embedding model'
-        dimension:
-          type: integer
-          label: 'Vector dimension'
+            api_version:
+              type: string
+              label: 'API version'
+        huggingface:
+          type: mapping
+          label: 'Hugging Face configuration'
+          mapping:
+            api_key:
+              type: string
+              label: 'API key (deprecated)'
+            api_key_name:
+              type: string
+              label: 'API key name (Key module)'
+            model:
+              type: string
+              label: 'Model name'
+            dimension:
+              type: integer
+              label: 'Vector dimension'
+        local:
+          type: mapping
+          label: 'Local model configuration'
+          mapping:
+            model_path:
+              type: string
+              label: 'Model path'
+            model_type:
+              type: string
+              label: 'Model type'
+            dimension:
+              type: integer
+              label: 'Vector dimension'
         batch_size:
           type: integer
-          label: 'Batch size for embeddings'
+          label: 'Batch size'
         rate_limit_delay:
           type: integer
-          label: 'Rate limit delay (ms)'
+          label: 'Rate limit delay'
         max_retries:
           type: integer
-          label: 'Maximum retries'
+          label: 'Max retries'
         timeout:
           type: integer
-          label: 'Request timeout (seconds)'
+          label: 'Timeout'
         enable_cache:
           type: boolean
-          label: 'Enable embedding cache'
+          label: 'Enable cache'
         cache_ttl:
           type: integer
-          label: 'Cache TTL (seconds)'
+          label: 'Cache TTL'
+    
     vector_index:
       type: mapping
       label: 'Vector index configuration'
       mapping:
+        enabled:
+          type: boolean
+          label: 'Enable vector indexing'
         method:
           type: string
-          label: 'Index method (ivfflat, hnsw)'
+          label: 'Index method'
         ivfflat_lists:
           type: integer
-          label: 'IVFFlat lists parameter'
+          label: 'IVFFlat lists'
         hnsw_m:
           type: integer
           label: 'HNSW M parameter'
         hnsw_ef_construction:
           type: integer
-          label: 'HNSW ef_construction parameter'
-        hnsw_ef_search:
+          label: 'HNSW ef_construction'
+        distance:
+          type: string
+          label: 'Distance metric'
+        probes:
           type: integer
-          label: 'HNSW ef_search parameter'
+          label: 'Probes'
+    
     hybrid_search:
       type: mapping
       label: 'Hybrid search configuration'
@@ -198,127 +195,42 @@ search_api.backend.plugin.postgresql_azure:
           label: 'Enable hybrid search'
         text_weight:
           type: float
-          label: 'Text search weight (0.0-1.0)'
+          label: 'Text search weight'
         vector_weight:
           type: float
-          label: 'Vector search weight (0.0-1.0)'
+          label: 'Vector search weight'
         similarity_threshold:
           type: float
-          label: 'Minimum similarity threshold'
-        rerank:
+          label: 'Similarity threshold'
+        max_results:
+          type: integer
+          label: 'Max results'
+        boost_exact_matches:
           type: boolean
-          label: 'Enable result reranking'
-
-# Vector PostgreSQL backend configuration
-search_api.backend.plugin.postgresql_vector:
-  type: config_object
-  label: 'PostgreSQL Vector search backend'
-  mapping:
-    connection:
+          label: 'Boost exact matches'
+    
+    performance:
       type: mapping
-      label: 'Database connection'
+      label: 'Performance configuration'
       mapping:
-        host:
-          type: string
-          label: 'Host'
-        port:
-          type: integer
-          label: 'Port'
-        database:
-          type: string
-          label: 'Database name'
-        username:
-          type: string
-          label: 'Username'
-        password:
-          type: string
-          label: 'Password (optional)'
-        password_key:
-          type: string
-          label: 'Password key reference (Key module) - optional'
-        ssl_mode:
-          type: string
-          label: 'SSL Mode'
-        ssl_ca:
-          type: string
-          label: 'Path to SSL certificate'
-        options:
-          type: sequence
-          label: 'Additional PDO options'
-          sequence:
-            type: string
-    index_prefix:
-      type: string
-      label: 'Index table prefix'
-    fts_configuration:
-      type: string
-      label: 'PostgreSQL FTS configuration'
-    debug:
-      type: boolean
-      label: 'Debug mode'
-    batch_size:
-      type: integer
-      label: 'Indexing batch size'
-    vector_search:
-      type: mapping
-      label: 'Vector search configuration'
-      mapping:
-        enabled:
+        azure_optimized:
           type: boolean
-          label: 'Enable vector search'
-        provider:
-          type: string
-          label: 'Vector provider (openai, huggingface, etc.)'
-        api_key:
-          type: string
-          label: 'API key (deprecated - use api_key_name)'
-        api_key_name:
-          type: string
-          label: 'API key name (Key module)'
-        model:
-          type: string
-          label: 'Embedding model'
-        dimension:
+          label: 'Azure optimized'
+        connection_pool_size:
           type: integer
-          label: 'Vector dimension'
-        api_base:
+          label: 'Connection pool size'
+        statement_timeout:
+          type: integer
+          label: 'Statement timeout'
+        work_mem:
           type: string
-          label: 'API base URL (for custom endpoints)'
-    vector_index:
-      type: mapping
-      label: 'Vector index configuration'
-      mapping:
-        method:
+          label: 'Work memory'
+        effective_cache_size:
           type: string
-          label: 'Index method (ivfflat, hnsw)'
-        ivfflat_lists:
-          type: integer
-          label: 'IVFFlat lists parameter'
-        hnsw_m:
-          type: integer
-          label: 'HNSW M parameter'
-        hnsw_ef_construction:
-          type: integer
-          label: 'HNSW ef_construction parameter'
-        hnsw_ef_search:
-          type: integer
-          label: 'HNSW ef_search parameter'
-    hybrid_search:
-      type: mapping
-      label: 'Hybrid search configuration'
-      mapping:
-        enabled:
-          type: boolean
-          label: 'Enable hybrid search'
-        text_weight:
-          type: float
-          label: 'Text search weight (0.0-1.0)'
-        vector_weight:
-          type: float
-          label: 'Vector search weight (0.0-1.0)'
-        similarity_threshold:
-          type: float
-          label: 'Minimum similarity threshold'
-        rerank:
-          type: boolean
-          label: 'Enable result reranking'
+          label: 'Effective cache size'
+        shared_buffers:
+          type: string
+          label: 'Shared buffers'
+        maintenance_work_mem:
+          type: string
+          label: 'Maintenance work memory'
