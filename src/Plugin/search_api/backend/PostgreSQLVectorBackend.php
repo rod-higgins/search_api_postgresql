@@ -25,7 +25,7 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
   public function defaultConfiguration() {
     $config = parent::defaultConfiguration();
     
-    // Remove the Azure-specific ai_embeddings config
+    // Remove the standard ai_embeddings config
     unset($config['ai_embeddings']);
     
     // Add flexible vector search configuration
@@ -80,19 +80,15 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
    * {@inheritdoc}
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
-    \Drupal::logger('search_api_postgresql')->notice('buildConfigurationForm called for @class', [
-      '@class' => static::class
-    ]);
-
     try {
-      // Get base form from parent but remove AI embeddings
+      // Get base form from parent but remove ai_embeddings
       $form = parent::buildConfigurationForm($form, $form_state);
       unset($form['ai_embeddings']);
 
       // Ensure we have default configuration
       $this->configuration = $this->configuration + $this->defaultConfiguration();
 
-      // Vector search configuration
+      // Vector Search Configuration
       $form['vector_search'] = [
         '#type' => 'details',
         '#title' => $this->t('Vector Search Configuration'),
@@ -107,7 +103,7 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         '#description' => $this->t('Enable semantic vector search capabilities. Requires pgvector extension.'),
       ];
 
-      // Provider selection - NO AJAX, uses form states
+      // Provider Selection
       $form['vector_search']['provider'] = [
         '#type' => 'select',
         '#title' => $this->t('Embedding Provider'),
@@ -125,10 +121,10 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         ],
       ];
 
-      // Provider-specific settings - MATCH SCHEMA: direct under vector_search, not in wrapper
+      // Add all provider-specific settings
       $this->addAllProviderSettings($form['vector_search']);
 
-      // Common vector settings
+      // Common Vector Settings
       $form['vector_search']['common'] = [
         '#type' => 'details',
         '#title' => $this->t('Common Settings'),
@@ -172,13 +168,13 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         '#title' => $this->t('Timeout (seconds)'),
         '#default_value' => $this->configuration['vector_search']['timeout'] ?? 30,
         '#min' => 5,
-        '#max' => 120,
-        '#description' => $this->t('Request timeout in seconds.'),
+        '#max' => 300,
+        '#description' => $this->t('Request timeout for API calls.'),
       ];
 
       $form['vector_search']['common']['enable_cache'] = [
         '#type' => 'checkbox',
-        '#title' => $this->t('Enable Embedding Cache'),
+        '#title' => $this->t('Enable Caching'),
         '#default_value' => $this->configuration['vector_search']['enable_cache'] ?? TRUE,
         '#description' => $this->t('Cache embedding results to improve performance.'),
       ];
@@ -187,7 +183,7 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         '#type' => 'number',
         '#title' => $this->t('Cache TTL (seconds)'),
         '#default_value' => $this->configuration['vector_search']['cache_ttl'] ?? 3600,
-        '#min' => 300,
+        '#min' => 60,
         '#max' => 86400,
         '#description' => $this->t('How long to cache embedding results.'),
         '#states' => [
@@ -197,10 +193,10 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         ],
       ];
 
-      // Vector index configuration
+      // Vector Index Configuration
       $form['vector_index'] = [
         '#type' => 'details',
-        '#title' => $this->t('Vector Index Configuration'),
+        '#title' => $this->t('Vector Index Settings'),
         '#open' => FALSE,
         '#states' => [
           'visible' => [
@@ -213,11 +209,11 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         '#type' => 'select',
         '#title' => $this->t('Index Method'),
         '#options' => [
-          'ivfflat' => $this->t('IVFFlat (Faster search, more memory)'),
-          'hnsw' => $this->t('HNSW (Hierarchical NSW)'),
+          'ivfflat' => $this->t('IVFFlat (Fast, good for large datasets)'),
+          'hnsw' => $this->t('HNSW (More accurate, uses more memory)'),
         ],
         '#default_value' => $this->configuration['vector_index']['method'] ?? 'ivfflat',
-        '#description' => $this->t('Vector indexing method for pgvector.'),
+        '#description' => $this->t('Vector index algorithm to use.'),
       ];
 
       $form['vector_index']['lists'] = [
@@ -225,8 +221,8 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         '#title' => $this->t('Lists (IVFFlat only)'),
         '#default_value' => $this->configuration['vector_index']['lists'] ?? 100,
         '#min' => 1,
-        '#max' => 10000,
-        '#description' => $this->t('Number of cluster centroids for IVFFlat index.'),
+        '#max' => 32768,
+        '#description' => $this->t('Number of inverted lists for IVFFlat index.'),
         '#states' => [
           'visible' => [
             ':input[name="backend_config[vector_index][method]"]' => ['value' => 'ivfflat'],
@@ -240,7 +236,7 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         '#default_value' => $this->configuration['vector_index']['probes'] ?? 10,
         '#min' => 1,
         '#max' => 1000,
-        '#description' => $this->t('Number of lists to probe during search.'),
+        '#description' => $this->t('Number of probes for IVFFlat search.'),
         '#states' => [
           'visible' => [
             ':input[name="backend_config[vector_index][method]"]' => ['value' => 'ivfflat'],
@@ -252,18 +248,18 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         '#type' => 'select',
         '#title' => $this->t('Distance Function'),
         '#options' => [
-          'cosine' => $this->t('Cosine Distance'),
+          'cosine' => $this->t('Cosine Distance (recommended)'),
           'l2' => $this->t('Euclidean Distance (L2)'),
           'inner_product' => $this->t('Inner Product'),
         ],
         '#default_value' => $this->configuration['vector_index']['distance'] ?? 'cosine',
-        '#description' => $this->t('Distance function for vector comparisons.'),
+        '#description' => $this->t('Distance function for vector similarity.'),
       ];
 
-      // Hybrid search configuration
+      // Hybrid Search Configuration
       $form['hybrid_search'] = [
         '#type' => 'details',
-        '#title' => $this->t('Hybrid Search Configuration'),
+        '#title' => $this->t('Hybrid Search Settings'),
         '#open' => FALSE,
         '#states' => [
           'visible' => [
@@ -324,10 +320,6 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
         ],
       ];
 
-      \Drupal::logger('search_api_postgresql')->notice('Form built successfully with @count elements', [
-        '@count' => count($form)
-      ]);
-      
       return $form;
 
     } catch (\Exception $e) {
@@ -349,22 +341,24 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
   /**
    * Add all provider-specific settings with form states for visibility.
    */
-  protected function addAllProviderSettings(array &$form_section) {
-    // OpenAI Settings - MATCH SCHEMA: direct under vector_search, not under provider_settings
-    $form_section['openai'] = [
+  protected function addAllProviderSettings(array &$form) {
+    // OpenAI Provider Settings
+    $form['openai'] = [
       '#type' => 'details',
       '#title' => $this->t('OpenAI Configuration'),
       '#open' => TRUE,
       '#states' => [
         'visible' => [
+          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
           ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'openai'],
         ],
       ],
     ];
 
-    $this->addProviderApiKeyFields($form_section['openai'], 'openai');
+    // Add API key fields for OpenAI using the trait
+    $this->addApiKeyFields($form['openai'], 'vector_search][openai', 'vector_search.openai');
 
-    $form_section['openai']['model'] = [
+    $form['openai']['model'] = [
       '#type' => 'select',
       '#title' => $this->t('Model'),
       '#options' => [
@@ -376,111 +370,92 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
       '#description' => $this->t('OpenAI embedding model to use.'),
     ];
 
-    $form_section['openai']['organization'] = [
+    $form['openai']['organization'] = [
       '#type' => 'textfield',
-      '#title' => $this->t('Organization (Optional)'),
+      '#title' => $this->t('Organization ID (Optional)'),
       '#default_value' => $this->configuration['vector_search']['openai']['organization'] ?? '',
       '#description' => $this->t('Your OpenAI organization ID (optional).'),
     ];
 
-    $form_section['openai']['base_url'] = [
+    $form['openai']['base_url'] = [
       '#type' => 'url',
       '#title' => $this->t('Base URL'),
       '#default_value' => $this->configuration['vector_search']['openai']['base_url'] ?? 'https://api.openai.com/v1',
-      '#description' => $this->t('OpenAI API base URL. Change for Azure OpenAI or custom endpoints.'),
+      '#description' => $this->t('OpenAI API base URL (use default unless using a proxy).'),
     ];
 
-    // Hugging Face Settings - MATCH SCHEMA: direct under vector_search
-    $form_section['huggingface'] = [
+    // Hugging Face Provider Settings
+    $form['huggingface'] = [
       '#type' => 'details',
       '#title' => $this->t('Hugging Face Configuration'),
       '#open' => TRUE,
       '#states' => [
         'visible' => [
+          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
           ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'huggingface'],
         ],
       ],
     ];
 
-    $this->addProviderApiKeyFields($form_section['huggingface'], 'huggingface');
+    // Add API key fields for Hugging Face using the trait
+    $this->addApiKeyFields($form['huggingface'], 'vector_search][huggingface', 'vector_search.huggingface');
 
-    $form_section['huggingface']['model'] = [
+    $form['huggingface']['model'] = [
       '#type' => 'textfield',
-      '#title' => $this->t('Model Name'),
+      '#title' => $this->t('Model'),
       '#default_value' => $this->configuration['vector_search']['huggingface']['model'] ?? 'sentence-transformers/all-MiniLM-L6-v2',
-      '#description' => $this->t('Hugging Face model name (e.g., sentence-transformers/all-MiniLM-L6-v2).'),
+      '#description' => $this->t('Hugging Face model identifier (e.g., sentence-transformers/all-MiniLM-L6-v2).'),
     ];
 
-    // Local Model Settings - MATCH SCHEMA: direct under vector_search
-    $form_section['local'] = [
+    $form['huggingface']['dimension'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Vector Dimension'),
+      '#default_value' => $this->configuration['vector_search']['huggingface']['dimension'] ?? 384,
+      '#min' => 1,
+      '#max' => 4096,
+      '#description' => $this->t('Vector dimension for the selected model.'),
+    ];
+
+    // Local Provider Settings
+    $form['local'] = [
       '#type' => 'details',
       '#title' => $this->t('Local Model Configuration'),
       '#open' => TRUE,
       '#states' => [
         'visible' => [
+          ':input[name="backend_config[vector_search][enabled]"]' => ['checked' => TRUE],
           ':input[name="backend_config[vector_search][provider]"]' => ['value' => 'local'],
         ],
       ],
     ];
 
-    $form_section['local']['model_path'] = [
+    $form['local']['model_path'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Model Path'),
       '#default_value' => $this->configuration['vector_search']['local']['model_path'] ?? '',
-      '#description' => $this->t('Path to local embedding model.'),
+      '#description' => $this->t('Path to local model files (absolute path or relative to Drupal root).'),
     ];
 
-    $form_section['local']['model_type'] = [
+    $form['local']['model_type'] = [
       '#type' => 'select',
       '#title' => $this->t('Model Type'),
       '#options' => [
         'sentence_transformers' => $this->t('Sentence Transformers'),
-        'transformers' => $this->t('Hugging Face Transformers'),
-        'word2vec' => $this->t('Word2Vec'),
+        'tensorflow' => $this->t('TensorFlow'),
+        'pytorch' => $this->t('PyTorch'),
       ],
       '#default_value' => $this->configuration['vector_search']['local']['model_type'] ?? 'sentence_transformers',
-      '#description' => $this->t('Type of local model.'),
+      '#description' => $this->t('Type of local model framework.'),
     ];
-  }
 
-  /**
-   * Add API key fields for specific provider.
-   */
-  protected function addProviderApiKeyFields(array &$form_section, $provider) {
-    if (!empty($this->keyRepository)) {
-      // Get available keys
-      $keys = [];
-      foreach ($this->keyRepository->getKeys() as $key) {
-        $keys[$key->id()] = $key->label();
-      }
-
-      $form_section['api_key_name'] = [
-        '#type' => 'select',
-        '#title' => $this->t('API Key (Key Module)'),
-        '#options' => $keys,
-        '#empty_option' => $this->t('- Select a key or use direct entry below -'),
-        '#default_value' => $this->configuration['vector_search'][$provider]['api_key_name'] ?? '',
-        '#description' => $this->t('Select a key containing your @provider API key.', ['@provider' => ucfirst($provider)]),
-      ];
-
-      $form_section['api_key'] = [
-        '#type' => 'password',
-        '#title' => $this->t('Direct API Key (Fallback)'),
-        '#description' => $this->t('Direct API key entry. Only used if no key is selected above.'),
-        '#states' => [
-          'visible' => [
-            // FIXED: Match schema structure - no provider_settings nesting
-            ':input[name="backend_config[vector_search][' . $provider . '][api_key_name]"]' => ['value' => ''],
-          ],
-        ],
-      ];
-    } else {
-      $form_section['api_key'] = [
-        '#type' => 'password',
-        '#title' => $this->t('API Key'),
-        '#description' => $this->t('Your @provider API key. Using Key module is recommended for production.', ['@provider' => ucfirst($provider)]),
-      ];
-    }
+    $form['local']['dimension'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Vector Dimension'),
+      '#default_value' => $this->configuration['vector_search']['local']['dimension'] ?? 384,
+      '#min' => 1,
+      '#max' => 4096,
+      '#description' => $this->t('Vector dimension for the local model.'),
+    ];
   }
 
   /**
@@ -497,32 +472,48 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
       
       switch ($provider) {
         case 'openai':
-          // FIXED: Match schema structure - direct under vector_search
-          $api_key_name = $values['vector_search']['openai']['api_key_name'] ?? '';
-          $direct_api_key = $values['vector_search']['openai']['api_key'] ?? '';
+          $openai_config = $values['vector_search']['openai'] ?? [];
+          $api_key_name = $openai_config['api_key_name'] ?? '';
+          $api_key = $openai_config['api_key'] ?? '';
           
-          if (empty($api_key_name) && empty($direct_api_key)) {
+          if (empty($api_key_name) && empty($api_key)) {
             $form_state->setErrorByName('vector_search][openai][api_key', 
-              $this->t('OpenAI API key is required.'));
+              $this->t('OpenAI API key is required when using OpenAI provider.'));
+          }
+          
+          if (!empty($api_key_name) && !empty($api_key)) {
+            $form_state->setErrorByName('vector_search][openai][api_key', 
+              $this->t('Please use either a key reference OR direct API key, not both.'));
           }
           break;
 
         case 'huggingface':
-          // FIXED: Match schema structure - direct under vector_search
-          $api_key_name = $values['vector_search']['huggingface']['api_key_name'] ?? '';
-          $direct_api_key = $values['vector_search']['huggingface']['api_key'] ?? '';
+          $hf_config = $values['vector_search']['huggingface'] ?? [];
+          $api_key_name = $hf_config['api_key_name'] ?? '';
+          $api_key = $hf_config['api_key'] ?? '';
           
-          if (empty($api_key_name) && empty($direct_api_key)) {
+          if (empty($api_key_name) && empty($api_key)) {
             $form_state->setErrorByName('vector_search][huggingface][api_key', 
-              $this->t('Hugging Face API key is required.'));
+              $this->t('Hugging Face API key is required when using Hugging Face provider.'));
+          }
+          
+          if (!empty($api_key_name) && !empty($api_key)) {
+            $form_state->setErrorByName('vector_search][huggingface][api_key', 
+              $this->t('Please use either a key reference OR direct API key, not both.'));
+          }
+
+          if (empty($hf_config['model'])) {
+            $form_state->setErrorByName('vector_search][huggingface][model', 
+              $this->t('Model identifier is required for Hugging Face provider.'));
           }
           break;
 
         case 'local':
-          // FIXED: Match schema structure - direct under vector_search
-          if (empty($values['vector_search']['local']['model_path'])) {
+          $local_config = $values['vector_search']['local'] ?? [];
+          
+          if (empty($local_config['model_path'])) {
             $form_state->setErrorByName('vector_search][local][model_path', 
-              $this->t('Local model path is required.'));
+              $this->t('Model path is required for local provider.'));
           }
           break;
       }
@@ -550,19 +541,19 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
 
     $values = $form_state->getValues();
 
-    // Save vector search configuration - MATCH SCHEMA STRUCTURE
+    // Save vector search configuration
     if (isset($values['vector_search'])) {
       // Save basic settings
       $this->configuration['vector_search']['enabled'] = !empty($values['vector_search']['enabled']);
       $this->configuration['vector_search']['provider'] = $values['vector_search']['provider'];
 
-      // Save provider-specific settings - MATCH SCHEMA: direct under vector_search
+      // Save provider-specific settings
       $provider = $values['vector_search']['provider'];
       if (isset($values['vector_search'][$provider])) {
         $this->configuration['vector_search'][$provider] = $values['vector_search'][$provider];
       }
 
-      // Save common settings - MATCH SCHEMA: direct under vector_search
+      // Save common settings
       if (isset($values['vector_search']['common'])) {
         $common_settings = $values['vector_search']['common'];
         $this->configuration['vector_search']['batch_size'] = $common_settings['batch_size'] ?? 25;
@@ -587,6 +578,14 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
 
   /**
    * Get API key for the specified provider.
+   *
+   * @param string $provider
+   *   The provider name (openai, huggingface, etc.).
+   * @param array $config
+   *   Optional provider configuration.
+   *
+   * @return string
+   *   The API key.
    */
   protected function getApiKey($provider, $config = []) {
     if (empty($config)) {
@@ -596,14 +595,24 @@ class PostgreSQLVectorBackend extends PostgreSQLBackend {
     $api_key_name = $config['api_key_name'] ?? '';
     $direct_key = $config['api_key'] ?? '';
 
-    if (!empty($api_key_name) && $this->keyRepository) {
-      $key = $this->keyRepository->getKey($api_key_name);
-      if ($key) {
-        return $key->getKeyValue();
-      }
-    }
+    return $this->getSecureKey($api_key_name, $direct_key, ucfirst($provider) . ' API key', FALSE);
+  }
 
-    return $direct_key;
+  /**
+   * {@inheritdoc}
+   */
+  public function getSupportedFeatures() {
+    $features = parent::getSupportedFeatures();
+    
+    // Add vector search specific features
+    if (!empty($this->configuration['vector_search']['enabled'])) {
+      $features[] = 'semantic_search';
+      $features[] = 'vector_search';
+      $features[] = 'hybrid_search';
+      $features[] = 'multi_provider_embeddings';
+    }
+    
+    return $features;
   }
 
 }
