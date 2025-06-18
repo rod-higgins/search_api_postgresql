@@ -354,7 +354,7 @@ class BulkRegenerateForm extends FormBase {
     $ai_servers = [];
     foreach ($servers as $server) {
       $backend = $server->getBackend();
-      if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure', 'postgresql_vector'])) {
+      if (!in_array($backend->getPluginId(), ['postgresql'])) {
         continue;
       }
 

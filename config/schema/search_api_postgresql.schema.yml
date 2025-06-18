@@ -1,4 +1,6 @@
-# Unified PostgreSQL backend configuration
+# Updated search_api_postgresql.schema.yml
+# Unified PostgreSQL backend configuration matching PostgreSQLBackend.php
+
 search_api.backend.plugin.postgresql:
   type: config_object
   label: 'PostgreSQL search backend with AI vector search'
@@ -43,10 +45,10 @@ search_api.backend.plugin.postgresql:
           label: 'Username'
         password:
           type: string
-          label: 'Password (optional)'
+          label: 'Password (optional for passwordless auth)'
         password_key:
           type: string
-          label: 'Password key reference (Key module) - optional'
+          label: 'Password key reference (Key module)'
         ssl_mode:
           type: string
           label: 'SSL Mode'
@@ -73,7 +75,7 @@ search_api.backend.plugin.postgresql:
       type: integer
       label: 'Indexing batch size'
     
-    # AI Embeddings configuration
+    # AI Embeddings configuration (COMPLETE)
     ai_embeddings:
       type: mapping
       label: 'AI Embeddings configuration'
@@ -84,6 +86,8 @@ search_api.backend.plugin.postgresql:
         provider:
           type: string
           label: 'AI provider (azure or openai)'
+        
+        # Azure OpenAI configuration
         azure:
           type: mapping
           label: 'Azure OpenAI configuration'
@@ -93,7 +97,7 @@ search_api.backend.plugin.postgresql:
               label: 'Azure OpenAI endpoint'
             api_key:
               type: string
-              label: 'Azure OpenAI API key'
+              label: 'Azure OpenAI API key (direct)'
             api_key_name:
               type: string
               label: 'Azure OpenAI API key name (Key module)'
@@ -109,13 +113,15 @@ search_api.backend.plugin.postgresql:
             dimension:
               type: integer
               label: 'Vector dimension'
+        
+        # OpenAI configuration
         openai:
           type: mapping
           label: 'OpenAI configuration'
           mapping:
             api_key:
               type: string
-              label: 'OpenAI API key'
+              label: 'OpenAI API key (direct)'
             api_key_name:
               type: string
               label: 'OpenAI API key name (Key module)'
@@ -124,13 +130,15 @@ search_api.backend.plugin.postgresql:
               label: 'Embedding model'
             organization:
               type: string
-              label: 'OpenAI organization'
+              label: 'OpenAI organization ID'
             base_url:
               type: string
               label: 'OpenAI base URL'
             dimension:
               type: integer
               label: 'Vector dimension'
+        
+        # Common AI settings
         batch_size:
           type: integer
           label: 'AI batch size'
@@ -150,25 +158,25 @@ search_api.backend.plugin.postgresql:
           type: integer
           label: 'Cache TTL (seconds)'
     
-    # Vector Index configuration
+    # Vector Index configuration (MISSING from original)
     vector_index:
       type: mapping
       label: 'Vector index configuration'
       mapping:
         method:
           type: string
-          label: 'Vector index method'
+          label: 'Index method (ivfflat, hnsw)'
         lists:
           type: integer
-          label: 'Number of lists (for IVFFlat)'
+          label: 'Number of lists for IVFFLAT'
         probes:
           type: integer
-          label: 'Number of probes'
+          label: 'Number of probes for IVFFLAT'
         distance:
           type: string
-          label: 'Distance function'
+          label: 'Distance metric (cosine, l2, inner_product)'
     
-    # Hybrid Search configuration
+    # Hybrid Search configuration (MISSING from original)
     hybrid_search:
       type: mapping
       label: 'Hybrid search configuration'
@@ -178,18 +186,18 @@ search_api.backend.plugin.postgresql:
           label: 'Enable hybrid search'
         text_weight:
           type: float
-          label: 'Text search weight'
+          label: 'Text search weight (0.0-1.0)'
         vector_weight:
           type: float
-          label: 'Vector search weight'
+          label: 'Vector search weight (0.0-1.0)'
         similarity_threshold:
           type: float
-          label: 'Similarity threshold'
+          label: 'Minimum similarity threshold'
         max_results:
           type: integer
-          label: 'Maximum results'
+          label: 'Maximum results to return'
     
-    # Performance configuration
+    # Performance configuration (MISSING from original)
     performance:
       type: mapping
       label: 'Performance configuration'
@@ -202,33 +210,16 @@ search_api.backend.plugin.postgresql:
           label: 'Statement timeout (ms)'
         work_mem:
           type: string
-          label: 'Work memory setting'
+          label: 'PostgreSQL work_mem setting'
         effective_cache_size:
           type: string
-          label: 'Effective cache size'
+          label: 'PostgreSQL effective_cache_size setting'
 
-# Legacy backend configurations (for backward compatibility)
-search_api.backend.plugin.postgresql_azure:
-  type: search_api.backend.plugin.postgresql
-
-search_api.backend.plugin.postgresql_vector:
-  type: search_api.backend.plugin.postgresql
-
-# Dashboard configuration
+# Dashboard configuration (referenced in code)
 search_api_postgresql.dashboard:
   type: config_object
   label: 'Search API PostgreSQL dashboard settings'
   mapping:
-    analytics:
-      type: mapping
-      label: 'Analytics settings'
-      mapping:
-        enabled:
-          type: boolean
-          label: 'Enable analytics tracking'
-        retention_days:
-          type: integer
-          label: 'Data retention period (days)'
     display:
       type: mapping
       label: 'Display settings'
@@ -256,7 +247,7 @@ search_api_postgresql.dashboard:
           type: integer
           label: 'Error count threshold'
 
-# Module settings
+# Module settings (referenced in code)
 search_api_postgresql.settings:
   type: config_object
   label: 'Search API PostgreSQL module settings'

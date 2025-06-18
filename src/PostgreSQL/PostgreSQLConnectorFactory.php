@@ -54,7 +54,7 @@ class PostgreSQLConnectorFactory {
   public function createFromServer($server) {
     $backend = $server->getBackend();
     
-    if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure', 'postgresql_vector'])) {
+    if (!in_array($backend->getPluginId(), ['postgresql'])) {
       throw new \Drupal\search_api\SearchApiException('Server does not use a PostgreSQL backend.');
     }
 

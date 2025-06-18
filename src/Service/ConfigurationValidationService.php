@@ -181,7 +181,7 @@ private function validateAiFeaturesConfiguration(array $config) {
     // Get all PostgreSQL servers
     $servers = $this->entityTypeManager->getStorage('search_api_server')->loadMultiple();
     $postgresql_servers = array_filter($servers, function($server) {
-      return in_array($server->getBackend()->getPluginId(), ['postgresql', 'postgresql_azure', 'postgresql_vector']);
+      return in_array($server->getBackend()->getPluginId(), ['postgresql']);
     });
 
     if (empty($postgresql_servers)) {
