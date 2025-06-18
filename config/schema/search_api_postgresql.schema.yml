@@ -1,10 +1,30 @@
-# Schema for Search API PostgreSQL module configuration
-
 # Unified PostgreSQL backend configuration
 search_api.backend.plugin.postgresql:
   type: config_object
   label: 'PostgreSQL search backend with AI vector search'
   mapping:
+    # Standard Search API DB fields (REQUIRED for compatibility)
+    database:
+      type: string
+      label: 'Database identifier'
+    min_chars:
+      type: integer
+      label: 'Minimum word length'
+    matching:
+      type: string
+      label: 'Partial matching mode'
+    autocomplete:
+      type: mapping
+      label: 'Autocomplete settings'
+      mapping:
+        suggest_suffix:
+          type: boolean
+          label: 'Suggest word endings'
+        suggest_words:
+          type: boolean
+          label: 'Suggest additional words'
+    
+    # PostgreSQL-specific connection configuration
     connection:
       type: mapping
       label: 'Database connection'
@@ -38,6 +58,8 @@ search_api.backend.plugin.postgresql:
           label: 'Additional PDO options'
           sequence:
             type: string
+    
+    # PostgreSQL-specific indexing configuration
     index_prefix:
       type: string
       label: 'Index table prefix'
@@ -50,6 +72,8 @@ search_api.backend.plugin.postgresql:
     batch_size:
       type: integer
       label: 'Indexing batch size'
+    
+    # AI Embeddings configuration
     ai_embeddings:
       type: mapping
       label: 'AI Embeddings configuration'
@@ -69,16 +93,16 @@ search_api.backend.plugin.postgresql:
               label: 'Azure OpenAI endpoint'
             api_key:
               type: string
-              label: 'API key'
+              label: 'Azure OpenAI API key'
             api_key_name:
               type: string
-              label: 'API key name (Key module)'
+              label: 'Azure OpenAI API key name (Key module)'
             deployment_name:
               type: string
-              label: 'Deployment name'
+              label: 'Azure deployment name'
             api_version:
               type: string
-              label: 'API version'
+              label: 'Azure API version'
             model:
               type: string
               label: 'Embedding model'
@@ -94,22 +118,22 @@ search_api.backend.plugin.postgresql:
               label: 'OpenAI API key'
             api_key_name:
               type: string
-              label: 'API key name (Key module)'
+              label: 'OpenAI API key name (Key module)'
             model:
               type: string
               label: 'Embedding model'
             organization:
               type: string
-              label: 'Organization ID (optional)'
+              label: 'OpenAI organization'
             base_url:
               type: string
-              label: 'Base URL'
+              label: 'OpenAI base URL'
             dimension:
               type: integer
               label: 'Vector dimension'
         batch_size:
           type: integer
-          label: 'Embedding batch size'
+          label: 'AI batch size'
         rate_limit_delay:
           type: integer
           label: 'Rate limit delay (ms)'
@@ -125,22 +149,26 @@ search_api.backend.plugin.postgresql:
         cache_ttl:
           type: integer
           label: 'Cache TTL (seconds)'
+    
+    # Vector Index configuration
     vector_index:
       type: mapping
       label: 'Vector index configuration'
       mapping:
         method:
           type: string
-          label: 'Index method (ivfflat or hnsw)'
+          label: 'Vector index method'
         lists:
           type: integer
-          label: 'Number of lists (for ivfflat)'
+          label: 'Number of lists (for IVFFlat)'
         probes:
           type: integer
-          label: 'Number of probes (for ivfflat)'
+          label: 'Number of probes'
         distance:
           type: string
-          label: 'Distance function (cosine, l2, inner_product)'
+          label: 'Distance function'
+    
+    # Hybrid Search configuration
     hybrid_search:
       type: mapping
       label: 'Hybrid search configuration'
@@ -160,6 +188,8 @@ search_api.backend.plugin.postgresql:
         max_results:
           type: integer
           label: 'Maximum results'
+    
+    # Performance configuration
     performance:
       type: mapping
       label: 'Performance configuration'
@@ -172,15 +202,22 @@ search_api.backend.plugin.postgresql:
           label: 'Statement timeout (ms)'
         work_mem:
           type: string
-          label: 'Work memory'
+          label: 'Work memory setting'
         effective_cache_size:
           type: string
           label: 'Effective cache size'
 
-# Module settings
-search_api_postgresql.settings:
+# Legacy backend configurations (for backward compatibility)
+search_api.backend.plugin.postgresql_azure:
+  type: search_api.backend.plugin.postgresql
+
+search_api.backend.plugin.postgresql_vector:
+  type: search_api.backend.plugin.postgresql
+
+# Dashboard configuration
+search_api_postgresql.dashboard:
   type: config_object
-  label: 'Search API PostgreSQL settings'
+  label: 'Search API PostgreSQL dashboard settings'
   mapping:
     analytics:
       type: mapping
@@ -188,66 +225,23 @@ search_api_postgresql.settings:
       mapping:
         enabled:
           type: boolean
-          label: 'Enable analytics'
+          label: 'Enable analytics tracking'
         retention_days:
           type: integer
-          label: 'Data retention (days)'
-        track_costs:
-          type: boolean
-          label: 'Track API costs'
-        track_performance:
-          type: boolean
-          label: 'Track performance metrics'
-    cache:
+          label: 'Data retention period (days)'
+    display:
       type: mapping
-      label: 'Cache settings'
+      label: 'Display settings'
       mapping:
-        default_ttl:
+        items_per_page:
           type: integer
-          label: 'Default TTL (seconds)'
-        max_entries:
+          label: 'Items per page'
+        refresh_interval:
           type: integer
-          label: 'Maximum cache entries'
-        cleanup_probability:
-          type: float
-          label: 'Cleanup probability'
-        enable_compression:
+          label: 'Auto-refresh interval (seconds)'
+        show_costs:
           type: boolean
-          label: 'Enable compression'
-    queue:
-      type: mapping
-      label: 'Queue settings'
-      mapping:
-        enabled:
-          type: boolean
-          label: 'Enable queue processing'
-        batch_size:
-          type: integer
-          label: 'Queue batch size'
-        time_limit:
-          type: integer
-          label: 'Queue time limit (seconds)'
-        memory_limit:
-          type: string
-          label: 'Queue memory limit'
-
-# Dashboard configuration
-search_api_postgresql.dashboard:
-  type: config_object
-  label: 'Search API PostgreSQL dashboard'
-  mapping:
-    refresh_interval:
-      type: integer
-      label: 'Dashboard refresh interval (seconds)'
-    show_costs:
-      type: boolean
-      label: 'Show cost information'
-    show_performance:
-      type: boolean
-      label: 'Show performance metrics'
-    chart_time_range:
-      type: string
-      label: 'Default chart time range'
+          label: 'Show cost information'
     alerts:
       type: mapping
       label: 'Alert settings'
@@ -257,10 +251,58 @@ search_api_postgresql.dashboard:
           label: 'Enable alerts'
         cost_threshold:
           type: float
-          label: 'Daily cost threshold'
+          label: 'Daily cost threshold (USD)'
         error_threshold:
           type: integer
-          label: 'Error rate threshold'
-        email_notifications:
+          label: 'Error count threshold'
+
+# Module settings
+search_api_postgresql.settings:
+  type: config_object
+  label: 'Search API PostgreSQL module settings'
+  mapping:
+    analytics:
+      type: mapping
+      label: 'Analytics configuration'
+      mapping:
+        enabled:
           type: boolean
-          label: 'Enable email notifications'
+          label: 'Enable analytics collection'
+        track_costs:
+          type: boolean
+          label: 'Track API costs'
+        track_performance:
+          type: boolean
+          label: 'Track performance metrics'
+        anonymize_queries:
+          type: boolean
+          label: 'Anonymize search queries'
+    security:
+      type: mapping
+      label: 'Security configuration'
+      mapping:
+        require_https:
+          type: boolean
+          label: 'Require HTTPS for API calls'
+        validate_ssl:
+          type: boolean
+          label: 'Validate SSL certificates'
+        max_api_calls_per_minute:
+          type: integer
+          label: 'Maximum API calls per minute'
+    performance:
+      type: mapping
+      label: 'Performance configuration'
+      mapping:
+        default_timeout:
+          type: integer
+          label: 'Default API timeout (seconds)'
+        max_concurrent_requests:
+          type: integer
+          label: 'Maximum concurrent requests'
+        cache_enabled:
+          type: boolean
+          label: 'Enable result caching'
+        cache_ttl:
+          type: integer
+          label: 'Cache TTL (seconds)'
