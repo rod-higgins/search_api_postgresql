@@ -4,11 +4,13 @@ namespace Drupal\search_api_postgresql\Plugin\search_api\backend;
 
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
+use Drupal\Core\Plugin\PluginFormInterface;
 use Drupal\search_api\Backend\BackendPluginBase;
 use Drupal\search_api\IndexInterface;
 use Drupal\search_api\Query\QueryInterface;
 use Drupal\search_api\SearchApiException;
 use Drupal\search_api\Item\ItemInterface;
+use Drupal\search_api\Plugin\PluginFormTrait;
 use Drupal\search_api_postgresql\Traits\SecurityManagementTrait;
 use Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector;
 use Drupal\search_api_postgresql\Service\EmbeddingService;
@@ -25,9 +27,10 @@ use Psr\Log\LoggerInterface;
  *   description = @Translation("PostgreSQL backend supporting standard database search with optional AI embedding providers for semantic search.")
  * )
  */
-class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPluginInterface {
+class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPluginInterface, PluginFormInterface {
 
   use SecurityManagementTrait;
+  use PluginFormTrait;
 
   /**
    * The logger.
@@ -299,51 +302,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       ],
     ];
 
-    // Autocomplete settings (if module available)
-    if ($this->getModuleHandler()->moduleExists('search_api_autocomplete')) {
-      $form['autocomplete'] = [
-        '#type' => 'details',
-        '#title' => $this->t('Autocomplete settings'),
-        '#description' => $this->t('These settings allow you to configure how suggestions are computed when autocompletion is used.'),
-      ];
-
-      $form['autocomplete']['suggest_suffix'] = [
-        '#type' => 'checkbox',
-        '#title' => $this->t('Suggest word endings'),
-        '#description' => $this->t('Suggest endings for the currently entered word.'),
-        '#default_value' => $this->configuration['autocomplete']['suggest_suffix'],
-      ];
-
-      $form['autocomplete']['suggest_words'] = [
-        '#type' => 'checkbox',
-        '#title' => $this->t('Suggest additional words'),
-        '#description' => $this->t('Suggest additional words the user might want to search for.'),
-        '#default_value' => $this->configuration['autocomplete']['suggest_words'],
-      ];
-    }
-
-    // Index Settings
-    $form['index_settings'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Index Settings'),
-      '#open' => FALSE,
-    ];
-
-    $form['index_settings']['index_prefix'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Index Prefix'),
-      '#default_value' => $this->configuration['index_prefix'] ?? 'search_api_',
-      '#description' => $this->t('Prefix for search index table names.'),
-    ];
-
-    $form['index_settings']['fts_configuration'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Full-text Configuration'),
-      '#default_value' => $this->configuration['fts_configuration'] ?? 'english',
-      '#description' => $this->t('PostgreSQL full-text search configuration to use. Examples: english, spanish, french.'),
-    ];
-
-    // AI Embeddings Configuration (PostgreSQL-specific)
+    // AI Embeddings Configuration
     $form['ai_embeddings'] = [
       '#type' => 'details',
       '#title' => $this->t('AI Embeddings (Advanced)'),
@@ -358,94 +317,21 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#description' => $this->t('Enable AI-powered semantic search using vector embeddings.'),
     ];
 
-    $form['ai_embeddings']['provider'] = [
-      '#type' => 'select',
-      '#title' => $this->t('AI Provider'),
-      '#options' => [
-        'azure' => $this->t('Azure OpenAI'),
-        'openai' => $this->t('OpenAI'),
-      ],
-      '#default_value' => $this->configuration['ai_embeddings']['provider'] ?? 'azure',
-      '#states' => [
-        'visible' => [
-          ':input[name="ai_embeddings[enabled]"]' => ['checked' => TRUE],
-        ],
-      ],
-    ];
-
-    // Azure AI configuration
-    $form['ai_embeddings']['azure'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Azure OpenAI Configuration'),
-      '#open' => FALSE,
-      '#states' => [
-        'visible' => [
-          ':input[name="ai_embeddings[enabled]"]' => ['checked' => TRUE],
-          ':input[name="ai_embeddings[provider]"]' => ['value' => 'azure'],
-        ],
-      ],
-    ];
-
-    $form['ai_embeddings']['azure']['endpoint'] = [
-      '#type' => 'url',
-      '#title' => $this->t('Azure OpenAI Endpoint'),
-      '#default_value' => $this->configuration['ai_embeddings']['azure']['endpoint'] ?? '',
-      '#description' => $this->t('Your Azure OpenAI service endpoint URL.'),
-    ];
-
-    $form['ai_embeddings']['azure']['deployment_name'] = [
+    // Add Azure fields (these will be used by the trait)
+    $form['ai_embeddings']['azure']['api_key'] = [
       '#type' => 'textfield',
-      '#title' => $this->t('Deployment Name'),
-      '#default_value' => $this->configuration['ai_embeddings']['azure']['deployment_name'] ?? '',
-      '#description' => $this->t('The name of your embedding model deployment.'),
+      '#title' => $this->t('Azure API Key'),
+      '#default_value' => '',
+      '#description' => $this->t('Your Azure OpenAI API key.'),
     ];
 
-    // OpenAI configuration
-    $form['ai_embeddings']['openai'] = [
-      '#type' => 'details',
-      '#title' => $this->t('OpenAI Configuration'),
-      '#open' => FALSE,
-      '#states' => [
-        'visible' => [
-          ':input[name="ai_embeddings[enabled]"]' => ['checked' => TRUE],
-          ':input[name="ai_embeddings[provider]"]' => ['value' => 'openai'],
-        ],
-      ],
-    ];
-
-    $form['ai_embeddings']['openai']['organization'] = [
+    // Add OpenAI fields (these will be used by the trait)
+    $form['ai_embeddings']['openai']['api_key'] = [
       '#type' => 'textfield',
-      '#title' => $this->t('Organization (Optional)'),
-      '#default_value' => $this->configuration['ai_embeddings']['openai']['organization'] ?? '',
-      '#description' => $this->t('Your OpenAI organization ID.'),
+      '#title' => $this->t('OpenAI API Key'),
+      '#default_value' => '',
+      '#description' => $this->t('Your OpenAI API key.'),
     ];
-
-    // Common AI settings
-    $form['ai_embeddings']['common'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Model Settings'),
-      '#open' => TRUE,
-      '#states' => [
-        'visible' => [
-          ':input[name="ai_embeddings[enabled]"]' => ['checked' => TRUE],
-        ],
-      ],
-    ];
-
-    $form['ai_embeddings']['common']['model'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Embedding Model'),
-      '#options' => [
-        'text-embedding-3-small' => $this->t('text-embedding-3-small (1536 dimensions)'),
-        'text-embedding-3-large' => $this->t('text-embedding-3-large (3072 dimensions)'),
-        'text-embedding-ada-002' => $this->t('text-embedding-ada-002 (1536 dimensions)'),
-      ],
-      '#default_value' => $this->configuration['ai_embeddings']['azure']['model'] ?? 'text-embedding-3-small',
-      '#description' => $this->t('The embedding model to use for generating vectors.'),
-    ];
-
-    // Add API key fields using the SecurityManagementTrait
-    $this->addAiKeyFieldsToForm($form);
 
     // Advanced Configuration
     $form['advanced'] = [
@@ -468,23 +354,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#min' => 1,
       '#max' => 1000,
       '#description' => $this->t('Number of items to process in each indexing batch.'),
-    ];
-
-    // Add Test Connection button
-    $form['test_connection'] = [
-      '#type' => 'button',
-      '#value' => $this->t('Test Connection'),
-      '#ajax' => [
-        'callback' => [$this, 'testConnectionAjax'],
-        'wrapper' => 'test-connection-result',
-      ],
-      '#weight' => 100,
-    ];
-
-    $form['test_connection_result'] = [
-      '#type' => 'markup',
-      '#markup' => '<div id="test-connection-result"></div>',
-      '#weight' => 101,
     ];
 
     return $form;

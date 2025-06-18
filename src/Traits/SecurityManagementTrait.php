@@ -377,7 +377,7 @@ trait SecurityManagementTrait {
    * @param array $keys
    *   Available keys from Key module.
    */
-  protected function addAiKeyFieldsToForm(array &$form, array $keys) {
+  protected function addAiKeyFieldsToForm(array &$form, array $keys = NULL) {
     // Azure OpenAI API key
     if (isset($form['ai_embeddings']['azure']['api_key'])) {
       $form['ai_embeddings']['azure']['api_key_name'] = [
