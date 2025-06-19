@@ -593,6 +593,26 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   }
 
   /**
+   * Helper method to get table name using IndexManager's logic.
+   * This ensures consistency with IndexManager's table name construction.
+   */
+  protected function getIndexTableNameForManager(IndexInterface $index) {
+    $index_id = $index->id();
+    
+    // Use the same validation as IndexManager
+    if (!preg_match('/^[a-z][a-z0-9_]*$/', $index_id)) {
+      throw new \InvalidArgumentException("Invalid index ID: {$index_id}");
+    }
+    
+    // Use the same prefix logic as IndexManager
+    $prefix = $this->configuration['index_prefix'] ?? 'search_api_';
+    $table_name_unquoted = $prefix . $index_id;
+    
+    // Use connector's quoting method
+    return $this->connector->quoteTableName($table_name_unquoted);
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function addIndex(IndexInterface $index) {
@@ -682,7 +702,11 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
     try {
       $this->ensureConnector();
-      $this->connector->deleteItems($index, $item_ids);
+      $indexManager = $this->getIndexManager();
+      
+      // Get table name using the same logic as IndexManager
+      $table_name = $this->getIndexTableNameForManager($index);
+      $indexManager->deleteItems($table_name, $item_ids);
     } catch (\Exception $e) {
       $this->logger->error('Failed to delete items from @index: @error', [
         '@index' => $index->id(),
@@ -698,7 +722,9 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   public function deleteAllIndexItems(IndexInterface $index, $datasource_id = NULL) {
     try {
       $this->ensureConnector();
-      $this->connector->deleteAllItems($index, $datasource_id);
+      // Use IndexManager for clearing items instead of connector directly
+      $indexManager = $this->getIndexManager();
+      $indexManager->clearIndex($index, $datasource_id);
     } catch (\Exception $e) {
       $this->logger->error('Failed to delete all items from @index: @error', [
         '@index' => $index->id(),
@@ -805,25 +831,16 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
   /**
    * Indexes a single item.
+   * 
+   * Updated to use IndexManager's table name construction method.
    */
   protected function indexItem(IndexInterface $index, ItemInterface $item) {
     try {
-      // Construct the table name safely (same logic as IndexManager)
-      $index_id = $index->id();
+      $indexManager = $this->getIndexManager();
       
-      // Validate index ID (same validation as IndexManager)
-      if (!preg_match('/^[a-z][a-z0-9_]*$/', $index_id)) {
-        throw new \InvalidArgumentException("Invalid index ID: {$index_id}");
-      }
-      
-      $prefix = $this->configuration['index_prefix'] ?? 'search_api_';
-      $table_name_unquoted = $prefix . $index_id;
-      
-      // Quote the table name using the connector
-      $table_name = $this->connector->quoteTableName($table_name_unquoted);
-      
-      // Use the IndexManager to index the item
-      $this->getIndexManager()->indexItem($table_name, $index, $item);
+      // Get table name using the same logic as IndexManager
+      $table_name = $this->getIndexTableNameForManager($index);
+      $indexManager->indexItem($table_name, $index, $item);
       
       return TRUE;
     } catch (\Exception $e) {
@@ -845,6 +862,8 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
   /**
    * Gets or creates an IndexManager instance.
+   * 
+   * Updated to ensure consistent configuration passing.
    */
   protected function getIndexManager() {
     if (!$this->indexManager) {
@@ -864,10 +883,11 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         }
       }
       
+      // Pass the complete configuration to IndexManager
       $this->indexManager = new \Drupal\search_api_postgresql\PostgreSQL\IndexManager(
         $this->connector,
         $field_mapper,
-        $this->configuration,
+        $this->configuration, // Pass full configuration, not just connection config
         $embedding_service
       );
     }
