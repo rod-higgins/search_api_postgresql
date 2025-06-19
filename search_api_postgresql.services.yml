@@ -188,13 +188,6 @@ services:
       - '@entity_type.manager'
       - '@messenger'
       - '@logger.factory'
-  
-  search_api_postgresql.configuration_validation:
-    class: Drupal\search_api_postgresql\Service\ConfigurationValidationService
-    arguments:
-      - '@entity_type.manager'
-      - '@key.repository'
-      - '@logger.factory'
 
 parameters:
   search_api_postgresql.default_batch_size: 50
