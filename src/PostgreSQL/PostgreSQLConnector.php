@@ -334,6 +334,146 @@ class PostgreSQLConnector {
   }
 
   /**
+   * Quote a table name for safe SQL usage.
+   *
+   * @param string $table_name
+   *   The table name to quote.
+   *
+   * @return string
+   *   The quoted table name.
+   */
+  public function quoteTableName($table_name) {
+    $this->validateIdentifier($table_name, 'table name');
+    return '"' . str_replace('"', '""', $table_name) . '"';
+  }
+
+  /**
+   * Quote a column name for safe SQL usage.
+   *
+   * @param string $column_name
+   *   The column name to quote.
+   *
+   * @return string
+   *   The quoted column name.
+   */
+  public function quoteColumnName($column_name) {
+    $this->validateIdentifier($column_name, 'column name');
+    return '"' . str_replace('"', '""', $column_name) . '"';
+  }
+
+  /**
+   * Quote an index name for safe SQL usage.
+   *
+   * @param string $index_name
+   *   The index name to quote.
+   *
+   * @return string
+   *   The quoted index name.
+   */
+  public function quoteIndexName($index_name) {
+    $this->validateIdentifier($index_name, 'index name');
+    return '"' . str_replace('"', '""', $index_name) . '"';
+  }
+
+  /**
+   * Validates an identifier for safe SQL usage.
+   *
+   * @param string $identifier
+   *   The identifier to validate.
+   * @param string $type
+   *   The type of identifier (for error messages).
+   *
+   * @throws \InvalidArgumentException
+   *   If the identifier is invalid.
+   */
+  public function validateIdentifier($identifier, $type = 'identifier') {
+    if (empty($identifier)) {
+      throw new \InvalidArgumentException("Empty {$type} not allowed");
+    }
+    
+    if (!is_string($identifier)) {
+      throw new \InvalidArgumentException("{$type} must be a string");
+    }
+    
+    // PostgreSQL identifier length limit
+    if (strlen($identifier) > 63) {
+      throw new \InvalidArgumentException("{$type} '{$identifier}' exceeds maximum length of 63 characters");
+    }
+    
+    // Basic validation for SQL identifiers
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $identifier)) {
+      throw new \InvalidArgumentException("Invalid {$type}: '{$identifier}'. Must start with a letter or underscore and contain only letters, numbers, and underscores.");
+    }
+  }
+
+  /**
+   * Validates a data type for safe SQL usage.
+   *
+   * @param string $data_type
+   *   The data type to validate.
+   *
+   * @return string
+   *   The validated data type.
+   *
+   * @throws \InvalidArgumentException
+   *   If the data type is invalid.
+   */
+  public function validateDataType($data_type) {
+    $allowed_types = [
+      'VARCHAR', 'TEXT', 'INTEGER', 'BIGINT', 'DECIMAL', 'NUMERIC',
+      'BOOLEAN', 'TIMESTAMP', 'DATE', 'TIME', 'TSVECTOR', 'VECTOR',
+      'JSONB', 'UUID', 'BYTEA', 'REAL', 'DOUBLE PRECISION'
+    ];
+    
+    // Handle parameterized types like VARCHAR(255) or VECTOR(1536)
+    $base_type = preg_replace('/\([^)]*\)/', '', strtoupper(trim($data_type)));
+    
+    if (!in_array($base_type, $allowed_types)) {
+      throw new \InvalidArgumentException("Invalid data type: {$data_type}");
+    }
+    
+    return $data_type;
+  }
+
+  /**
+   * Gets the columns of a table.
+   *
+   * @param string $table_name
+   *   The table name (unquoted).
+   *
+   * @return array
+   *   Array of column names.
+   */
+  public function getTableColumns($table_name) {
+    try {
+      $sql = "SELECT column_name FROM information_schema.columns WHERE table_name = ? ORDER BY ordinal_position";
+      $stmt = $this->executePrepared($sql, [$table_name]);
+      return $stmt->fetchAll(\PDO::FETCH_COLUMN);
+    }
+    catch (\Exception $e) {
+      $this->logger->warning('Error getting table columns for @table: @message', [
+        '@table' => $table_name,
+        '@message' => $e->getMessage(),
+      ]);
+      return [];
+    }
+  }
+
+  /**
+   * Escapes a string for use in LIKE patterns.
+   *
+   * @param string $string
+   *   The string to escape.
+   *
+   * @return string
+   *   The escaped string.
+   */
+  public function escapeLikePattern($string) {
+    // Escape PostgreSQL LIKE pattern special characters
+    return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $string);
+  }
+
+  /**
    * Check if an extension exists.
    *
    * @param string $extension_name
