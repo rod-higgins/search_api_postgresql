@@ -216,6 +216,46 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
   }
 
   /**
+   * Tests the Azure OpenAI service connectivity.
+   *
+   * @return array
+   *   Test results with success status and details.
+   */
+  public function testConnection() {
+    try {
+      // Test with a simple embedding generation
+      $test_text = 'test connection';
+      $embedding = $this->generateEmbedding($test_text);
+      
+      if ($embedding && is_array($embedding) && count($embedding) === $this->dimension) {
+        return [
+          'success' => TRUE,
+          'message' => 'Azure OpenAI connection successful',
+          'endpoint' => $this->endpoint,
+          'deployment' => $this->deploymentName,
+          'dimension' => count($embedding),
+          'api_version' => $this->apiVersion,
+        ];
+      }
+      
+      return [
+        'success' => FALSE,
+        'message' => 'Invalid response from Azure OpenAI API',
+        'endpoint' => $this->endpoint,
+        'dimension' => $embedding ? count($embedding) : 0,
+      ];
+      
+    } catch (\Exception $e) {
+      return [
+        'success' => FALSE,
+        'message' => 'Azure OpenAI connection failed: ' . $e->getMessage(),
+        'endpoint' => $this->endpoint,
+        'exception' => get_class($e),
+      ];
+    }
+  }
+
+  /**
    * Generates a single embedding from the API.
    *
    * @param string $text

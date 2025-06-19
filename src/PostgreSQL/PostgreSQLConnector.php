@@ -156,23 +156,53 @@ class PostgreSQLConnector {
   /**
    * Test the database connection.
    *
+   * @return array
+   *   Array with connection test results.
+   *
    * @throws \Exception
    *   If connection test fails.
    */
   public function testConnection() {
-    $connection = $this->connect();
-    
-    // Test with a simple query
-    $stmt = $connection->query('SELECT version()');
-    $version = $stmt->fetchColumn();
-    
-    if (empty($version)) {
-      throw new \Exception('Connection test failed: Could not retrieve database version.');
-    }
+    try {
+      $connection = $this->connect();
+      
+      // Test with a simple query
+      $stmt = $connection->query('SELECT version()');
+      $version = $stmt->fetchColumn();
+      
+      if (empty($version)) {
+        return [
+          'success' => FALSE,
+          'error' => 'Connection test failed: Could not retrieve database version.',
+          'database' => $this->config['database'] ?? '',
+          'version' => '',
+        ];
+      }
 
-    $this->logger->info('Connection test successful. PostgreSQL version: @version', [
-      '@version' => $version,
-    ]);
+      $this->logger->info('Connection test successful. PostgreSQL version: @version', [
+        '@version' => $version,
+      ]);
+      
+      return [
+        'success' => TRUE,
+        'database' => $this->config['database'] ?? '',
+        'version' => $version,
+        'host' => $this->config['host'] ?? '',
+        'port' => $this->config['port'] ?? 5432,
+      ];
+      
+    } catch (\Exception $e) {
+      $this->logger->error('Connection test failed: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      
+      return [
+        'success' => FALSE,
+        'error' => $e->getMessage(),
+        'database' => $this->config['database'] ?? '',
+        'version' => '',
+      ];
+    }
   }
 
   /**
