@@ -587,7 +587,8 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   public function isAvailable() {
     try {
       $this->ensureConnector();
-      return $this->connector->testConnection()['success'];
+      $result = $this->connector->testConnection();
+      return is_array($result) && !empty($result['success']);
     } catch (\Exception $e) {
       $this->logger->error('PostgreSQL backend availability check failed: @error', ['@error' => $e->getMessage()]);
       return FALSE;
