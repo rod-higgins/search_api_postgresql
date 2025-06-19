@@ -16,6 +16,7 @@ use Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector;
 use Drupal\search_api_postgresql\Service\EmbeddingService;
 use Drupal\search_api_postgresql\Service\VectorSearchService;
 use Drupal\search_api_postgresql\PostgreSQL\FieldMapper;
+use Drupal\search_api_postgresql\PostgreSQL\IndexManager;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -885,9 +886,9 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       }
       
       // Pass the complete configuration to IndexManager
-      $this->indexManager = new \Drupal\search_api_postgresql\PostgreSQL\IndexManager(
+      $this->indexManager = new IndexManager(
         $this->connector,
-        $field_mapper,
+        $fieldMapper,
         $this->configuration, // Pass full configuration, not just connection config
         $embedding_service
       );
