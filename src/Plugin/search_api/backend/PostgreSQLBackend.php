@@ -61,6 +61,13 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   protected $vectorSearchService;
 
   /**
+   * The index manager.
+   *
+   * @var \Drupal\search_api_postgresql\PostgreSQL\IndexManager
+   */
+  protected $indexManager;
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
@@ -776,54 +783,24 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    * Creates the necessary database tables for an index.
    */
   protected function createIndexTables(IndexInterface $index) {
-    $index_id = $index->id();
-    $prefix = $this->configuration['index_prefix'];
-    
-    // Create main search table
-    $main_table = $prefix . $index_id;
-    $this->connector->createSearchTable($main_table, $index);
-    
-    // Create field-specific tables for complex fields
-    foreach ($index->getFields() as $field_id => $field) {
-      if ($this->needsFieldTable($field)) {
-        $field_table = $prefix . $index_id . '_' . $field_id;
-        $this->connector->createFieldTable($field_table, $field);
-      }
-    }
-    
-    // Create full-text search indexes
-    $this->connector->createFullTextIndexes($main_table, $index, $this->configuration['fts_configuration']);
+    // Use the IndexManager to create the index
+    $this->getIndexManager()->createIndex($index);
   }
 
   /**
    * Updates the schema for an existing index.
    */
   protected function updateIndexSchema(IndexInterface $index) {
-    $index_id = $index->id();
-    $prefix = $this->configuration['index_prefix'];
-    $main_table = $prefix . $index_id;
-    
-    // Update main table schema
-    $this->connector->updateSearchTable($main_table, $index);
-    
-    // Update field tables
-    foreach ($index->getFields() as $field_id => $field) {
-      if ($this->needsFieldTable($field)) {
-        $field_table = $prefix . $index_id . '_' . $field_id;
-        $this->connector->updateFieldTable($field_table, $field);
-      }
-    }
-    
-    // Update full-text search indexes
-    $this->connector->updateFullTextIndexes($main_table, $index, $this->configuration['fts_configuration']);
+    // Use the IndexManager to update the index
+    $this->getIndexManager()->updateIndex($index);
   }
 
   /**
    * Drops all tables associated with an index.
    */
   protected function dropIndexTables($index_id) {
-    $prefix = $this->configuration['index_prefix'];
-    $this->connector->dropIndexTables($prefix . $index_id);
+    // Use the IndexManager to drop the index
+    $this->getIndexManager()->dropIndex($index_id);
   }
 
   /**
@@ -831,7 +808,24 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    */
   protected function indexItem(IndexInterface $index, ItemInterface $item) {
     try {
-      return $this->connector->indexItem($index, $item);
+      // Construct the table name safely (same logic as IndexManager)
+      $index_id = $index->id();
+      
+      // Validate index ID (same validation as IndexManager)
+      if (!preg_match('/^[a-z][a-z0-9_]*$/', $index_id)) {
+        throw new \InvalidArgumentException("Invalid index ID: {$index_id}");
+      }
+      
+      $prefix = $this->configuration['index_prefix'] ?? 'search_api_';
+      $table_name_unquoted = $prefix . $index_id;
+      
+      // Quote the table name using the connector
+      $table_name = $this->connector->quoteTableName($table_name_unquoted);
+      
+      // Use the IndexManager to index the item
+      $this->getIndexManager()->indexItem($table_name, $index, $item);
+      
+      return TRUE;
     } catch (\Exception $e) {
       $this->logger->error('Failed to index item @item: @error', [
         '@item' => $item->getId(),
@@ -846,7 +840,38 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    */
   protected function needsFieldTable($field) {
     // Complex multi-value fields might need separate tables
-    return $field->getType() === 'string' && $field->getConfiguration()['multi_value'] ?? FALSE;
+    return $field->getType() === 'string' && ($field->getConfiguration()['multi_value'] ?? FALSE);
   }
 
+  /**
+   * Gets or creates an IndexManager instance.
+   */
+  protected function getIndexManager() {
+    if (!$this->indexManager) {
+      // Ensure we have a connector
+      $this->ensureConnector();
+      
+      // Create the field mapper
+      $field_mapper = new \Drupal\search_api_postgresql\PostgreSQL\FieldMapper();
+      $embedding_service = null;
+      
+      // Initialize embedding service if vector search is enabled
+      if (!empty($this->configuration['ai_embeddings']['enabled'])) {
+        try {
+          $embedding_service = \Drupal::service('search_api_postgresql.embedding_service');
+        } catch (\Exception $e) {
+          $this->logger->warning('Embedding service not available: @error', ['@error' => $e->getMessage()]);
+        }
+      }
+      
+      $this->indexManager = new \Drupal\search_api_postgresql\PostgreSQL\IndexManager(
+        $this->connector,
+        $field_mapper,
+        $this->configuration,
+        $embedding_service
+      );
+    }
+    
+    return $this->indexManager;
+  }
 }
