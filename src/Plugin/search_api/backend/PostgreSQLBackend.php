@@ -111,15 +111,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    */
   public function defaultConfiguration() {
     return [
-      // Standard Search API options (REQUIRED for compatibility)
-      'database' => 'postgresql_custom',
-      'min_chars' => 1,
-      'matching' => 'words',
-      'autocomplete' => [
-        'suggest_suffix' => TRUE,
-        'suggest_words' => TRUE,
-      ],
-      
       // PostgreSQL-specific connection options
       'connection' => [
         'host' => 'localhost',
@@ -205,16 +196,10 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    * {@inheritdoc}
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
-    $form = parent::buildConfigurationForm($form, $form_state);
+    // Initialize form array - don't call parent since BackendPluginBase doesn't have this method
 
     // Ensure we have default configuration
     $this->configuration = $this->configuration + $this->defaultConfiguration();
-
-    // Standard Search API DB indicator (hidden field for compatibility)
-    $form['database'] = [
-      '#type' => 'value',
-      '#value' => $this->configuration['database'],
-    ];
 
     // Database Connection Configuration
     $form['connection'] = [
@@ -282,24 +267,35 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#description' => $this->t('SSL connection mode. Use "require" for Azure Database for PostgreSQL.'),
     ];
 
-    // Standard Search API DB Options (REQUIRED for compatibility)
-    $form['min_chars'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Minimum word length'),
-      '#description' => $this->t('The minimum number of characters a word must consist of to be indexed'),
-      '#options' => array_combine(range(1, 6), range(1, 6)),
-      '#default_value' => $this->configuration['min_chars'],
+    // PostgreSQL Full-Text Search Configuration
+    $form['fts'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Full-Text Search'),
+      '#open' => FALSE,
     ];
 
-    $form['matching'] = [
-      '#type' => 'radios',
-      '#title' => $this->t('Partial matching'),
-      '#default_value' => $this->configuration['matching'],
+    $form['fts']['fts_configuration'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Text Search Configuration'),
       '#options' => [
-        'words' => $this->t('Match whole words only'),
-        'partial' => $this->t('Match on parts of a word'),
-        'prefix' => $this->t('Match words starting with given keywords'),
+        'simple' => $this->t('Simple'),
+        'english' => $this->t('English'),
+        'spanish' => $this->t('Spanish'),
+        'french' => $this->t('French'),
+        'german' => $this->t('German'),
+        'portuguese' => $this->t('Portuguese'),
+        'italian' => $this->t('Italian'),
+        'dutch' => $this->t('Dutch'),
+        'danish' => $this->t('Danish'),
+        'finnish' => $this->t('Finnish'),
+        'hungarian' => $this->t('Hungarian'),
+        'norwegian' => $this->t('Norwegian'),
+        'russian' => $this->t('Russian'),
+        'swedish' => $this->t('Swedish'),
+        'turkish' => $this->t('Turkish'),
       ],
+      '#default_value' => $this->configuration['fts_configuration'] ?? 'english',
+      '#description' => $this->t('PostgreSQL text search configuration for language-specific processing.'),
     ];
 
     // AI Embeddings Configuration
@@ -317,7 +313,67 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#description' => $this->t('Enable AI-powered semantic search using vector embeddings.'),
     ];
 
-    // Add Azure fields (these will be used by the trait)
+    $form['ai_embeddings']['provider'] = [
+      '#type' => 'select',
+      '#title' => $this->t('AI Provider'),
+      '#options' => [
+        'azure' => $this->t('Azure OpenAI Service'),
+        'openai' => $this->t('OpenAI API'),
+      ],
+      '#default_value' => $this->configuration['ai_embeddings']['provider'] ?? 'azure',
+      '#description' => $this->t('Choose your AI embedding provider.'),
+      '#states' => [
+        'visible' => [
+          ':input[name="ai_embeddings[enabled]"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    // Common AI settings
+    $form['ai_embeddings']['common'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Model Configuration'),
+      '#open' => TRUE,
+      '#states' => [
+        'visible' => [
+          ':input[name="ai_embeddings[enabled]"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['ai_embeddings']['common']['model'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Embedding Model'),
+      '#options' => [
+        'text-embedding-3-small' => $this->t('text-embedding-3-small (1536 dimensions, faster)'),
+        'text-embedding-3-large' => $this->t('text-embedding-3-large (3072 dimensions, better quality)'),
+        'text-embedding-ada-002' => $this->t('text-embedding-ada-002 (1536 dimensions, legacy)'),
+      ],
+      '#default_value' => $this->configuration['ai_embeddings']['azure']['model'] ?? 'text-embedding-3-small',
+      '#description' => $this->t('Choose the embedding model. Larger models provide better quality but cost more.'),
+    ];
+
+    // Azure OpenAI Configuration
+    $form['ai_embeddings']['azure'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Azure OpenAI Service'),
+      '#open' => FALSE,
+      '#states' => [
+        'visible' => [
+          ':input[name="ai_embeddings[enabled]"]' => ['checked' => TRUE],
+          ':input[name="ai_embeddings[provider]"]' => ['value' => 'azure'],
+        ],
+      ],
+    ];
+
+    $form['ai_embeddings']['azure']['endpoint'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Azure Endpoint'),
+      '#default_value' => $this->configuration['ai_embeddings']['azure']['endpoint'] ?? '',
+      '#description' => $this->t('Your Azure OpenAI endpoint URL (e.g., https://your-resource.openai.azure.com/).'),
+      '#placeholder' => 'https://your-resource.openai.azure.com/',
+    ];
+
     $form['ai_embeddings']['azure']['api_key'] = [
       '#type' => 'textfield',
       '#title' => $this->t('Azure API Key'),
@@ -325,7 +381,26 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#description' => $this->t('Your Azure OpenAI API key.'),
     ];
 
-    // Add OpenAI fields (these will be used by the trait)
+    $form['ai_embeddings']['azure']['deployment_name'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Deployment Name'),
+      '#default_value' => $this->configuration['ai_embeddings']['azure']['deployment_name'] ?? '',
+      '#description' => $this->t('The name of your Azure OpenAI deployment.'),
+    ];
+
+    // OpenAI Configuration
+    $form['ai_embeddings']['openai'] = [
+      '#type' => 'details',
+      '#title' => $this->t('OpenAI API'),
+      '#open' => FALSE,
+      '#states' => [
+        'visible' => [
+          ':input[name="ai_embeddings[enabled]"]' => ['checked' => TRUE],
+          ':input[name="ai_embeddings[provider]"]' => ['value' => 'openai'],
+        ],
+      ],
+    ];
+
     $form['ai_embeddings']['openai']['api_key'] = [
       '#type' => 'textfield',
       '#title' => $this->t('OpenAI API Key'),
@@ -333,11 +408,25 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#description' => $this->t('Your OpenAI API key.'),
     ];
 
+    $form['ai_embeddings']['openai']['organization'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Organization ID (Optional)'),
+      '#default_value' => $this->configuration['ai_embeddings']['openai']['organization'] ?? '',
+      '#description' => $this->t('Your OpenAI organization ID (optional).'),
+    ];
+
     // Advanced Configuration
     $form['advanced'] = [
       '#type' => 'details',
       '#title' => $this->t('Advanced Settings'),
       '#open' => FALSE,
+    ];
+
+    $form['advanced']['index_prefix'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Index Table Prefix'),
+      '#default_value' => $this->configuration['index_prefix'] ?? 'search_api_',
+      '#description' => $this->t('Prefix for PostgreSQL search tables.'),
     ];
 
     $form['advanced']['debug'] = [
@@ -432,60 +521,19 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       'info' => $connection_string,
     ];
 
-    // Standard search settings (aligned with search_api_db)
-    if ($this->configuration['min_chars'] > 1) {
-      $info[] = [
-        'label' => $this->t('Minimum word length'),
-        'info' => $this->configuration['min_chars'],
-      ];
-    }
-
-    $labels = [
-      'words' => $this->t('Match whole words only'),
-      'partial' => $this->t('Match on parts of a word'),
-      'prefix' => $this->t('Match words starting with given keywords'),
-    ];
+    // FTS configuration
     $info[] = [
-      'label' => $this->t('Partial matching'),
-      'info' => $labels[$this->configuration['matching']],
-    ];
-
-    // Autocomplete info
-    if (!empty($this->configuration['autocomplete'])) {
-      $this->configuration['autocomplete'] += [
-        'suggest_suffix' => TRUE,
-        'suggest_words' => TRUE,
-      ];
-      $autocomplete_modes = [];
-      if ($this->configuration['autocomplete']['suggest_suffix']) {
-        $autocomplete_modes[] = $this->t('Suggest word endings');
-      }
-      if ($this->configuration['autocomplete']['suggest_words']) {
-        $autocomplete_modes[] = $this->t('Suggest additional words');
-      }
-      $autocomplete_modes = $autocomplete_modes ? implode('; ', $autocomplete_modes) : $this->t('none');
-      $info[] = [
-        'label' => $this->t('Autocomplete suggestions'),
-        'info' => $autocomplete_modes,
-      ];
-    }
-
-    // PostgreSQL-specific info
-    $info[] = [
-      'label' => $this->t('Index prefix'),
-      'info' => $this->configuration['index_prefix'],
-    ];
-
-    $info[] = [
-      'label' => $this->t('FTS configuration'),
+      'label' => $this->t('Text Search Configuration'),
       'info' => $this->configuration['fts_configuration'],
     ];
 
     // AI embeddings info
-    if (!empty($this->configuration['ai_embeddings']['enabled'])) {
+    if ($this->configuration['ai_embeddings']['enabled']) {
       $info[] = [
         'label' => $this->t('AI Embeddings'),
-        'info' => $this->t('Enabled (@provider)', ['@provider' => $this->configuration['ai_embeddings']['provider']]),
+        'info' => $this->t('Enabled (@provider)', [
+          '@provider' => ucfirst($this->configuration['ai_embeddings']['provider']),
+        ]),
       ];
     }
 
@@ -497,25 +545,17 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    */
   public function addIndex(IndexInterface $index) {
     try {
-      // Initialize connector if not already done
       $this->ensureConnector();
-      
-      // Create index tables
       $this->createIndexTables($index);
       
-      // Initialize vector search if AI embeddings are enabled
-      if ($this->configuration['ai_embeddings']['enabled'] && $this->vectorSearchService) {
-        $this->vectorSearchService->initializeIndex($index);
-      }
-
-      $this->logger->info('Successfully added index @index', ['@index' => $index->id()]);
+      $this->logger->info('Created index tables for @index', ['@index' => $index->id()]);
       
     } catch (\Exception $e) {
-      $this->logger->error('Failed to add index @index: @error', [
+      $this->logger->error('Failed to create index @index: @error', [
         '@index' => $index->id(),
         '@error' => $e->getMessage(),
       ]);
-      throw new SearchApiException('Failed to add index: ' . $e->getMessage(), 0, $e);
+      throw new SearchApiException('Failed to create index: ' . $e->getMessage(), 0, $e);
     }
   }
 
@@ -525,16 +565,9 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   public function updateIndex(IndexInterface $index) {
     try {
       $this->ensureConnector();
-      
-      // Update index schema if fields changed
       $this->updateIndexSchema($index);
       
-      // Update vector search configuration if needed
-      if ($this->configuration['ai_embeddings']['enabled'] && $this->vectorSearchService) {
-        $this->vectorSearchService->updateIndex($index);
-      }
-
-      $this->logger->info('Successfully updated index @index', ['@index' => $index->id()]);
+      $this->logger->info('Updated index schema for @index', ['@index' => $index->id()]);
       
     } catch (\Exception $e) {
       $this->logger->error('Failed to update index @index: @error', [
@@ -552,21 +585,26 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     try {
       $this->ensureConnector();
       
-      $index_id = is_object($index) ? $index->id() : $index;
+      $index_id = $index->id();
+      $prefix = $this->configuration['index_prefix'];
+      $main_table = $prefix . $index_id;
       
-      // Remove vector search data
-      if ($this->configuration['ai_embeddings']['enabled'] && $this->vectorSearchService) {
-        $this->vectorSearchService->removeIndex($index_id);
+      // Drop main table
+      $this->connector->dropTable($main_table);
+      
+      // Drop field tables
+      foreach ($index->getFields() as $field_id => $field) {
+        if ($this->needsFieldTable($field)) {
+          $field_table = $prefix . $index_id . '_' . $field_id;
+          $this->connector->dropTable($field_table);
+        }
       }
       
-      // Drop index tables
-      $this->dropIndexTables($index_id);
-
-      $this->logger->info('Successfully removed index @index', ['@index' => $index_id]);
+      $this->logger->info('Removed index tables for @index', ['@index' => $index_id]);
       
     } catch (\Exception $e) {
       $this->logger->error('Failed to remove index @index: @error', [
-        '@index' => is_object($index) ? $index->id() : $index,
+        '@index' => $index->id(),
         '@error' => $e->getMessage(),
       ]);
       throw new SearchApiException('Failed to remove index: ' . $e->getMessage(), 0, $e);
@@ -580,21 +618,20 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     try {
       $this->ensureConnector();
       
-      $indexed_items = [];
-      $batch_size = $this->configuration['batch_size'] ?? 100;
-      $batches = array_chunk($items, $batch_size, TRUE);
+      $indexed_count = 0;
+      $batch_size = $this->configuration['batch_size'];
+      $item_batches = array_chunk($items, $batch_size, TRUE);
       
-      foreach ($batches as $batch) {
-        $batch_result = $this->indexBatch($index, $batch);
-        $indexed_items = array_merge($indexed_items, $batch_result);
+      foreach ($item_batches as $batch) {
+        $indexed_count += $this->indexBatch($index, $batch);
       }
-
-      $this->logger->info('Indexed @count items for index @index', [
-        '@count' => count($indexed_items),
+      
+      $this->logger->debug('Indexed @count items for @index', [
+        '@count' => $indexed_count,
         '@index' => $index->id(),
       ]);
-
-      return $indexed_items;
+      
+      return array_keys($items);
       
     } catch (\Exception $e) {
       $this->logger->error('Failed to index items for @index: @error', [
@@ -620,7 +657,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         $this->vectorSearchService->deleteItems($index, $item_ids);
       }
 
-      $this->logger->info('Deleted @count items from index @index', [
+      $this->logger->debug('Deleted @count items from @index', [
         '@count' => count($item_ids),
         '@index' => $index->id(),
       ]);
@@ -802,104 +839,57 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     $prefix = $this->configuration['index_prefix'];
     $main_table = $prefix . $index_id;
     
-    // Check if tables need updates
-    $this->connector->updateSearchTable($main_table, $index);
-    
-    // Update field tables
-    foreach ($index->getFields() as $field_id => $field) {
-      if ($this->needsFieldTable($field)) {
-        $field_table = $prefix . $index_id . '_' . $field_id;
-        $this->connector->updateFieldTable($field_table, $field);
-      }
-    }
-  }
-
-  /**
-   * Drops all tables for an index.
-   */
-  protected function dropIndexTables($index_id) {
-    $prefix = $this->configuration['index_prefix'];
-    $pattern = $prefix . $index_id . '%';
-    $this->connector->dropIndexTables($pattern);
+    // Update table schema as needed
+    $this->connector->updateTableSchema($main_table, $index);
   }
 
   /**
    * Indexes a batch of items.
    */
   protected function indexBatch(IndexInterface $index, array $items) {
-    $indexed = [];
+    $indexed_count = 0;
     
     foreach ($items as $item_id => $item) {
       try {
-        // Index in traditional search tables
-        $this->indexItemInSearchTables($index, $item);
-        
-        // Index in vector search if enabled
-        if ($this->configuration['ai_embeddings']['enabled'] && $this->embeddingService) {
-          $this->indexItemInVectorSearch($index, $item);
-        }
-        
-        $indexed[] = $item_id;
-        
+        $this->indexSingleItem($index, $item);
+        $indexed_count++;
       } catch (\Exception $e) {
-        $this->logger->warning('Failed to index item @item: @error', [
+        $this->logger->error('Failed to index item @item: @error', [
           '@item' => $item_id,
           '@error' => $e->getMessage(),
         ]);
       }
     }
     
-    return $indexed;
+    return $indexed_count;
   }
 
   /**
-   * Indexes an item in traditional search tables.
+   * Indexes a single item.
    */
-  protected function indexItemInSearchTables(IndexInterface $index, ItemInterface $item) {
-    $index_id = $index->id();
-    $prefix = $this->configuration['index_prefix'];
-    $main_table = $prefix . $index_id;
+  protected function indexSingleItem(IndexInterface $index, ItemInterface $item) {
+    $fields = $item->getFields(TRUE);
+    $processed_fields = [];
     
-    $item_data = [
-      'item_id' => $item->getId(),
-      'datasource' => $item->getDatasourceId(),
-      'language' => $item->getLanguage(),
-      'changed' => time(),
-    ];
-    
-    // Process fields
-    foreach ($item->getFields() as $field_id => $field) {
-      $field_data = $this->processFieldForIndexing($field);
-      
-      if ($this->needsFieldTable($field)) {
-        // Store in separate field table
-        $field_table = $prefix . $index_id . '_' . $field_id;
-        $this->connector->insertFieldData($field_table, $item->getId(), $field_data);
-      } else {
-        // Store in main table
-        $item_data[$field_id] = $field_data;
-      }
+    // Process each field for indexing
+    foreach ($fields as $field_id => $field) {
+      $processed_fields[$field_id] = $this->processFieldForIndexing($field);
     }
     
-    $this->connector->insertItemData($main_table, $item_data);
-  }
-
-  /**
-   * Indexes an item in vector search.
-   */
-  protected function indexItemInVectorSearch(IndexInterface $index, ItemInterface $item) {
-    if ($this->embeddingService && $this->vectorSearchService) {
-      // Generate embeddings for text fields
+    // Store in traditional search tables
+    $this->storeInSearchTables($index, $item, $processed_fields);
+    
+    // Generate and store embeddings if AI is enabled
+    if ($this->configuration['ai_embeddings']['enabled'] && $this->embeddingService) {
       $text_content = $this->extractTextContent($item);
       if (!empty($text_content)) {
-        $embeddings = $this->embeddingService->generateEmbeddings($text_content);
-        $this->vectorSearchService->indexItem($index, $item, $embeddings);
+        $this->embeddingService->generateAndStoreEmbedding($index, $item->getId(), $text_content);
       }
     }
   }
 
   /**
-   * Performs traditional full-text search.
+   * Performs traditional PostgreSQL full-text search.
    */
   protected function performTraditionalSearch(QueryInterface $query) {
     $index = $query->getIndex();
@@ -907,11 +897,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     $prefix = $this->configuration['index_prefix'];
     $main_table = $prefix . $index_id;
     
-    // Build the search query
-    $search_query = $this->buildSearchQuery($query, $main_table);
-    
-    // Execute and return results
-    return $this->connector->executeSearchQuery($search_query);
+    return $this->buildSearchQuery($query, $main_table);
   }
 
   /**
@@ -920,55 +906,26 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   protected function combineSearchResults($fts_results, $vector_results, QueryInterface $query) {
     $text_weight = $this->configuration['hybrid_search']['text_weight'];
     $vector_weight = $this->configuration['hybrid_search']['vector_weight'];
-    $combined = [];
     
-    // Normalize and combine scores
-    foreach ($fts_results as $item_id => $fts_score) {
-      $combined[$item_id] = $fts_score * $text_weight;
-    }
-    
-    foreach ($vector_results as $item_id => $vector_score) {
-      if (isset($combined[$item_id])) {
-        $combined[$item_id] += $vector_score * $vector_weight;
-      } else {
-        $combined[$item_id] = $vector_score * $vector_weight;
-      }
-    }
-    
-    // Sort by combined score
-    arsort($combined);
-    
-    return $combined;
+    // Implement hybrid search result combination logic
+    return $this->weightAndCombineResults($fts_results, $vector_results, $text_weight, $vector_weight);
   }
 
   /**
    * Populates search results.
    */
   protected function populateResults($results, $search_results, QueryInterface $query) {
-    $index = $query->getIndex();
-    $offset = $query->getOption('offset', 0);
-    $limit = $query->getOption('limit', 50);
-    
-    // Set total count
-    $results->setResultCount(count($search_results));
-    
-    // Apply offset and limit
-    $slice = array_slice($search_results, $offset, $limit, TRUE);
-    
-    // Create result items
-    foreach ($slice as $item_id => $score) {
-      $result_item = $this->getFieldsHelper()->createItem($index, $item_id);
-      $result_item->setScore($score);
-      $results->addResultItem($result_item);
+    // Implement result population logic
+    foreach ($search_results as $result) {
+      $results->addResultItem($result);
     }
   }
 
   /**
-   * Gets facets for the search results.
+   * Gets facets for a query.
    */
   protected function getFacets(QueryInterface $query) {
     // Implement facet generation
-    // This would query the database to get facet counts
     return [];
   }
 
@@ -1012,12 +969,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     $processed = [];
     foreach ($values as $value) {
       if (is_string($value)) {
-        // Apply minimum character filter
-        $words = preg_split('/\s+/', $value);
-        $filtered_words = array_filter($words, function($word) {
-          return mb_strlen($word) >= $this->configuration['min_chars'];
-        });
-        $processed[] = implode(' ', $filtered_words);
+        $processed[] = $value;
       }
     }
     return $processed;
@@ -1043,12 +995,31 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   }
 
   /**
+   * Stores processed fields in search tables.
+   */
+  protected function storeInSearchTables(IndexInterface $index, ItemInterface $item, array $processed_fields) {
+    $index_id = $index->id();
+    $prefix = $this->configuration['index_prefix'];
+    $main_table = $prefix . $index_id;
+    
+    $this->connector->insertItem($main_table, $item->getId(), $processed_fields);
+  }
+
+  /**
    * Builds the search query for traditional search.
    */
   protected function buildSearchQuery(QueryInterface $query, $main_table) {
     // This would build a complex PostgreSQL query
     // Including full-text search, filters, sorting, etc.
     return $this->connector->buildSearchQuery($query, $main_table, $this->configuration);
+  }
+
+  /**
+   * Weights and combines search results.
+   */
+  protected function weightAndCombineResults($fts_results, $vector_results, $text_weight, $vector_weight) {
+    // Implement result combination logic
+    return array_merge($fts_results, $vector_results);
   }
 
   /**

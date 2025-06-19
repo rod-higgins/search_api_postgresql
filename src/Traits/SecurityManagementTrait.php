@@ -378,7 +378,6 @@ trait SecurityManagementTrait {
    *   Available keys from Key module.
    */
   protected function addAiKeyFieldsToForm(array &$form, array $keys = NULL) {
-    
     // If keys not provided, get them ourselves
     if ($keys === NULL) {
       $key_repository = $this->getKeyRepository();
