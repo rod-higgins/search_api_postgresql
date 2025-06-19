@@ -215,6 +215,55 @@ private function validateAiFeaturesConfiguration(array $config) {
   }
 
   /**
+   * Checks server health by running comprehensive tests.
+   *
+   * @param \Drupal\search_api\ServerInterface $server
+   *   The server to check.
+   *
+   * @return array
+   *   Array containing health check results with 'overall' status.
+   */
+  public function checkServerHealth(ServerInterface $server) {
+    $tests = [];
+    
+    // Test database connection
+    $tests['database_connection'] = $this->testDatabaseConnection($server);
+    
+    // Test key access
+    $tests['key_access'] = $this->testKeyAccess($server);
+    
+    // Test pgvector extension
+    $tests['pgvector_extension'] = $this->testPgVectorExtension($server);
+    
+    // Test AI service if enabled
+    $backend = $server->getBackend();
+    $config = $backend->getConfiguration();
+    if ($this->isAiEmbeddingsEnabled($config)) {
+      $tests['ai_service'] = $this->testAiService($server);
+    }
+    
+    // Determine overall health status
+    $overall_health = TRUE;
+    $failed_tests = [];
+    
+    foreach ($tests as $test_name => $result) {
+      if (!$result['success']) {
+        $overall_health = FALSE;
+        $failed_tests[] = $test_name;
+      }
+    }
+    
+    return [
+      'overall' => $overall_health,
+      'tests' => $tests,
+      'failed_tests' => $failed_tests,
+      'message' => $overall_health ? 
+        'All health checks passed' : 
+        sprintf('Failed tests: %s', implode(', ', $failed_tests))
+    ];
+  }
+
+  /**
    * Checks if pgvector extension is available.
    *
    * @param \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector $connector
