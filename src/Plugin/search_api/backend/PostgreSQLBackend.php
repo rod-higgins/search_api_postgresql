@@ -15,6 +15,7 @@ use Drupal\search_api_postgresql\Traits\SecurityManagementTrait;
 use Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector;
 use Drupal\search_api_postgresql\Service\EmbeddingService;
 use Drupal\search_api_postgresql\Service\VectorSearchService;
+use Drupal\search_api_postgresql\PostgreSQL\FieldMapper;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -871,7 +872,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       $this->ensureConnector();
       
       // Create the field mapper
-      $field_mapper = new \Drupal\search_api_postgresql\PostgreSQL\FieldMapper();
+      $fieldMapper = new FieldMapper($this->configuration);
       $embedding_service = null;
       
       // Initialize embedding service if vector search is enabled
