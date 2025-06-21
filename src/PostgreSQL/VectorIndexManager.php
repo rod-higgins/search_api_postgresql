@@ -272,43 +272,83 @@ class VectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds SELECT clause for vector search.
+   *
+   * @param \Drupal\search_api\Query\QueryInterface $query
+   *   The search query.
+   *
+   * @return string
+   *   The SELECT clause.
    */
   protected function buildVectorSelectClause(QueryInterface $query) {
-    $fields = ['search_api_id', 'search_api_datasource', 'search_api_language'];
+    $fields = [];
+    
+    // Add system fields
+    $fields[] = 'search_api_id';
+    $fields[] = 'search_api_datasource';
+    $fields[] = 'search_api_language';
     
     // Add requested fields
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
       $fields[] = $field_id;
     }
 
-    // Add vector similarity score
-    $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS search_api_relevance";
+    // ALWAYS add relevance score - required by Search API specification
+    if ($query->getKeys() && $this->embeddingService) {
+      // With search keys and embedding service: use vector similarity score
+      $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS search_api_relevance";
+    } else {
+      // Without search keys or embedding service: provide default relevance value
+      $fields[] = "1.0 AS search_api_relevance";
+    }
 
     return implode(', ', $fields);
   }
 
   /**
    * Builds SELECT clause for hybrid search.
+   *
+   * @param \Drupal\search_api\Query\QueryInterface $query
+   *   The search query.
+   * @param float $text_weight
+   *   Weight for text search scores.
+   * @param float $vector_weight
+   *   Weight for vector search scores.
+   *
+   * @return string
+   *   The SELECT clause.
    */
   protected function buildHybridSelectClause(QueryInterface $query, $text_weight, $vector_weight) {
-    $fields = ['search_api_id', 'search_api_datasource', 'search_api_language'];
+    $fields = [];
+    
+    // Add system fields
+    $fields[] = 'search_api_id';
+    $fields[] = 'search_api_datasource';
+    $fields[] = 'search_api_language';
     
     // Add requested fields
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
       $fields[] = $field_id;
     }
 
-    // Combine text and vector scores
-    $fts_config = $this->config['fts_configuration'];
-    $fields[] = "
-      (
-        {$text_weight} * ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query)) +
-        {$vector_weight} * (1 - (content_embedding <=> :query_embedding))
-      ) AS hybrid_score";
-    
-    $fields[] = "ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query)) AS text_score";
-    $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS vector_score";
-    $fields[] = "hybrid_score AS search_api_relevance";
+    // ALWAYS add relevance score - required by Search API specification
+    if ($query->getKeys() && $this->embeddingService) {
+      // With search keys and embedding service: use hybrid scoring
+      $fts_config = $this->config['fts_configuration'] ?? 'english';
+      
+      // Combine text and vector scores
+      $fields[] = "
+        (
+          {$text_weight} * ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query)) +
+          {$vector_weight} * (1 - (content_embedding <=> :query_embedding))
+        ) AS hybrid_score";
+      
+      $fields[] = "ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query)) AS text_score";
+      $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS vector_score";
+      $fields[] = "hybrid_score AS search_api_relevance";
+    } else {
+      // Without search keys or embedding service: provide default relevance value
+      $fields[] = "1.0 AS search_api_relevance";
+    }
 
     return implode(', ', $fields);
   }

@@ -26,25 +26,6 @@ class AzureVectorQueryBuilder extends QueryBuilder {
   }
 
   /**
-   * {@inheritdoc}
-   */
-  public function buildSearchQuery(QueryInterface $query) {
-    $search_mode = $query->getOption('search_mode', 'hybrid');
-    
-    switch ($search_mode) {
-      case 'vector_only':
-        return $this->buildVectorSearchQuery($query);
-      
-      case 'text_only':
-        return parent::buildSearchQuery($query);
-        
-      case 'hybrid':
-      default:
-        return $this->buildHybridSearchQuery($query);
-    }
-  }
-
-  /**
    * Builds a vector-only search query using Azure embeddings.
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
@@ -92,6 +73,69 @@ class AzureVectorQueryBuilder extends QueryBuilder {
     $params[':query_embedding'] = '[' . implode(',', $query_embedding) . ']';
 
     return ['sql' => $sql, 'params' => $params];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function buildSearchQuery(QueryInterface $query) {
+    // Handle queries without search keys using parent method
+    if (!$query->getKeys()) {
+      return parent::buildSearchQuery($query);
+    }
+
+    // Check if Azure vector search is enabled and available
+    if (!$this->isVectorSearchEnabled()) {
+      return parent::buildSearchQuery($query);
+    }
+
+    $search_mode = $query->getOption('search_mode', 'hybrid');
+    
+    switch ($search_mode) {
+      case 'vector_only':
+        return $this->buildVectorSearchQuery($query);
+      
+      case 'text_only':
+        return parent::buildSearchQuery($query);
+        
+      case 'hybrid':
+      default:
+        return $this->buildHybridSearchQuery($query);
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   * 
+   * Overrides parent to ensure search_api_relevance is always included.
+   */
+  protected function buildSelectClause(QueryInterface $query) {
+    $fields = [];
+    
+    // Add system fields (properly quoted)
+    $fields[] = $this->connector->quoteColumnName('search_api_id');
+    $fields[] = $this->connector->quoteColumnName('search_api_datasource');
+    $fields[] = $this->connector->quoteColumnName('search_api_language');
+    
+    // Add requested fields from the index
+    foreach ($query->getIndex()->getFields() as $field_id => $field) {
+      $safe_field = $this->validateIndexField($query->getIndex(), $field_id);
+      $fields[] = $safe_field;
+    }
+
+    // ALWAYS add relevance score - required by Search API specification
+    if ($query->getKeys()) {
+      // With search keys: use actual relevance calculation
+      $fts_config = $this->validateFtsConfiguration();
+      $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') . 
+                ", to_tsquery('{$fts_config}', :ts_query)) AS " . 
+                $this->connector->quoteColumnName('search_api_relevance');
+    } else {
+      // Without search keys: provide default relevance value
+      $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
+    }
+
+    return implode(', ', $fields);
   }
 
   /**
@@ -169,8 +213,15 @@ class AzureVectorQueryBuilder extends QueryBuilder {
       $fields[] = $this->connector->quoteColumnName($field_id);
     }
 
-    // Add vector similarity score
-    $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS " . $this->connector->quoteColumnName('search_api_relevance');
+    // ALWAYS add relevance score - required by Search API specification
+    if ($query->getKeys() && $this->embeddingService) {
+      // With search keys and Azure embedding service: use vector similarity score
+      $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS " .
+                $this->connector->quoteColumnName('search_api_relevance');
+    } else {
+      // Without search keys or embedding service: provide default relevance value
+      $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
+    }
 
     return implode(', ', $fields);
   }
@@ -240,25 +291,27 @@ class AzureVectorQueryBuilder extends QueryBuilder {
       $fields[] = $this->connector->quoteColumnName($field_id);
     }
 
-    $fts_config = $this->config['fts_configuration'] ?? 'english';
-    $search_vector_field = $this->connector->quoteColumnName('search_vector');
-    
-    // Combine text and vector scores with Azure-optimized weighting
-    $fields[] = "
-      CASE 
-        WHEN content_embedding IS NOT NULL AND {$search_vector_field} @@ to_tsquery('{$fts_config}', :ts_query) THEN
-          {$text_weight} * ts_rank({$search_vector_field}, to_tsquery('{$fts_config}', :ts_query)) +
+    // ALWAYS add relevance score - required by Search API specification
+    if ($query->getKeys() && $this->embeddingService) {
+      // With search keys and Azure embedding service: use hybrid scoring
+      $fts_config = $this->config['fts_configuration'] ?? 'english';
+      
+      // Combine text and vector scores (Azure-optimized)
+      $fields[] = "
+        (
+          {$text_weight} * ts_rank(" . $this->connector->quoteColumnName('search_vector') . 
+          ", to_tsquery('{$fts_config}', :ts_query)) +
           {$vector_weight} * (1 - (content_embedding <=> :query_embedding))
-        WHEN content_embedding IS NOT NULL THEN
-          {$vector_weight} * (1 - (content_embedding <=> :query_embedding))
-        WHEN {$search_vector_field} @@ to_tsquery('{$fts_config}', :ts_query) THEN
-          {$text_weight} * ts_rank({$search_vector_field}, to_tsquery('{$fts_config}', :ts_query))
-        ELSE 0
-      END AS hybrid_score";
-    
-    $fields[] = "ts_rank({$search_vector_field}, to_tsquery('{$fts_config}', :ts_query)) AS text_score";
-    $fields[] = "COALESCE((1 - (content_embedding <=> :query_embedding)), 0) AS vector_score";
-    $fields[] = "hybrid_score AS " . $this->connector->quoteColumnName('search_api_relevance');
+        ) AS hybrid_score";
+      
+      $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') . 
+                ", to_tsquery('{$fts_config}', :ts_query)) AS text_score";
+      $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS vector_score";
+      $fields[] = "hybrid_score AS " . $this->connector->quoteColumnName('search_api_relevance');
+    } else {
+      // Without search keys or embedding service: provide default relevance value
+      $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
+    }
 
     return implode(', ', $fields);
   }

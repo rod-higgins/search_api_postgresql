@@ -149,12 +149,16 @@ class QueryBuilder {
       $fields[] = $safe_field;
     }
 
-    // Add relevance score if there's a full-text search
+    // ALWAYS add relevance score - required by Search API specification
     if ($query->getKeys()) {
+      // With search keys: use actual relevance calculation
       $fts_config = $this->validateFtsConfiguration();
       $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') . 
-                 ", to_tsquery('{$fts_config}', :ts_query)) AS " . 
-                 $this->connector->quoteColumnName('search_api_relevance');
+                ", to_tsquery('{$fts_config}', :ts_query)) AS " . 
+                $this->connector->quoteColumnName('search_api_relevance');
+    } else {
+      // Without search keys: provide default relevance value
+      $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
     }
 
     return implode(', ', $fields);
