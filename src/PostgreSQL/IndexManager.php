@@ -153,17 +153,7 @@ class IndexManager {
   }
 
   /**
-   * Indexes an item in the database.
-   *
-   * @param string $table_name
-   *   The table name (quoted).
-   * @param \Drupal\search_api\IndexInterface $index
-   *   The search index.
-   * @param \Drupal\search_api\Item\ItemInterface $item
-   *   The item to index.
-   *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If indexing fails.
+   * Enhanced indexItem method that properly handles complex field types.
    */
   public function indexItem($table_name, IndexInterface $index, ItemInterface $item) {
     $fields = $item->getFields(TRUE);
@@ -173,69 +163,129 @@ class IndexManager {
       'search_api_language' => $item->getLanguage() ?: '',
     ];
 
-    // Process field values
+    $searchable_text_parts = [];
+
+    // Process field values with enhanced extraction
     foreach ($fields as $field_id => $field) {
-      $field_value = $field->getValues();
-      if (!empty($field_value)) {
-        $prepared_value = $this->fieldMapper->prepareFieldValue(
-          reset($field_value),
-          $field->getType()
-        );
-        $values[$field_id] = $prepared_value;
+      // Validate field ID to prevent SQL injection
+      $this->connector->validateIdentifier($field_id, 'field ID');
+      
+      $field_values = $field->getValues();
+      $field_type = $field->getType();
+      
+      if (!empty($field_values)) {
+        try {
+          // Get the first value and extract scalar data
+          $raw_value = reset($field_values);
+          
+          // Use the enhanced extraction method
+          $scalar_value = $this->fieldMapper->extractScalarValue($raw_value, $field_type);
+          
+          // Now prepare the value for the field type
+          $prepared_value = $this->fieldMapper->prepareFieldValue($scalar_value, $field_type);
+          $values[$field_id] = $prepared_value;
+          
+          // Collect text for full-text search if this is a searchable field
+          $searchable_fields = $this->fieldMapper->getSearchableFields($index);
+          if (in_array($field_id, $searchable_fields) && in_array($field_type, ['text', 'string'])) {
+            if (is_array($scalar_value)) {
+              $searchable_text_parts[] = implode(' ', array_filter($scalar_value, 'is_scalar'));
+            } elseif (is_scalar($scalar_value)) {
+              $searchable_text_parts[] = (string) $scalar_value;
+            }
+          }
+        }
+        catch (\Exception $e) {
+          // Log the error with field details for debugging
+          \Drupal::logger('search_api_postgresql')->error('Failed to process field @field_id (@field_type) for item @item_id: @message', [
+            '@field_id' => $field_id,
+            '@field_type' => $field_type,
+            '@item_id' => $item->getId(),
+            '@message' => $e->getMessage(),
+          ]);
+          
+          // Set field to NULL to prevent indexing failure
+          $values[$field_id] = NULL;
+        }
+      } else {
+        // Set empty fields to NULL
+        $values[$field_id] = NULL;
       }
     }
 
     // Generate full-text search vector
-    $searchable_text = $this->fieldMapper->extractSearchableText($fields, $index);
+    $searchable_text = trim(implode(' ', array_filter($searchable_text_parts)));
     if (!empty($searchable_text)) {
       $fts_config = $this->validateFtsConfiguration();
       $values['search_vector'] = "to_tsvector('{$fts_config}', :searchable_text)";
     }
 
-    // Generate embeddings if enabled
-    if ($this->isVectorSearchEnabled() && $this->embeddingService) {
-      $embedding_text = $this->fieldMapper->generateEmbeddingText($values, $index);
-      if (!empty($embedding_text)) {
-        try {
-          $embedding = $this->embeddingService->generateEmbedding($embedding_text);
-          if (!empty($embedding)) {
-            $values['embedding_vector'] = $this->fieldMapper->prepareFieldValue($embedding, 'vector');
-          }
-        }
-        catch (\Exception $e) {
-          // Log error but don't fail indexing
-          \Drupal::logger('search_api_postgresql')->warning('Failed to generate embedding for item @id: @message', [
-            '@id' => $item->getId(),
-            '@message' => $e->getMessage(),
-          ]);
-        }
-      }
+    // Generate embeddings if enabled (queue for background processing)
+    if ($this->isVectorSearchEnabled() && !empty($searchable_text)) {
+      // Set embedding to NULL initially - will be updated via queue
+      $values['embedding_vector'] = NULL;
+      
+      // Queue embedding generation
+      $this->queueEmbeddingGeneration($index, $item->getId(), $searchable_text);
     }
 
-    // Build INSERT query
+    // Build and execute INSERT query
+    $this->executeIndexQuery($table_name, $values, $searchable_text);
+  }
+
+  /**
+   * Executes the index query with proper parameter binding.
+   */
+  protected function executeIndexQuery($table_name, array $values, $searchable_text = '') {
     $columns = [];
     $placeholders = [];
     $params = [];
 
     foreach ($values as $field_id => $value) {
-      $columns[] = $this->connector->quoteColumnName($field_id);
-      if ($field_id === 'search_vector' && strpos($value, 'to_tsvector') === 0) {
+      $quoted_column = $this->connector->quoteColumnName($field_id);
+      $columns[] = $quoted_column;
+      
+      if ($field_id === 'search_vector' && is_string($value) && strpos($value, 'to_tsvector') === 0) {
+        // Raw SQL expression for tsvector
         $placeholders[] = $value;
-      }
-      else {
-        $placeholders[] = ":{$field_id}";
-        $params[":{$field_id}"] = $value;
+      } else {
+        $placeholder = ":{$field_id}";
+        $placeholders[] = $placeholder;
+        $params[$placeholder] = $value;
       }
     }
 
-    if (isset($values['search_vector'])) {
+    // Add searchable text parameter if needed
+    if (!empty($searchable_text)) {
       $params[':searchable_text'] = $searchable_text;
     }
 
-    $insert_sql = "INSERT INTO {$table_name} (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")
-                   ON CONFLICT (search_api_id) DO UPDATE SET " . $this->buildUpdateSet($columns, $values);
+    // Use UPSERT to handle updates
+    $insert_sql = "INSERT INTO {$table_name} (" . implode(', ', $columns) . ") 
+                  VALUES (" . implode(', ', $placeholders) . ")
+                  ON CONFLICT (search_api_id) DO UPDATE SET " . 
+                  $this->buildUpdateClause($columns, $placeholders, $values);
     
     $this->connector->executeQuery($insert_sql, $params);
+  }
+
+  /**
+   * Builds the UPDATE clause for UPSERT operations.
+   */
+  protected function buildUpdateClause(array $columns, array $placeholders, array $values) {
+    $update_parts = [];
+    
+    for ($i = 0; $i < count($columns); $i++) {
+      $column = $columns[$i];
+      $placeholder = $placeholders[$i];
+      
+      // Skip the ID column in updates
+      if (strpos($column, 'search_api_id') === false) {
+        $update_parts[] = "{$column} = {$placeholder}";
+      }
+    }
+    
+    return implode(', ', $update_parts);
   }
 
   /**

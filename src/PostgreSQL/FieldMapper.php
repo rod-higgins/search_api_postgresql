@@ -255,6 +255,131 @@ class FieldMapper {
   }
 
   /**
+   * Extracts scalar values from complex field objects.
+   *
+   * @param mixed $field_value
+   *   The field value from Search API.
+   * @param string $field_type
+   *   The field type.
+   *
+   * @return mixed
+   *   A scalar value or array of scalars.
+   */
+  protected function extractScalarValue($field_value, $field_type) {
+    // Handle different field value types
+    if (is_scalar($field_value)) {
+      return $field_value;
+    }
+
+    // Handle TextItem objects (formatted text fields)
+    if (is_object($field_value)) {
+      // Check for common text extraction methods
+      if (method_exists($field_value, 'getValue')) {
+        $value = $field_value->getValue();
+        // For formatted text, extract the actual text
+        if (is_array($value) && isset($value['value'])) {
+          return $value['value'];
+        }
+        return $value;
+      }
+      
+      if (method_exists($field_value, 'getString')) {
+        return $field_value->getString();
+      }
+      
+      if (method_exists($field_value, '__toString')) {
+        return (string) $field_value;
+      }
+      
+      // For entity references, try to get label
+      if (method_exists($field_value, 'getEntity')) {
+        $entity = $field_value->getEntity();
+        if ($entity && method_exists($entity, 'label')) {
+          return $entity->label();
+        }
+      }
+      
+      // Handle typed data objects
+      if (method_exists($field_value, 'value')) {
+        $property_value = $field_value->value;
+        if (is_scalar($property_value)) {
+          return $property_value;
+        }
+      }
+    }
+
+    // Handle arrays recursively
+    if (is_array($field_value)) {
+      $scalar_values = [];
+      foreach ($field_value as $item) {
+        $scalar_item = $this->extractScalarValue($item, $field_type);
+        if (is_scalar($scalar_item)) {
+          $scalar_values[] = $scalar_item;
+        }
+      }
+      return $scalar_values;
+    }
+
+    // Last resort - try to convert to string
+    if (is_object($field_value) || is_array($field_value)) {
+      // Log a warning for debugging
+      \Drupal::logger('search_api_postgresql')->warning('Could not extract scalar value from field type @type: @value', [
+        '@type' => $field_type,
+        '@value' => is_object($field_value) ? get_class($field_value) : gettype($field_value),
+      ]);
+      
+      // Return empty string to prevent indexing failure
+      return '';
+    }
+
+    return $field_value;
+  }
+
+  /**
+   * Enhanced prepareFieldValue method that handles complex field types.
+   *
+   * @param mixed $value
+   *   The field value.
+   * @param string $field_type
+   *   The field type.
+   *
+   * @return mixed
+   *   The prepared value.
+   */
+  public function prepareFieldValue($value, $field_type) {
+    // First extract scalar values from complex objects
+    $scalar_value = $this->extractScalarValue($value, $field_type);
+    
+    // Now process based on field type
+    switch ($field_type) {
+      case 'text':
+        return $this->prepareTextValue($scalar_value);
+        
+      case 'string':
+        return $this->prepareStringValue($scalar_value);
+        
+      case 'integer':
+        return $this->prepareIntegerValue($scalar_value);
+        
+      case 'decimal':
+        return $this->prepareDecimalValue($scalar_value);
+        
+      case 'boolean':
+        return $this->prepareBooleanValue($scalar_value);
+        
+      case 'date':
+        return $this->prepareDateValue($scalar_value);
+        
+      case 'vector':
+        return $this->prepareVectorValue($scalar_value);
+        
+      default:
+        // For unknown types, treat as text
+        return $this->prepareTextValue($scalar_value);
+    }
+  }
+
+  /**
    * Generates searchable text from multiple fields for embedding.
    *
    * @param array $field_values
@@ -281,55 +406,6 @@ class FieldMapper {
 
     $combined_text = implode(' ', array_filter($text_parts));
     return trim($combined_text);
-  }
-
-  /**
-   * Prepares a field value for database storage.
-   *
-   * @param mixed $value
-   *   The field value.
-   * @param string $type
-   *   The field type.
-   *
-   * @return mixed
-   *   The prepared value.
-   *
-   * @throws \Drupal\search_api\SearchApiException
-   *   If value preparation fails.
-   */
-  public function prepareFieldValue($value, $type) {
-    if ($value === NULL) {
-      return NULL;
-    }
-
-    $this->validateSearchApiType($type);
-
-    switch ($type) {
-      case 'text':
-      case 'postgresql_fulltext':
-        return $this->prepareTextValue($value);
-
-      case 'string':
-        return $this->prepareStringValue($value);
-
-      case 'integer':
-        return $this->prepareIntegerValue($value);
-
-      case 'decimal':
-        return $this->prepareDecimalValue($value);
-
-      case 'date':
-        return $this->prepareDateValue($value);
-
-      case 'boolean':
-        return $this->prepareBooleanValue($value);
-
-      case 'vector':
-        return $this->prepareVectorValue($value);
-
-      default:
-        throw new SearchApiException("Unsupported field type for value preparation: {$type}");
-    }
   }
 
   /**
