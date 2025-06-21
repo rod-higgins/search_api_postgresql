@@ -260,7 +260,6 @@ class QueryBuilder {
     // Special handling for boolean fields - cast the parameter in SQL
     $parameter_ref = ":{$field}";
     if (in_array($field, ['status', 'sticky']) && in_array($operator, ['=', '<>', '!='])) {
-      // Cast integer parameter to boolean in SQL
       $parameter_ref = ":{$field}::boolean";
     }
 
@@ -274,16 +273,16 @@ class QueryBuilder {
         return "{$safe_field} <> {$parameter_ref}";
 
       case '<':
-        return "{$safe_field} < :{$field}";
+        return "{$safe_field} < {$parameter_ref}";
 
       case '<=':
-        return "{$safe_field} <= :{$field}";
+        return "{$safe_field} <= {$parameter_ref}";
 
       case '>':
-        return "{$safe_field} > :{$field}";
+        return "{$safe_field} > {$parameter_ref}";
 
       case '>=':
-        return "{$safe_field} >= :{$field}";
+        return "{$safe_field} >= {$parameter_ref}";
 
       case 'IN':
         if (is_array($value) && !empty($value)) {
@@ -317,24 +316,14 @@ class QueryBuilder {
 
       case 'BETWEEN':
         if (is_array($value) && count($value) === 2) {
-          return "{$safe_field} BETWEEN :{$field}_between_start AND :{$field}_between_end";
+          return "{$safe_field} BETWEEN :{$field}_min AND :{$field}_max";
         }
-        return '1=1';
+        throw new \InvalidArgumentException('BETWEEN operator requires array with exactly 2 values');
 
-      case 'NOT BETWEEN':
-        if (is_array($value) && count($value) === 2) {
-          return "{$safe_field} NOT BETWEEN :{$field}_not_between_start AND :{$field}_not_between_end";
-        }
-        return '1=1';
-
-      case 'CONTAINS':
-        return "{$safe_field} LIKE :{$field}_contains";
-
-      case 'STARTS_WITH':
-        return "{$safe_field} LIKE :{$field}_starts_with";
-
-      case 'ENDS_WITH':
-        return "{$safe_field} LIKE :{$field}_ends_with";
+      case 'LIKE':
+      case 'NOT LIKE':
+        $like_operator = $operator === 'LIKE' ? 'LIKE' : 'NOT LIKE';
+        return "{$safe_field} {$like_operator} {$parameter_ref}";
 
       case 'IS NULL':
         return "{$safe_field} IS NULL";
@@ -343,7 +332,7 @@ class QueryBuilder {
         return "{$safe_field} IS NOT NULL";
 
       default:
-        return "{$safe_field} = :{$field}";
+        throw new \InvalidArgumentException("Unsupported operator: {$operator}");
     }
   }
 
