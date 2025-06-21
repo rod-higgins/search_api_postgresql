@@ -547,28 +547,25 @@ private function validateAiFeaturesConfiguration(array $config) {
     }
   }
 
-
   /**
    * Tests database connection.
    */
   protected function testDatabaseConnection(ServerInterface $server) {
     try {
-      $backend = $server->getBackend();
+
+      $values = $form_state->getValues();
+      $connection_config = $values['backend_config']['connection'] ?? $this->configuration['connection'];
       
-      // Get password using the backend's method
-      $config = $backend->getConfiguration();
-      $connection_config = $config['connection'];
-      
-      // Use the backend's password resolution method
-      if (method_exists($backend, 'getDatabasePassword')) {
-        $reflection = new \ReflectionClass($backend);
+      if (method_exists($this, 'getDatabasePassword')) {
+        $reflection = new \ReflectionClass($this);
         $method = $reflection->getMethod('getDatabasePassword');
         $method->setAccessible(TRUE);
-        $connection_config['password'] = $method->invoke($backend);
+        $connection_config['password'] = $method->invoke($this);
       }
-
-      $connector = new PostgreSQLConnector($connection_config, $this->logger);
-      $connector->testConnection();
+      
+      // Test the connection
+      $test_connector = new PostgreSQLConnector($connection_config, $this->logger);
+      $result = $test_connector->testConnection();
 
       $password_info = '';
       if (!empty($connection_config['password_key'])) {

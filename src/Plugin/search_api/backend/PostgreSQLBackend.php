@@ -778,48 +778,23 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
   /**
    * AJAX callback for testing database connection.
-   * Updated to use the same logic as ConfigurationValidationService.
+   * Updated for Drupal 11 with proper translation and improved user feedback.
    */
   public function testConnectionAjax(array &$form, FormStateInterface $form_state) {
     try {
       $values = $form_state->getValues();
-      $connection_config = $values['connection'] ?? $this->configuration['connection'];
+      $connection_config = $values['backend_config']['connection'] ?? $this->configuration['connection'];
+      $test_connector = new PostgreSQLConnector($connection_config, $this->logger);
+      $result = $test_connector->testConnection();
       
-      // Use the backend's password resolution method (same as ConfigurationValidationService)
-      if (method_exists($this, 'getDatabasePassword') && !empty($connection_config['password_key'])) {
-        $reflection = new \ReflectionClass($this);
-        $method = $reflection->getMethod('getDatabasePassword');
-        $method->setAccessible(TRUE);
-        $connection_config['password'] = $method->invoke($this);
-      }
-
-      // Test the connection using the same approach as ConfigurationValidationService
-      $connector = new PostgreSQLConnector($connection_config, $this->logger);
-      $test_result = $connector->testConnection();
-      
-      if ($test_result['success']) {
-        // Provide detailed connection information like ConfigurationValidationService
-        $password_info = '';
-        if (!empty($connection_config['password_key'])) {
-          $password_info = ' (using key: ' . $connection_config['password_key'] . ')';
-        }
-        elseif (!empty($connection_config['password'])) {
-          $password_info = ' (using direct password)';
-        }
-        else {
-          $password_info = ' (passwordless connection)';
-        }
-        
-        $details = 'Connected to ' . $connection_config['host'] . ':' . $connection_config['port'] . $password_info;
-        
-        $message = $this->t('Connection successful! @details', [
-          '@details' => $details,
+      if ($result['success']) {
+        $message = $this->t('Connection successful! Database: @db, Version: @version', [
+          '@db' => $result['database'] ?? 'Unknown',
+          '@version' => $result['version'] ?? 'Unknown',
         ]);
         $message_type = 'status';
       } else {
-        $message = $this->t('Connection failed: @error', [
-          '@error' => $test_result['error'] ?? 'Unknown error',
-        ]);
+        $message = $this->t('Connection failed: @error', ['@error' => $result['error']]);
         $message_type = 'error';
       }
       
@@ -836,7 +811,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#type' => 'container',
       '#attributes' => [
         'id' => 'connection-test-result',
-        'class' => ['connection-test-result'],
+        'class' => ['connection-test-wrapper'],
       ],
       'message' => [
         '#theme' => 'status_messages',
