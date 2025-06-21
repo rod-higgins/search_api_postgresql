@@ -98,12 +98,6 @@ class QueryBuilder {
     $sql = $this->assembleSqlQuery($sql_parts);
     $params = $this->getQueryParameters($query);
 
-    // DEBUG: Output the generated query
-    echo "\n=== QueryBuilder DEBUG ===\n";
-    echo "SQL: " . $sql . "\n";
-    echo "Params: " . print_r($params, true) . "\n";
-    echo "========================\n";
-
     return ['sql' => $sql, 'params' => $params];
   }
 
