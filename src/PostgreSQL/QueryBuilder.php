@@ -320,6 +320,21 @@ class QueryBuilder {
         }
         throw new \InvalidArgumentException('BETWEEN operator requires array with exactly 2 values');
 
+      case 'NOT BETWEEN':
+        if (is_array($value) && count($value) === 2) {
+          return "{$safe_field} NOT BETWEEN :{$field}_not_between_min AND :{$field}_not_between_max";
+        }
+        throw new \InvalidArgumentException('NOT BETWEEN operator requires array with exactly 2 values');
+
+      case 'CONTAINS':
+        return "{$safe_field} LIKE :{$field}_contains";
+
+      case 'STARTS_WITH':
+        return "{$safe_field} LIKE :{$field}_starts_with";
+
+      case 'ENDS_WITH':
+        return "{$safe_field} LIKE :{$field}_ends_with";
+
       case 'LIKE':
       case 'NOT LIKE':
         $like_operator = $operator === 'LIKE' ? 'LIKE' : 'NOT LIKE';
@@ -614,15 +629,15 @@ class QueryBuilder {
 
       case 'BETWEEN':
         if (is_array($value) && count($value) === 2) {
-          $params[":{$field}_between_start"] = $value[0];
-          $params[":{$field}_between_end"] = $value[1];
+          $params[":{$field}_min"] = $value[0];
+          $params[":{$field}_max"] = $value[1];
         }
         break;
 
       case 'NOT BETWEEN':
         if (is_array($value) && count($value) === 2) {
-          $params[":{$field}_not_between_start"] = $value[0];
-          $params[":{$field}_not_between_end"] = $value[1];
+          $params[":{$field}_not_between_min"] = $value[0];
+          $params[":{$field}_not_between_max"] = $value[1];
         }
         break;
 
@@ -644,7 +659,15 @@ class QueryBuilder {
         break;
 
       default:
-        $params[":{$field}"] = $value;
+        // For boolean fields that need casting, ensure we bind as integer
+        // The ::boolean cast in SQL will handle the conversion
+        if (in_array($field, ['status', 'sticky']) && is_bool($value)) {
+          // Convert PHP boolean back to integer for PostgreSQL parameter binding
+          // The SQL will use ::boolean cast to convert it properly
+          $params[":{$field}"] = $value ? 1 : 0;
+        } else {
+          $params[":{$field}"] = $value;
+        }
         break;
     }
   }
