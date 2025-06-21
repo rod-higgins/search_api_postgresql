@@ -207,65 +207,54 @@ function search_api_postgresql_schema() {
     ],
   ];
 
-  // Embedding cache table
+  // CORRECTED: Embedding cache table - Updated to match DatabaseEmbeddingCache expectations
   $schema['search_api_postgresql_embedding_cache'] = [
-    'description' => 'Cache for embedding vectors',
+    'description' => 'Cache table for embedding vectors.',
     'fields' => [
-      'cache_id' => [
-        'type' => 'varchar',
-        'length' => 255,
-        'not null' => TRUE,
-        'description' => 'Cache ID (hash of content)',
-      ],
-      'server_id' => [
-        'type' => 'varchar',
-        'length' => 255,
-        'not null' => TRUE,
-        'description' => 'Server ID',
-      ],
-      'content_hash' => [
+      'text_hash' => [
         'type' => 'varchar',
         'length' => 64,
         'not null' => TRUE,
-        'description' => 'SHA-256 hash of the content',
+        'description' => 'SHA256 hash of the text.',
       ],
-      'embedding' => [
-        'type' => 'text',
+      'embedding_data' => [
+        'type' => 'blob',
         'size' => 'big',
         'not null' => TRUE,
-        'description' => 'Serialized embedding vector',
+        'description' => 'Serialized and possibly compressed embedding vector.',
       ],
-      'model' => [
-        'type' => 'varchar',
-        'length' => 100,
+      'dimensions' => [
+        'type' => 'int',
         'not null' => TRUE,
-        'description' => 'Model used to generate embedding',
+        'description' => 'Number of dimensions in the vector.',
       ],
       'created' => [
         'type' => 'int',
-        'unsigned' => TRUE,
         'not null' => TRUE,
-        'description' => 'Unix timestamp when created',
+        'description' => 'Unix timestamp when created.',
       ],
-      'accessed' => [
+      'last_accessed' => [
         'type' => 'int',
-        'unsigned' => TRUE,
         'not null' => TRUE,
-        'description' => 'Unix timestamp when last accessed',
+        'description' => 'Unix timestamp when last accessed.',
+      ],
+      'expires' => [
+        'type' => 'int',
+        'not null' => TRUE,
+        'description' => 'Unix timestamp when expires.',
       ],
       'hit_count' => [
         'type' => 'int',
-        'unsigned' => TRUE,
         'not null' => TRUE,
         'default' => 0,
-        'description' => 'Number of cache hits',
+        'description' => 'Number of times accessed.',
       ],
     ],
-    'primary key' => ['cache_id'],
+    'primary key' => ['text_hash'],
     'indexes' => [
-      'server_hash' => ['server_id', 'content_hash'],
+      'expires' => ['expires'],
+      'last_accessed' => ['last_accessed'],
       'created' => ['created'],
-      'accessed' => ['accessed'],
     ],
   ];
 

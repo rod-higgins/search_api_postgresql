@@ -1,31 +1,9 @@
-# Updated search_api_postgresql.schema.yml
-# Unified PostgreSQL backend configuration matching PostgreSQLBackend.php
+# Schema definition
 
 search_api.backend.plugin.postgresql:
   type: config_object
   label: 'PostgreSQL search backend with AI vector search'
   mapping:
-    # Standard Search API DB fields (REQUIRED for compatibility)
-    database:
-      type: string
-      label: 'Database identifier'
-    min_chars:
-      type: integer
-      label: 'Minimum word length'
-    matching:
-      type: string
-      label: 'Partial matching mode'
-    autocomplete:
-      type: mapping
-      label: 'Autocomplete settings'
-      mapping:
-        suggest_suffix:
-          type: boolean
-          label: 'Suggest word endings'
-        suggest_words:
-          type: boolean
-          label: 'Suggest additional words'
-    
     # PostgreSQL-specific connection configuration
     connection:
       type: mapping
@@ -75,19 +53,17 @@ search_api.backend.plugin.postgresql:
       type: integer
       label: 'Indexing batch size'
     
-    # AI Embeddings configuration (COMPLETE)
+    # AI Embeddings configuration
     ai_embeddings:
       type: mapping
-      label: 'AI Embeddings configuration'
+      label: 'AI embeddings configuration'
       mapping:
         enabled:
           type: boolean
           label: 'Enable AI embeddings'
         provider:
           type: string
-          label: 'AI provider (azure or openai)'
-        
-        # Azure OpenAI configuration
+          label: 'AI service provider'
         azure:
           type: mapping
           label: 'Azure OpenAI configuration'
@@ -97,68 +73,49 @@ search_api.backend.plugin.postgresql:
               label: 'Azure OpenAI endpoint'
             api_key:
               type: string
-              label: 'Azure OpenAI API key (direct)'
-            api_key_name:
+              label: 'API key'
+            api_key_key:
               type: string
-              label: 'Azure OpenAI API key name (Key module)'
+              label: 'API key reference (Key module)'
             deployment_name:
               type: string
-              label: 'Azure deployment name'
-            api_version:
-              type: string
-              label: 'Azure API version'
+              label: 'Deployment name'
             model:
               type: string
               label: 'Embedding model'
             dimension:
               type: integer
-              label: 'Vector dimension'
-        
-        # OpenAI configuration
+              label: 'Vector dimensions'
+            api_version:
+              type: string
+              label: 'API version'
         openai:
           type: mapping
-          label: 'OpenAI configuration'
+          label: 'OpenAI direct configuration'
           mapping:
             api_key:
               type: string
-              label: 'OpenAI API key (direct)'
-            api_key_name:
+              label: 'API key'
+            api_key_key:
               type: string
-              label: 'OpenAI API key name (Key module)'
+              label: 'API key reference (Key module)'
             model:
               type: string
               label: 'Embedding model'
-            organization:
-              type: string
-              label: 'OpenAI organization ID'
-            base_url:
-              type: string
-              label: 'OpenAI base URL'
             dimension:
               type: integer
-              label: 'Vector dimension'
-        
-        # Common AI settings
-        batch_size:
-          type: integer
-          label: 'AI batch size'
-        rate_limit_delay:
-          type: integer
-          label: 'Rate limit delay (ms)'
-        max_retries:
-          type: integer
-          label: 'Maximum retries'
-        timeout:
-          type: integer
-          label: 'Request timeout (seconds)'
-        enable_cache:
+              label: 'Vector dimensions'
+            organization:
+              type: string
+              label: 'Organization ID'
+        cache:
           type: boolean
           label: 'Enable embedding cache'
         cache_ttl:
           type: integer
           label: 'Cache TTL (seconds)'
     
-    # Vector Index configuration (MISSING from original)
+    # Vector Index configuration
     vector_index:
       type: mapping
       label: 'Vector index configuration'
@@ -176,7 +133,7 @@ search_api.backend.plugin.postgresql:
           type: string
           label: 'Distance metric (cosine, l2, inner_product)'
     
-    # Hybrid Search configuration (MISSING from original)
+    # Hybrid Search configuration
     hybrid_search:
       type: mapping
       label: 'Hybrid search configuration'
@@ -197,7 +154,7 @@ search_api.backend.plugin.postgresql:
           type: integer
           label: 'Maximum results to return'
     
-    # Performance configuration (MISSING from original)
+    # Performance configuration
     performance:
       type: mapping
       label: 'Performance configuration'
@@ -215,7 +172,28 @@ search_api.backend.plugin.postgresql:
           type: string
           label: 'PostgreSQL effective_cache_size setting'
 
-# Dashboard configuration (referenced in code)
+# Embedding cache configuration schema
+search_api_postgresql.embedding_cache:
+  type: config_object
+  label: 'Search API PostgreSQL embedding cache settings'
+  mapping:
+    default_ttl:
+      type: integer
+      label: 'Default TTL in seconds'
+    max_entries:
+      type: integer
+      label: 'Maximum cache entries'
+    cleanup_probability:
+      type: float
+      label: 'Cleanup probability (0.0-1.0)'
+    enable_compression:
+      type: boolean
+      label: 'Enable compression'
+    table_name:
+      type: string
+      label: 'Cache table name'
+
+# Dashboard configuration
 search_api_postgresql.dashboard:
   type: config_object
   label: 'Search API PostgreSQL dashboard settings'
@@ -247,7 +225,7 @@ search_api_postgresql.dashboard:
           type: integer
           label: 'Error count threshold'
 
-# Module settings (referenced in code)
+# Module settings
 search_api_postgresql.settings:
   type: config_object
   label: 'Search API PostgreSQL module settings'
