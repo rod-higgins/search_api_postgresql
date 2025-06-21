@@ -318,6 +318,43 @@ class ConfigurationValidationService {
   }
 
   /**
+   * Runs comprehensive tests for a server configuration.
+   *
+   * @param \Drupal\search_api\ServerInterface $server
+   *   The server to test.
+   *
+   * @return array
+   *   Array of comprehensive test results.
+   */
+  public function runComprehensiveTests(ServerInterface $server) {
+    $results = [];
+    
+    // Run configuration validation
+    $validation_results = $this->validateServerConfiguration($server);
+    $results['configuration'] = [
+      'success' => empty($validation_results['errors']),
+      'errors' => $validation_results['errors'],
+      'warnings' => $validation_results['warnings'],
+    ];
+    
+    // Run server health checks
+    $health_results = $this->checkServerHealth($server);
+    $results['health'] = $health_results;
+    
+    // Determine overall success
+    $overall_success = $results['configuration']['success'] && $health_results['overall'];
+    
+    $results['overall'] = [
+      'success' => $overall_success,
+      'message' => $overall_success ? 
+        'All comprehensive tests passed' : 
+        'Some tests failed - see details above',
+    ];
+    
+    return $results;
+  }
+
+  /**
    * Checks if AI embeddings are enabled.
    */
   protected function isAiEmbeddingsEnabled($config) {
