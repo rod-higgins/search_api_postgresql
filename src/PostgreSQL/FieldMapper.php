@@ -265,7 +265,7 @@ class FieldMapper {
    * @return mixed
    *   A scalar value or array of scalars.
    */
-  protected function extractScalarValue($field_value, $field_type) {
+  public function extractScalarValue($field_value, $field_type) {
     // Handle different field value types
     if (is_scalar($field_value)) {
       return $field_value;
