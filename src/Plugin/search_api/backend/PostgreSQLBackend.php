@@ -397,14 +397,13 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#ajax' => [
         'callback' => [$this, 'testConnectionAjax'],
         'wrapper' => 'connection-test-result',
-        'method' => 'replace',
         'effect' => 'fade',
         'progress' => [
           'type' => 'throbber',
           'message' => $this->t('Testing connection...'),
         ],
       ],
-      '#limit_validation_errors' => [], // ← This prevents form validation!
+      '#limit_validation_errors' => [], // Prevents form validation
       '#suffix' => '<div class="test-connection-help">Click to verify database connectivity.</div>',
     ];
 
@@ -811,7 +810,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#type' => 'container',
       '#attributes' => [
         'id' => 'connection-test-result',
-        'class' => ['connection-test-wrapper'],
+        'class' => ['connection-test-wrapper']
       ],
       'message' => [
         '#theme' => 'status_messages',
