@@ -98,6 +98,12 @@ class QueryBuilder {
     $sql = $this->assembleSqlQuery($sql_parts);
     $params = $this->getQueryParameters($query);
 
+    // DEBUG: Output the generated query
+    echo "\n=== QueryBuilder DEBUG ===\n";
+    echo "SQL: " . $sql . "\n";
+    echo "Params: " . print_r($params, true) . "\n";
+    echo "========================\n";
+
     return ['sql' => $sql, 'params' => $params];
   }
 
@@ -251,13 +257,44 @@ class QueryBuilder {
     // Validate and quote field name
     $safe_field = $this->validateConditionField($index, $field);
 
+    // Special handling for boolean fields - cast the parameter in SQL
+    $parameter_ref = ":{$field}";
+    if (in_array($field, ['status', 'sticky']) && in_array($operator, ['=', '<>', '!='])) {
+      // Cast integer parameter to boolean in SQL
+      $parameter_ref = ":{$field}::boolean";
+    }
+
     // Build SQL based on operator
     switch ($operator) {
+      case '=':
+        return "{$safe_field} = {$parameter_ref}";
+
+      case '<>':
+      case '!=':
+        return "{$safe_field} <> {$parameter_ref}";
+
+      case '<':
+        return "{$safe_field} < :{$field}";
+
+      case '<=':
+        return "{$safe_field} <= :{$field}";
+
+      case '>':
+        return "{$safe_field} > :{$field}";
+
+      case '>=':
+        return "{$safe_field} >= :{$field}";
+
       case 'IN':
         if (is_array($value) && !empty($value)) {
           $placeholders = [];
           foreach ($value as $i => $val) {
-            $placeholders[] = ":{$field}_in_{$i}";
+            $placeholder = ":{$field}_in_{$i}";
+            // Cast each placeholder for boolean fields
+            if (in_array($field, ['status', 'sticky'])) {
+              $placeholder .= "::boolean";
+            }
+            $placeholders[] = $placeholder;
           }
           return "{$safe_field} IN (" . implode(', ', $placeholders) . ")";
         }
@@ -267,17 +304,28 @@ class QueryBuilder {
         if (is_array($value) && !empty($value)) {
           $placeholders = [];
           foreach ($value as $i => $val) {
-            $placeholders[] = ":{$field}_not_in_{$i}";
+            $placeholder = ":{$field}_not_in_{$i}";
+            // Cast each placeholder for boolean fields
+            if (in_array($field, ['status', 'sticky'])) {
+              $placeholder .= "::boolean";
+            }
+            $placeholders[] = $placeholder;
           }
           return "{$safe_field} NOT IN (" . implode(', ', $placeholders) . ")";
         }
         return '1=1'; // Empty NOT IN should match everything
 
       case 'BETWEEN':
-        return "{$safe_field} BETWEEN :{$field}_between_start AND :{$field}_between_end";
+        if (is_array($value) && count($value) === 2) {
+          return "{$safe_field} BETWEEN :{$field}_between_start AND :{$field}_between_end";
+        }
+        return '1=1';
 
       case 'NOT BETWEEN':
-        return "{$safe_field} NOT BETWEEN :{$field}_not_between_start AND :{$field}_not_between_end";
+        if (is_array($value) && count($value) === 2) {
+          return "{$safe_field} NOT BETWEEN :{$field}_not_between_start AND :{$field}_not_between_end";
+        }
+        return '1=1';
 
       case 'CONTAINS':
         return "{$safe_field} LIKE :{$field}_contains";
@@ -295,7 +343,7 @@ class QueryBuilder {
         return "{$safe_field} IS NOT NULL";
 
       default:
-        return "{$safe_field} {$operator} :{$field}";
+        return "{$safe_field} = :{$field}";
     }
   }
 
@@ -523,10 +571,35 @@ class QueryBuilder {
     // Validate field name for parameter generation
     $this->connector->validateIdentifier($field, 'field name');
 
+    // SPECIAL HANDLING for node_grants field - fix Database backend format
+    if ($field === 'node_grants' && is_string($value)) {
+      // Convert Database backend format (node_access__all) to PostgreSQL format (node_access_all:0)
+      if ($value === 'node_access__all') {
+        $value = 'node_access_all:0';
+      }
+      // Handle other possible conversions if needed
+      $value = str_replace('__', '_all:', $value);
+    }
+
+    // SPECIAL HANDLING for boolean fields - convert integer to boolean
+    if (in_array($field, ['status', 'sticky']) && is_numeric($value)) {
+      $value = (bool) $value;
+    }
+
     switch ($operator) {
       case 'IN':
         if (is_array($value)) {
           foreach ($value as $i => $val) {
+            // Apply same conversions for array values
+            if ($field === 'node_grants' && is_string($val)) {
+              if ($val === 'node_access__all') {
+                $val = 'node_access_all:0';
+              }
+              $val = str_replace('__', '_all:', $val);
+            }
+            if (in_array($field, ['status', 'sticky']) && is_numeric($val)) {
+              $val = (bool) $val;
+            }
             $params[":{$field}_in_{$i}"] = $val;
           }
         }
@@ -535,6 +608,16 @@ class QueryBuilder {
       case 'NOT IN':
         if (is_array($value)) {
           foreach ($value as $i => $val) {
+            // Apply same conversions for array values
+            if ($field === 'node_grants' && is_string($val)) {
+              if ($val === 'node_access__all') {
+                $val = 'node_access_all:0';
+              }
+              $val = str_replace('__', '_all:', $val);
+            }
+            if (in_array($field, ['status', 'sticky']) && is_numeric($val)) {
+              $val = (bool) $val;
+            }
             $params[":{$field}_not_in_{$i}"] = $val;
           }
         }

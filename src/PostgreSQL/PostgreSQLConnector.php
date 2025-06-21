@@ -154,12 +154,8 @@ class PostgreSQLConnector {
       \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
       \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
       \PDO::ATTR_TIMEOUT => 30,
+      \PDO::ATTR_EMULATE_PREPARES => FALSE,
     ];
-
-    // Set charset if specified
-    if (!empty($this->config['charset'])) {
-      $options[\PDO::MYSQL_ATTR_INIT_COMMAND] = "SET NAMES " . $this->config['charset'];
-    }
 
     return $options;
   }
