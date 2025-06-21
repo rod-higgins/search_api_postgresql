@@ -6,12 +6,12 @@ use Drupal\search_api\IndexInterface;
 use Drupal\search_api\Query\QueryInterface;
 
 /**
- * Enhanced QueryBuilder with vector search capabilities.
+ * Enhanced QueryBuilder with Azure AI vector search capabilities.
  */
-class VectorQueryBuilder extends QueryBuilder {
+class AzureVectorQueryBuilder extends QueryBuilder {
 
   /**
-   * The embedding service.
+   * The Azure embedding service.
    *
    * @var \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface
    */
@@ -29,11 +29,6 @@ class VectorQueryBuilder extends QueryBuilder {
    * {@inheritdoc}
    */
   public function buildSearchQuery(QueryInterface $query) {
-    // Check if vector search is enabled and available
-    if (!$this->isVectorSearchEnabled()) {
-      return parent::buildSearchQuery($query);
-    }
-
     $search_mode = $query->getOption('search_mode', 'hybrid');
     
     switch ($search_mode) {
@@ -50,7 +45,7 @@ class VectorQueryBuilder extends QueryBuilder {
   }
 
   /**
-   * Builds a vector-only search query.
+   * Builds a vector-only search query using Azure embeddings.
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
@@ -64,11 +59,10 @@ class VectorQueryBuilder extends QueryBuilder {
     
     $keys = $query->getKeys();
     if (!$keys || !$this->embeddingService) {
-      // Fallback to traditional search
       return parent::buildSearchQuery($query);
     }
 
-    // Generate embedding for search query
+    // Generate embedding for search query using Azure AI
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
     
     try {
@@ -89,7 +83,7 @@ class VectorQueryBuilder extends QueryBuilder {
       'SELECT' => $this->buildVectorSelectClause($query),
       'FROM' => $table_name,
       'WHERE' => $this->buildVectorWhereClause($query),
-      'ORDER' => 'ORDER BY search_api_relevance DESC',
+      'ORDER' => 'ORDER BY ' . $this->connector->quoteColumnName('search_api_relevance') . ' DESC',
       'LIMIT' => $this->buildLimitClause($query),
     ];
 
@@ -101,7 +95,7 @@ class VectorQueryBuilder extends QueryBuilder {
   }
 
   /**
-   * Builds a hybrid search query combining text and vector search.
+   * Builds a hybrid search query combining PostgreSQL FTS and Azure AI vectors.
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
@@ -163,15 +157,20 @@ class VectorQueryBuilder extends QueryBuilder {
    *   The SELECT clause.
    */
   protected function buildVectorSelectClause(QueryInterface $query) {
-    $fields = ['search_api_id', 'search_api_datasource', 'search_api_language'];
+    $fields = [];
+    
+    // Add system fields (properly quoted)
+    $fields[] = $this->connector->quoteColumnName('search_api_id');
+    $fields[] = $this->connector->quoteColumnName('search_api_datasource');
+    $fields[] = $this->connector->quoteColumnName('search_api_language');
     
     // Add requested fields
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
-      $fields[] = $field_id;
+      $fields[] = $this->connector->quoteColumnName($field_id);
     }
 
     // Add vector similarity score
-    $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS search_api_relevance";
+    $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS " . $this->connector->quoteColumnName('search_api_relevance');
 
     return implode(', ', $fields);
   }
@@ -194,20 +193,21 @@ class VectorQueryBuilder extends QueryBuilder {
 
     // Handle filters
     if ($condition_group = $query->getConditionGroup()) {
-      $condition_sql = $this->buildConditionGroup($condition_group);
+      $condition_sql = $this->buildConditionGroupSql($condition_group, $query->getIndex());
       if (!empty($condition_sql)) {
         $conditions[] = $condition_sql;
       }
     }
 
-    // Handle language filtering
+    // Handle language filtering (properly quoted)
     if ($languages = $query->getLanguages()) {
       if ($languages !== [NULL]) {
         $language_placeholders = [];
         foreach ($languages as $i => $language) {
           $language_placeholders[] = ":language_{$i}";
         }
-        $conditions[] = 'search_api_language IN (' . implode(', ', $language_placeholders) . ')';
+        $language_field = $this->connector->quoteColumnName('search_api_language');
+        $conditions[] = $language_field . ' IN (' . implode(', ', $language_placeholders) . ')';
       }
     }
 
@@ -228,31 +228,37 @@ class VectorQueryBuilder extends QueryBuilder {
    *   The SELECT clause.
    */
   protected function buildHybridSelectClause(QueryInterface $query, $text_weight, $vector_weight) {
-    $fields = ['search_api_id', 'search_api_datasource', 'search_api_language'];
+    $fields = [];
+    
+    // Add system fields (properly quoted)
+    $fields[] = $this->connector->quoteColumnName('search_api_id');
+    $fields[] = $this->connector->quoteColumnName('search_api_datasource');
+    $fields[] = $this->connector->quoteColumnName('search_api_language');
     
     // Add requested fields
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
-      $fields[] = $field_id;
+      $fields[] = $this->connector->quoteColumnName($field_id);
     }
 
-    $fts_config = $this->config['fts_configuration'];
+    $fts_config = $this->config['fts_configuration'] ?? 'english';
+    $search_vector_field = $this->connector->quoteColumnName('search_vector');
     
-    // Combine text and vector scores
+    // Combine text and vector scores with Azure-optimized weighting
     $fields[] = "
       CASE 
-        WHEN content_embedding IS NOT NULL AND search_vector @@ to_tsquery('{$fts_config}', :ts_query) THEN
-          {$text_weight} * ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query)) +
+        WHEN content_embedding IS NOT NULL AND {$search_vector_field} @@ to_tsquery('{$fts_config}', :ts_query) THEN
+          {$text_weight} * ts_rank({$search_vector_field}, to_tsquery('{$fts_config}', :ts_query)) +
           {$vector_weight} * (1 - (content_embedding <=> :query_embedding))
         WHEN content_embedding IS NOT NULL THEN
           {$vector_weight} * (1 - (content_embedding <=> :query_embedding))
-        WHEN search_vector @@ to_tsquery('{$fts_config}', :ts_query) THEN
-          {$text_weight} * ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query))
+        WHEN {$search_vector_field} @@ to_tsquery('{$fts_config}', :ts_query) THEN
+          {$text_weight} * ts_rank({$search_vector_field}, to_tsquery('{$fts_config}', :ts_query))
         ELSE 0
       END AS hybrid_score";
     
-    $fields[] = "ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query)) AS text_score";
+    $fields[] = "ts_rank({$search_vector_field}, to_tsquery('{$fts_config}', :ts_query)) AS text_score";
     $fields[] = "COALESCE((1 - (content_embedding <=> :query_embedding)), 0) AS vector_score";
-    $fields[] = "hybrid_score AS search_api_relevance";
+    $fields[] = "hybrid_score AS " . $this->connector->quoteColumnName('search_api_relevance');
 
     return implode(', ', $fields);
   }
@@ -268,33 +274,35 @@ class VectorQueryBuilder extends QueryBuilder {
    */
   protected function buildHybridWhereClause(QueryInterface $query) {
     $conditions = ['1=1'];
-    $fts_config = $this->config['fts_configuration'];
+    $search_vector_field = $this->connector->quoteColumnName('search_vector');
 
     // Include items that match either text search OR have vector similarity
     if ($keys = $query->getKeys()) {
+      $fts_config = $this->config['fts_configuration'] ?? 'english';
       $similarity_threshold = $this->getSimilarityThreshold();
       $conditions[] = "(
-        search_vector @@ to_tsquery('{$fts_config}', :ts_query) OR
+        {$search_vector_field} @@ to_tsquery('{$fts_config}', :ts_query) OR
         (content_embedding IS NOT NULL AND (1 - (content_embedding <=> :query_embedding)) >= {$similarity_threshold})
       )";
     }
 
     // Handle filters
     if ($condition_group = $query->getConditionGroup()) {
-      $condition_sql = $this->buildConditionGroup($condition_group);
+      $condition_sql = $this->buildConditionGroupSql($condition_group, $query->getIndex());
       if (!empty($condition_sql)) {
         $conditions[] = $condition_sql;
       }
     }
 
-    // Handle language filtering
+    // Handle language filtering (properly quoted)
     if ($languages = $query->getLanguages()) {
       if ($languages !== [NULL]) {
         $language_placeholders = [];
         foreach ($languages as $i => $language) {
           $language_placeholders[] = ":language_{$i}";
         }
-        $conditions[] = 'search_api_language IN (' . implode(', ', $language_placeholders) . ')';
+        $language_field = $this->connector->quoteColumnName('search_api_language');
+        $conditions[] = $language_field . ' IN (' . implode(', ', $language_placeholders) . ')';
       }
     }
 
@@ -350,7 +358,7 @@ class VectorQueryBuilder extends QueryBuilder {
    *   The text search weight.
    */
   protected function getTextWeight() {
-    return $this->config['hybrid_search']['text_weight'] ?? 0.7;
+    return $this->config['hybrid_search']['text_weight'] ?? 0.6;
   }
 
   /**
@@ -360,7 +368,7 @@ class VectorQueryBuilder extends QueryBuilder {
    *   The vector search weight.
    */
   protected function getVectorWeight() {
-    return $this->config['hybrid_search']['vector_weight'] ?? 0.3;
+    return $this->config['hybrid_search']['vector_weight'] ?? 0.4;
   }
 
   /**
@@ -370,7 +378,35 @@ class VectorQueryBuilder extends QueryBuilder {
    *   The similarity threshold.
    */
   protected function getSimilarityThreshold() {
-    return $this->config['hybrid_search']['similarity_threshold'] ?? 0.1;
+    return $this->config['hybrid_search']['similarity_threshold'] ?? 0.15;
   }
 
+  /**
+   * Assembles SQL parts into a complete query.
+   *
+   * @param array $parts
+   *   Array of SQL parts.
+   *
+   * @return string
+   *   The assembled SQL query.
+   */
+  protected function assembleSqlQuery(array $parts) {
+    $sql = [];
+    
+    foreach (['SELECT', 'FROM', 'WHERE', 'ORDER', 'LIMIT'] as $clause) {
+      if (!empty($parts[$clause])) {
+        if ($clause === 'SELECT') {
+          $sql[] = 'SELECT ' . $parts[$clause];
+        }
+        elseif ($clause === 'FROM' || $clause === 'WHERE') {
+          $sql[] = $clause . ' ' . $parts[$clause];
+        }
+        else {
+          $sql[] = $parts[$clause];
+        }
+      }
+    }
+
+    return implode("\n", $sql);
+  }
 }

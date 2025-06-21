@@ -360,7 +360,10 @@ class QueryBuilder {
     
     foreach (['SELECT', 'FROM', 'WHERE', 'ORDER', 'LIMIT'] as $clause) {
       if (!empty($parts[$clause])) {
-        if ($clause === 'FROM' || $clause === 'WHERE') {
+        if ($clause === 'SELECT') {
+          $sql[] = 'SELECT ' . $parts[$clause];
+        }
+        elseif ($clause === 'FROM' || $clause === 'WHERE') {
           $sql[] = $clause . ' ' . $parts[$clause];
         }
         else {

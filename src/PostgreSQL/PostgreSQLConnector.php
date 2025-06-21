@@ -447,7 +447,7 @@ class PostgreSQLConnector {
    *   The table name to quote.
    *
    * @return string
-   *   The validated table name (unquoted for compatibility).
+   *   The properly quoted table name.
    */
   public function quoteTableName($table_name) {
     // Remove any existing quotes and validate the name
@@ -458,8 +458,8 @@ class PostgreSQLConnector {
       throw new \InvalidArgumentException("Invalid table name: {$table_name}");
     }
     
-    // Return unquoted but validated identifier for compatibility
-    return $table_name;
+    // Return properly quoted identifier for PostgreSQL
+    return '"' . $table_name . '"';
   }
 
   /**
@@ -469,7 +469,7 @@ class PostgreSQLConnector {
    *   The column name to quote.
    *
    * @return string
-   *   The validated column name (unquoted for compatibility).
+   *   The properly quoted column name.
    */
   public function quoteColumnName($column_name) {
     // Remove any existing quotes and validate the name
@@ -480,8 +480,58 @@ class PostgreSQLConnector {
       throw new \InvalidArgumentException("Invalid column name: {$column_name}");
     }
     
-    // Return unquoted but validated identifier for compatibility
-    return $column_name;
+    // Return properly quoted identifier for PostgreSQL
+    return '"' . $column_name . '"';
+  }
+
+  /**
+   * Quotes an index name for safe SQL usage.
+   *
+   * @param string $index_name
+   *   The index name to quote.
+   *
+   * @return string
+   *   The properly quoted index name.
+   */
+  public function quoteIndexName($index_name) {
+    // Remove any existing quotes and validate the name
+    $index_name = trim($index_name, '"');
+    
+    // Basic validation - only allow alphanumeric and underscores
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $index_name)) {
+      throw new \InvalidArgumentException("Invalid index name: {$index_name}");
+    }
+    
+    // Return properly quoted identifier for PostgreSQL
+    return '"' . $index_name . '"';
+  }
+
+  /**
+   * Validates an identifier without quoting it.
+   * Used for metadata queries where unquoted names are needed.
+   *
+   * @param string $identifier
+   *   The identifier to validate.
+   * @param string $type
+   *   The type of identifier (for error messages).
+   *
+   * @return string
+   *   The validated but unquoted identifier.
+   *
+   * @throws \InvalidArgumentException
+   *   If the identifier is invalid.
+   */
+  public function validateIdentifier($identifier, $type = 'identifier') {
+    // Remove any existing quotes and validate the name
+    $identifier = trim($identifier, '"');
+    
+    // Basic validation - only allow alphanumeric and underscores
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $identifier)) {
+      throw new \InvalidArgumentException("Invalid {$type}: {$identifier}");
+    }
+    
+    // Return unquoted but validated identifier for metadata queries
+    return $identifier;
   }
 
   /**
