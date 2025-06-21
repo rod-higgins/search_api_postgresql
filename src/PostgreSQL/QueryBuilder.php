@@ -464,7 +464,8 @@ class QueryBuilder {
     $processed = [];
 
     foreach ($keys as $key => $value) {
-      if ($key[0] === '#') {
+      // Check if key is a string and starts with '#' (configuration keys)
+      if (is_string($key) && isset($key[0]) && $key[0] === '#') {
         continue;
       }
 
@@ -476,6 +477,10 @@ class QueryBuilder {
         if ($sub_query) {
           $processed[] = '(' . $sub_query . ')';
         }
+      }
+      // Handle other types (integers, etc.) by converting to string
+      elseif (is_scalar($value)) {
+        $processed[] = $this->escapeSearchString((string) $value);
       }
     }
 
