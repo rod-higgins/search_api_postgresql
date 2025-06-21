@@ -447,7 +447,7 @@ class PostgreSQLConnector {
    *   The table name to quote.
    *
    * @return string
-   *   The quoted table name.
+   *   The validated table name (unquoted for compatibility).
    */
   public function quoteTableName($table_name) {
     // Remove any existing quotes and validate the name
@@ -458,7 +458,8 @@ class PostgreSQLConnector {
       throw new \InvalidArgumentException("Invalid table name: {$table_name}");
     }
     
-    return '"' . $table_name . '"';
+    // Return unquoted but validated identifier for compatibility
+    return $table_name;
   }
 
   /**
@@ -468,7 +469,7 @@ class PostgreSQLConnector {
    *   The column name to quote.
    *
    * @return string
-   *   The quoted column name.
+   *   The validated column name (unquoted for compatibility).
    */
   public function quoteColumnName($column_name) {
     // Remove any existing quotes and validate the name
@@ -479,7 +480,8 @@ class PostgreSQLConnector {
       throw new \InvalidArgumentException("Invalid column name: {$column_name}");
     }
     
-    return '"' . $column_name . '"';
+    // Return unquoted but validated identifier for compatibility
+    return $column_name;
   }
 
   /**
