@@ -391,7 +391,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#description' => $this->t('OpenAI organization ID if required.'),
     ];
 
-    // Test Connection Button (update this section)
     $form['connection']['test_connection'] = [
       '#type' => 'button',
       '#value' => $this->t('Test Connection'),
@@ -405,6 +404,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
           'message' => $this->t('Testing connection...'),
         ],
       ],
+      '#limit_validation_errors' => [], // ← This prevents form validation!
       '#suffix' => '<div class="test-connection-help">Click to verify database connectivity.</div>',
     ];
 
@@ -778,6 +778,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
   /**
    * AJAX callback for testing database connection.
+   * Updated for Drupal 11 with proper translation and improved user feedback.
    */
   public function testConnectionAjax(array &$form, FormStateInterface $form_state) {
     try {
@@ -805,7 +806,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     }
 
     // Debug logging
-    \Drupal::logger('search_api_postgresql')->info('AJAX Response: @message', ['@message' => $message]);
+    $this->logger->info('AJAX Connection Test: @message', ['@message' => $message]);
 
     // Return the exact element that should replace the wrapper
     return [

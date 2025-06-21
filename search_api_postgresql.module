@@ -468,6 +468,11 @@ function search_api_postgresql_form_search_api_server_form_alter(&$form, FormSta
  * Validation callback for PostgreSQL server forms.
  */
 function search_api_postgresql_server_form_validate($form, FormStateInterface $form_state) {
+  // Skip validation for AJAX requests (like Test Connection button)
+  if ($form_state->getTriggeringElement() && isset($form_state->getTriggeringElement()['#ajax'])) {
+    return;
+  }
+  
   $values = $form_state->getValues();
   
   // Validate connection configuration
@@ -476,59 +481,38 @@ function search_api_postgresql_server_form_validate($form, FormStateInterface $f
     
     // Ensure either password or password_key is provided
     if (empty($connection['password']) && empty($connection['password_key'])) {
-      $form_state->setErrorByName('backend_config][connection][password', 
-        t('Either a password or a password key reference must be provided.'));
+      $form_state->setErrorByName(['backend_config']['connection']['password'], 
+        \Drupal::translation()->translate('Either a password or a password key reference must be provided.'));
     }
     
     // Validate SSL configuration
     if (!empty($connection['ssl_mode']) && $connection['ssl_mode'] !== 'disable') {
       $settings = \Drupal::config('search_api_postgresql.settings');
       if ($settings->get('security.require_https') && empty($connection['ssl_ca'])) {
-        $form_state->setErrorByName('backend_config][connection][ssl_ca', 
-          t('SSL certificate path is required when using secure SSL modes.'));
+        $form_state->setErrorByName(['backend_config']['connection']['ssl_ca'], 
+          \Drupal::translation()->translate('SSL certificate path is required when using secure SSL modes.'));
       }
     }
     
     // Validate database connection parameters
     if (empty($connection['host'])) {
-      $form_state->setErrorByName('backend_config][connection][host', 
-        t('Database host is required.'));
+      $form_state->setErrorByName(['backend_config']['connection']['host'], 
+        \Drupal::translation()->translate('Database host is required.'));
     }
-    
+
+    if (empty($connection['port'])) {
+      $form_state->setErrorByName(['backend_config']['connection']['port'], 
+        \Drupal::translation()->translate('Database port is required.'));
+    }
+
     if (empty($connection['database'])) {
-      $form_state->setErrorByName('backend_config][connection][database', 
-        t('Database name is required.'));
+      $form_state->setErrorByName(['backend_config']['connection']['database'], 
+        \Drupal::translation()->translate('Database name is required.'));
     }
-    
+
     if (empty($connection['username'])) {
-      $form_state->setErrorByName('backend_config][connection][username', 
-        t('Database username is required.'));
-    }
-  }
-  
-  // Validate AI configuration if enabled
-  if (!empty($values['backend_config']['ai_embeddings']['enabled'])) {
-    $ai_config = $values['backend_config']['ai_embeddings'];
-    
-    if (empty($ai_config['provider'])) {
-      $form_state->setErrorByName('backend_config][ai_embeddings][provider', 
-        t('AI provider must be selected when embeddings are enabled.'));
-    }
-    
-    // Provider-specific validation
-    if (!empty($ai_config['provider'])) {
-      $provider_config = $ai_config[$ai_config['provider']] ?? [];
-      
-      if (empty($provider_config['api_key']) && empty($provider_config['api_key_key'])) {
-        $form_state->setErrorByName("backend_config][ai_embeddings][{$ai_config['provider']}][api_key", 
-          t('API key or key reference is required for the selected provider.'));
-      }
-      
-      // Validate model selection
-      if (empty($provider_config['model'])) {
-        $form_state->setErrorByName("backend_config][ai_embeddings][{$ai_config['provider']}][model", 
-          t('Model selection is required for the selected provider.'));
-      }
+      $form_state->setErrorByName(['backend_config']['connection']['username'], 
+        \Drupal::translation()->translate('Database username is required.'));
     }
   }
 }
