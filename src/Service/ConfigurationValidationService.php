@@ -63,53 +63,281 @@ class ConfigurationValidationService {
    * @return array
    *   Validation results with 'errors' and 'warnings' arrays.
    */
-  /**
- * Validates a server's configuration.
- *
- * @param \Drupal\search_api\ServerInterface $server
- *   The server to validate.
- *
- * @return array
- *   Validation results with 'errors' and 'warnings' arrays.
- */
-public function validateServerConfiguration(ServerInterface $server) {
-  $errors = [];
-  $warnings = [];
-  $backend = $server->getBackend();
-  $config = $backend->getConfiguration();
+  public function validateServerConfiguration(ServerInterface $server) {
+    $errors = [];
+    $warnings = [];
+    
+    try {
+      $backend = $server->getBackend();
+      $config = $backend->getConfiguration();
 
-  // Check if it's a PostgreSQL backend - NOW ONLY ONE BACKEND
-  if ($backend->getPluginId() !== 'postgresql') {
-    $errors[] = 'Server is not using the PostgreSQL backend.';
+      // Check if it's a PostgreSQL backend
+      if ($backend->getPluginId() !== 'postgresql') {
+        $errors[] = 'Server is not using the PostgreSQL backend.';
+        return ['errors' => $errors, 'warnings' => $warnings];
+      }
+    } catch (\Exception $e) {
+      $errors[] = 'Unable to validate server configuration: ' . $e->getMessage();
+      return ['errors' => $errors, 'warnings' => $warnings];
+    }
+
+    // Validate database connection
+    $db_validation = $this->validateDatabaseConnection($config);
+    $errors = array_merge($errors, $db_validation['errors']);
+    $warnings = array_merge($warnings, $db_validation['warnings']);
+
+    // Validate key storage
+    $key_validation = $this->validateKeyStorage($config);
+    $errors = array_merge($errors, $key_validation['errors']);
+    $warnings = array_merge($warnings, $key_validation['warnings']);
+
+    // Validate AI embeddings configuration
+    if ($this->isAiEmbeddingsEnabled($config)) {
+      $ai_validation = $this->validateAiEmbeddingsConfiguration($config);
+      $errors = array_merge($errors, $ai_validation['errors']);
+      $warnings = array_merge($warnings, $ai_validation['warnings']);
+    }
+
+    // Validate vector search configuration
+    if ($this->isVectorSearchEnabled($config)) {
+      $vector_validation = $this->validateVectorSearchConfiguration($config);
+      $errors = array_merge($errors, $vector_validation['errors']);
+      $warnings = array_merge($warnings, $vector_validation['warnings']);
+    }
+
     return ['errors' => $errors, 'warnings' => $warnings];
   }
 
-  // Validate database connection
-  $db_validation = $this->validateDatabaseConnection($config);
-  $errors = array_merge($errors, $db_validation['errors']);
-  $warnings = array_merge($warnings, $db_validation['warnings']);
+  /**
+   * Validates database connection configuration.
+   */
+  protected function validateDatabaseConnection($config) {
+    $errors = [];
+    $warnings = [];
+    $connection = $config['connection'] ?? [];
 
-  // Validate key storage
-  $key_validation = $this->validateKeyStorage($config);
-  $errors = array_merge($errors, $key_validation['errors']);
-  $warnings = array_merge($warnings, $key_validation['warnings']);
+    // Check required fields
+    $required_fields = ['host', 'port', 'database', 'username'];
+    foreach ($required_fields as $field) {
+      if (empty($connection[$field])) {
+        $errors[] = "Database connection field '{$field}' is required.";
+      }
+    }
 
-  // Validate AI features configuration (NEW UNIFIED STRUCTURE)
-  if ($this->isAiFeaturesEnabled($config)) {
-    $ai_validation = $this->validateAiFeaturesConfiguration($config);
-    $errors = array_merge($errors, $ai_validation['errors']);
-    $warnings = array_merge($warnings, $ai_validation['warnings']);
+    // Validate password configuration - passwords are optional for development
+    $password_key = $connection['password_key'] ?? '';
+    $direct_password = $connection['password'] ?? '';
+    
+    if (empty($password_key) && empty($direct_password)) {
+      $warnings[] = 'No database password configured. This may be acceptable for development environments (like Lando with trust authentication) but is not recommended for production.';
+    }
+    
+    // If a password key is specified, validate it exists
+    if (!empty($password_key)) {
+      $key_validation = $this->validateKey($password_key, 'Database password');
+      $errors = array_merge($errors, $key_validation['errors']);
+      $warnings = array_merge($warnings, $key_validation['warnings']);
+    }
+
+    // Validate port
+    $port = $connection['port'] ?? 0;
+    if ($port < 1 || $port > 65535) {
+      $errors[] = 'Database port must be between 1 and 65535.';
+    }
+
+    // Check SSL configuration for production
+    $ssl_mode = $connection['ssl_mode'] ?? 'require';
+    if (!in_array($ssl_mode, ['require', 'verify-ca', 'verify-full']) && empty($direct_password) && empty($password_key)) {
+      $warnings[] = 'Using weak SSL mode without password authentication. Consider using "require", "verify-ca", or "verify-full" for better security.';
+    }
+
+    return ['errors' => $errors, 'warnings' => $warnings];
   }
 
-  return ['errors' => $errors, 'warnings' => $warnings];
-}
+  /**
+   * Validates key storage configuration.
+   */
+  protected function validateKeyStorage($config) {
+    $errors = [];
+    $warnings = [];
 
-/**
- * Check if AI features are enabled (NEW METHOD).
- */
-private function isAiFeaturesEnabled(array $config) {
-  return !empty($config['ai_features']['enabled']);
-}
+    // Check database password key (if specified)
+    $password_key = $config['connection']['password_key'] ?? '';
+    if (!empty($password_key)) {
+      $key_validation = $this->validateKey($password_key, 'Database password');
+      $errors = array_merge($errors, $key_validation['errors']);
+      $warnings = array_merge($warnings, $key_validation['warnings']);
+    }
+
+    // Check AI API keys if enabled
+    if ($this->isAiEmbeddingsEnabled($config)) {
+      $ai_config = $config['ai_embeddings'] ?? [];
+      
+      // Check Azure OpenAI API key
+      if (!empty($ai_config['azure']['api_key_key'])) {
+        $key_validation = $this->validateKey($ai_config['azure']['api_key_key'], 'Azure OpenAI API');
+        $errors = array_merge($errors, $key_validation['errors']);
+        $warnings = array_merge($warnings, $key_validation['warnings']);
+      } elseif (empty($ai_config['azure']['api_key'])) {
+        $warnings[] = 'Azure OpenAI API key not configured. Use Key module for secure storage.';
+      }
+
+      // Check OpenAI API key
+      if (!empty($ai_config['openai']['api_key_key'])) {
+        $key_validation = $this->validateKey($ai_config['openai']['api_key_key'], 'OpenAI API');
+        $errors = array_merge($errors, $key_validation['errors']);
+        $warnings = array_merge($warnings, $key_validation['warnings']);
+      } elseif (empty($ai_config['openai']['api_key'])) {
+        $warnings[] = 'OpenAI API key not configured. Use Key module for secure storage.';
+      }
+    }
+
+    return ['errors' => $errors, 'warnings' => $warnings];
+  }
+
+  /**
+   * Validates a specific key.
+   */
+  protected function validateKey($key_name, $type) {
+    $errors = [];
+    $warnings = [];
+
+    if (!$this->keyRepository) {
+      $errors[] = "Key module not available for {$type} key validation.";
+      return ['errors' => $errors, 'warnings' => $warnings];
+    }
+
+    try {
+      $key = $this->keyRepository->getKey($key_name);
+      if (!$key) {
+        $errors[] = "{$type} key '{$key_name}' not found.";
+      } else {
+        // Check if key has a value
+        $key_value = $key->getKeyValue();
+        if (empty($key_value)) {
+          $errors[] = "{$type} key '{$key_name}' exists but has no value.";
+        }
+      }
+    } catch (\Exception $e) {
+      $errors[] = "Error accessing {$type} key '{$key_name}': " . $e->getMessage();
+    }
+
+    return ['errors' => $errors, 'warnings' => $warnings];
+  }
+
+  /**
+   * Validates AI embeddings configuration.
+   */
+  protected function validateAiEmbeddingsConfiguration($config) {
+    $errors = [];
+    $warnings = [];
+
+    $ai_config = $config['ai_embeddings'] ?? [];
+    $provider = $ai_config['provider'] ?? '';
+
+    if (empty($provider)) {
+      $errors[] = 'AI provider must be selected when embeddings are enabled.';
+      return ['errors' => $errors, 'warnings' => $warnings];
+    }
+
+    // Validate provider-specific configuration
+    if ($provider === 'azure') {
+      $azure_config = $ai_config['azure'] ?? [];
+      
+      if (empty($azure_config['endpoint'])) {
+        $errors[] = 'Azure OpenAI endpoint is required when Azure provider is selected.';
+      }
+
+      if (empty($azure_config['deployment_name'])) {
+        $errors[] = 'Azure OpenAI deployment name is required when Azure provider is selected.';
+      }
+
+      if (empty($azure_config['api_key']) && empty($azure_config['api_key_key'])) {
+        $errors[] = 'Azure OpenAI API key is required when Azure provider is selected.';
+      }
+
+      // Validate model configuration
+      $model = $azure_config['model'] ?? 'text-embedding-3-small';
+      $valid_models = ['text-embedding-ada-002', 'text-embedding-3-small', 'text-embedding-3-large'];
+      if (!in_array($model, $valid_models)) {
+        $warnings[] = "Unknown embedding model '{$model}'. Supported models: " . implode(', ', $valid_models);
+      }
+    } elseif ($provider === 'openai') {
+      $openai_config = $ai_config['openai'] ?? [];
+      
+      if (empty($openai_config['api_key']) && empty($openai_config['api_key_key'])) {
+        $errors[] = 'OpenAI API key is required when OpenAI provider is selected.';
+      }
+
+      // Validate model configuration
+      $model = $openai_config['model'] ?? 'text-embedding-3-small';
+      $valid_models = ['text-embedding-ada-002', 'text-embedding-3-small', 'text-embedding-3-large'];
+      if (!in_array($model, $valid_models)) {
+        $warnings[] = "Unknown embedding model '{$model}'. Supported models: " . implode(', ', $valid_models);
+      }
+    }
+
+    return ['errors' => $errors, 'warnings' => $warnings];
+  }
+
+  /**
+   * Validates vector search configuration.
+   */
+  protected function validateVectorSearchConfiguration($config) {
+    $errors = [];
+    $warnings = [];
+
+    $vector_config = $config['vector_index'] ?? [];
+
+    // Validate distance method
+    $distance = $vector_config['distance'] ?? 'cosine';
+    if (!in_array($distance, ['cosine', 'l2', 'inner_product'])) {
+      $errors[] = 'Vector distance method must be one of: cosine, l2, inner_product.';
+    }
+
+    // Validate index method
+    $method = $vector_config['method'] ?? 'ivfflat';
+    if (!in_array($method, ['ivfflat', 'hnsw'])) {
+      $errors[] = 'Vector index method must be either "ivfflat" or "hnsw".';
+    }
+
+    // Validate method-specific parameters
+    if ($method === 'ivfflat') {
+      $lists = $vector_config['lists'] ?? 100;
+      if ($lists < 1 || $lists > 10000) {
+        $warnings[] = 'IVFFlat lists parameter should be between 1 and 10000.';
+      }
+      
+      $probes = $vector_config['probes'] ?? 10;
+      if ($probes < 1 || $probes > $lists) {
+        $warnings[] = 'IVFFlat probes parameter should be between 1 and the number of lists.';
+      }
+    }
+
+    return ['errors' => $errors, 'warnings' => $warnings];
+  }
+
+  /**
+   * Checks if AI embeddings are enabled.
+   */
+  protected function isAiEmbeddingsEnabled($config) {
+    return !empty($config['ai_embeddings']['enabled']);
+  }
+
+  /**
+   * Checks if vector search is enabled.
+   */
+  protected function isVectorSearchEnabled($config) {
+    // Vector search is available when AI embeddings are enabled
+    return $this->isAiEmbeddingsEnabled($config);
+  }
+
+  /**
+   * Check if AI features are enabled (NEW METHOD).
+   */
+  private function isAiFeaturesEnabled(array $config) {
+    return !empty($config['ai_features']['enabled']);
+  }
 
 /**
  * Validate AI features configuration (REPLACES OLD METHODS).
@@ -282,187 +510,6 @@ private function validateAiFeaturesConfiguration(array $config) {
     }
   }
 
-  /**
-   * Validates database connection configuration.
-   */
-  protected function validateDatabaseConnection($config) {
-    $errors = [];
-    $warnings = [];
-    $connection = $config['connection'] ?? [];
-
-    // Check required fields
-    $required_fields = ['host', 'port', 'database', 'username'];
-    foreach ($required_fields as $field) {
-      if (empty($connection[$field])) {
-        $errors[] = "Database connection field '{$field}' is required.";
-      }
-    }
-
-    // Validate password configuration - UPDATED: passwords are now optional
-    $password_key = $connection['password_key'] ?? '';
-    $direct_password = $connection['password'] ?? '';
-    
-    if (empty($password_key) && empty($direct_password)) {
-      // Allow empty passwords but issue a warning for security awareness
-      $warnings[] = 'No database password configured. This may be acceptable for development environments (like Lando with trust authentication) but is not recommended for production.';
-    }
-    
-    // If a password key is specified, validate it exists
-    if (!empty($password_key)) {
-      $key_validation = $this->validateKey($password_key, 'Database password');
-      $errors = array_merge($errors, $key_validation['errors']);
-      $warnings = array_merge($warnings, $key_validation['warnings']);
-    }
-
-    // Validate port
-    $port = $connection['port'] ?? 0;
-    if ($port < 1 || $port > 65535) {
-      $errors[] = 'Database port must be between 1 and 65535.';
-    }
-
-    // Check SSL configuration for production
-    $ssl_mode = $connection['ssl_mode'] ?? 'require';
-    if (!in_array($ssl_mode, ['require', 'verify-ca', 'verify-full']) && empty($direct_password) && empty($password_key)) {
-      $warnings[] = 'Using weak SSL mode without password authentication. Consider using "require", "verify-ca", or "verify-full" for better security.';
-    }
-
-    return ['errors' => $errors, 'warnings' => $warnings];
-  }
-
-  /**
-   * Validates key storage configuration.
-   */
-  protected function validateKeyStorage($config) {
-    $errors = [];
-    $warnings = [];
-
-    // Check database password key (if specified)
-    $password_key = $config['connection']['password_key'] ?? '';
-    if (!empty($password_key)) {
-      $key_validation = $this->validateKey($password_key, 'Database password');
-      $errors = array_merge($errors, $key_validation['errors']);
-      $warnings = array_merge($warnings, $key_validation['warnings']);
-    }
-
-    // Check AI API keys for all backend types
-    if ($this->isAiEmbeddingsEnabled($config)) {
-      // Handle different config structures
-      $ai_config = $config['ai_embeddings']['azure_ai'] ?? $config['azure_embedding'] ?? [];
-      $api_key_name = $ai_config['api_key_name'] ?? '';
-      
-      if (!empty($api_key_name)) {
-        $key_validation = $this->validateKey($api_key_name, 'AI API');
-        $errors = array_merge($errors, $key_validation['errors']);
-        $warnings = array_merge($warnings, $key_validation['warnings']);
-      }
-      elseif (empty($ai_config['api_key'])) {
-        $warnings[] = 'AI API key not configured. Use Key module for secure storage.';
-      }
-    }
-
-    return ['errors' => $errors, 'warnings' => $warnings];
-  }
-
-  /**
-   * Validates a specific key.
-   */
-  protected function validateKey($key_name, $type) {
-    $errors = [];
-    $warnings = [];
-
-    if (!$this->keyRepository) {
-      $errors[] = "Key module not available for {$type} key validation.";
-      return ['errors' => $errors, 'warnings' => $warnings];
-    }
-
-    $key = $this->keyRepository->getKey($key_name);
-    if (!$key) {
-      $errors[] = "{$type} key '{$key_name}' not found.";
-    }
-    else {
-      // Check if key has a value
-      $key_value = $key->getKeyValue();
-      if (empty($key_value)) {
-        $errors[] = "{$type} key '{$key_name}' exists but has no value.";
-      }
-    }
-
-    return ['errors' => $errors, 'warnings' => $warnings];
-  }
-
-  /**
-   * Validates AI embeddings configuration.
-   */
-  protected function validateAiEmbeddingsConfiguration($config) {
-    $errors = [];
-    $warnings = [];
-
-    // Handle different config structures
-    $ai_config = $config['ai_embeddings']['azure_ai'] ?? $config['azure_embedding'] ?? [];
-
-    if (empty($ai_config['endpoint'])) {
-      $errors[] = 'Azure AI endpoint is required when embeddings are enabled.';
-    }
-
-    if (empty($ai_config['deployment_name'])) {
-      $errors[] = 'Azure AI deployment name is required when embeddings are enabled.';
-    }
-
-    if (empty($ai_config['api_key']) && empty($ai_config['api_key_name'])) {
-      $errors[] = 'Azure AI API key is required when embeddings are enabled.';
-    }
-
-    // Validate model configuration
-    $model = $ai_config['model'] ?? 'text-embedding-ada-002';
-    $valid_models = ['text-embedding-ada-002', 'text-embedding-3-small', 'text-embedding-3-large'];
-    if (!in_array($model, $valid_models)) {
-      $warnings[] = "Unknown embedding model '{$model}'. Supported models: " . implode(', ', $valid_models);
-    }
-
-    return ['errors' => $errors, 'warnings' => $warnings];
-  }
-
-  /**
-   * Validates vector search configuration.
-   */
-  protected function validateVectorSearchConfiguration($config) {
-    $errors = [];
-    $warnings = [];
-
-    $vector_config = $config['vector_search'] ?? [];
-
-    // Validate dimension
-    $dimension = $vector_config['dimension'] ?? 1536;
-    if ($dimension < 1 || $dimension > 10000) {
-      $errors[] = 'Vector dimension must be between 1 and 10000.';
-    }
-
-    // Validate index method
-    $index_method = $vector_config['index_method'] ?? 'ivfflat';
-    if (!in_array($index_method, ['ivfflat', 'hnsw'])) {
-      $errors[] = 'Vector index method must be either "ivfflat" or "hnsw".';
-    }
-
-    // Validate method-specific parameters
-    if ($index_method === 'ivfflat') {
-      $lists = $vector_config['ivfflat_lists'] ?? 100;
-      if ($lists < 1 || $lists > 10000) {
-        $warnings[] = 'IVFFlat lists parameter should be between 1 and 10000.';
-      }
-    } elseif ($index_method === 'hnsw') {
-      $m = $vector_config['hnsw_m'] ?? 16;
-      if ($m < 2 || $m > 100) {
-        $warnings[] = 'HNSW M parameter should be between 2 and 100.';
-      }
-      
-      $ef_construction = $vector_config['hnsw_ef_construction'] ?? 64;
-      if ($ef_construction < 1 || $ef_construction > 1000) {
-        $warnings[] = 'HNSW ef_construction parameter should be between 1 and 1000.';
-      }
-    }
-
-    return ['errors' => $errors, 'warnings' => $warnings];
-  }
 
   /**
    * Tests database connection.
@@ -625,18 +672,4 @@ private function validateAiFeaturesConfiguration(array $config) {
     }
   }
 
-  /**
-   * Checks if AI embeddings are enabled.
-   */
-  protected function isAiEmbeddingsEnabled($config) {
-    return !empty($config['ai_embeddings']['enabled']) || 
-           !empty($config['azure_embedding']['enabled']);
-  }
-
-  /**
-   * Checks if vector search is enabled.
-   */
-  protected function isVectorSearchEnabled($config) {
-    return !empty($config['vector_search']['enabled']);
-  }
 }

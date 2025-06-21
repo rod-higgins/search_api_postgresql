@@ -1058,11 +1058,19 @@ class EmbeddingAdminController extends ControllerBase {
    * Gets server information.
    */
   protected function getServerInformation($server) {
+    $backend = $server->getBackend();
+    $config = $backend->getConfiguration();
+    
+    // Always available from config
+    $result = [
+      'host' => $config['connection']['host'] ?? 'Unknown',
+      'database' => $config['connection']['database'] ?? 'Unknown',
+      'ai_enabled' => ($config['ai_embeddings']['enabled'] ?? FALSE) || ($config['azure_embedding']['enabled'] ?? FALSE),
+      'vector_search' => !empty($config['vector_search']['enabled']) || !empty($config['azure_embedding']['enabled']),
+    ];
+
     try {
-      $backend = $server->getBackend();
-      $config = $backend->getConfiguration();
-      
-      // Connect to get database information
+      // Only database-dependent operations in try block
       $reflection = new \ReflectionClass($backend);
       $connect_method = $reflection->getMethod('connect');
       $connect_method->setAccessible(TRUE);
@@ -1072,19 +1080,15 @@ class EmbeddingAdminController extends ControllerBase {
       $connector_property->setAccessible(TRUE);
       $connector = $connector_property->getValue($backend);
       
-      return [
-        'host' => $config['connection']['host'] ?? 'Unknown',
-        'database' => $config['connection']['database'] ?? 'Unknown',
-        'pg_version' => $connector->getVersion(),
-        'has_pgvector' => $this->validationService->checkPgVectorExtension($connector),
-        'ai_enabled' => ($config['ai_embeddings']['enabled'] ?? FALSE) || ($config['azure_embedding']['enabled'] ?? FALSE),
-        'vector_search' => !empty($config['vector_search']['enabled']) || !empty($config['azure_embedding']['enabled']),
-      ];
+      $result['pg_version'] = $connector->getVersion();
+      $result['has_pgvector'] = $this->validationService->checkPgVectorExtension($connector);
     } catch (\Exception $e) {
-      return [
-        'error' => $e->getMessage(),
-      ];
+      // Only set defaults for database-dependent values
+      $result['pg_version'] = 'Unknown';
+      $result['has_pgvector'] = FALSE;
     }
+
+    return $result;
   }
 
   /**
