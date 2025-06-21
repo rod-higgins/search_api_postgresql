@@ -358,3 +358,104 @@ function search_api_postgresql_update_8002() {
   
   return t('Cleared caches to register new analytics service methods.');
 }
+
+/**
+ * Implements hook_requirements().
+ */
+function search_api_postgresql_requirements($phase) {
+  $requirements = [];
+
+  // During uninstall, check for active servers using this backend
+  if ($phase == 'uninstall') {
+    $servers = \Drupal::entityTypeManager()
+      ->getStorage('search_api_server')
+      ->loadByProperties([
+        'backend' => [
+          'postgresql', 
+          'postgresql_vector', 
+          'azure_postgresql_vector'
+        ]
+      ]);
+
+    if (!empty($servers)) {
+      $server_list = [];
+      foreach ($servers as $server) {
+        $server_list[] = $server->label() . ' (' . $server->id() . ')';
+      }
+
+      $requirements['search_api_postgresql_active_servers'] = [
+        'title' => t('Active PostgreSQL Search Servers'),
+        'value' => t('@count active servers found', ['@count' => count($servers)]),
+        'severity' => REQUIREMENT_ERROR,
+        'description' => t('Cannot uninstall Search API PostgreSQL while servers are still using this backend. Please delete the following servers first: @servers', [
+          '@servers' => implode(', ', $server_list),
+        ]),
+      ];
+    }
+  }
+
+  return $requirements;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function search_api_postgresql_uninstall() {
+  // Safety check - this should be caught by hook_requirements, but double-check
+  $servers = \Drupal::entityTypeManager()
+    ->getStorage('search_api_server')
+    ->loadByProperties([
+      'backend' => [
+        'postgresql', 
+        'postgresql_vector', 
+        'azure_postgresql_vector'
+      ]
+    ]);
+
+  if (!empty($servers)) {
+    $server_names = [];
+    foreach ($servers as $server) {
+      $server_names[] = $server->label();
+    }
+    
+    \Drupal::messenger()->addError(t('Cannot uninstall: Active servers found (@servers). Please delete all PostgreSQL search servers before uninstalling this module.', [
+      '@servers' => implode(', ', $server_names),
+    ]));
+    
+    throw new \Exception('Cannot uninstall module while servers are active');
+  }
+
+  // Only proceed if no active servers
+  $database = \Drupal::database();
+  $schema = $database->schema();
+
+  // Remove module-specific tables (NOT user search indexes)
+  $tables = [
+    'search_api_postgresql_analytics',
+    'search_api_postgresql_metrics', 
+    'search_api_postgresql_daily_aggregates',
+    'search_api_postgresql_embedding_cache',
+  ];
+
+  $removed_tables = [];
+  foreach ($tables as $table) {
+    if ($schema->tableExists($table)) {
+      $schema->dropTable($table);
+      $removed_tables[] = $table;
+    }
+  }
+
+  // Remove configuration
+  \Drupal::configFactory()->getEditable('search_api_postgresql.settings')->delete();
+  \Drupal::configFactory()->getEditable('search_api_postgresql.dashboard')->delete();
+  \Drupal::configFactory()->getEditable('search_api_postgresql.embedding_cache')->delete();
+
+  // Log what was removed
+  if (!empty($removed_tables)) {
+    \Drupal::logger('search_api_postgresql')->info('Uninstalled Search API PostgreSQL module. Removed tables: @tables', [
+      '@tables' => implode(', ', $removed_tables),
+    ]);
+  }
+
+  \Drupal::messenger()->addMessage(t('Search API PostgreSQL module uninstalled successfully. Analytics data has been removed.'));
+}
