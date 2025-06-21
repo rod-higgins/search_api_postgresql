@@ -3,6 +3,17 @@
 namespace Drupal\search_api_postgresql\PostgreSQL;
 
 use Psr\Log\LoggerInterface;
+use Drupal\search_api\Query\QueryInterface; 
+use Drupal\search_api\SearchApiException; 
+use Drupal\search_api\Query\ResultSet; 
+use Drupal\search_api\Item\Item;
+use Drupal\search_api_postgresql\PostgreSQL\FieldMapper;
+use Drupal\search_api_postgresql\PostgreSQL\QueryBuilder;
+
+// If vector search classes exist these will be needed
+use Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder;
+use Drupal\search_api_postgresql\PostgreSQL\EnhancedVectorQueryBuilder;
+use Drupal\search_api_postgresql\PostgreSQL\AzureVectorQueryBuilder;
 
 /**
  * PostgreSQL database connector.
@@ -341,132 +352,7 @@ class PostgreSQLConnector {
   }
 
   /**
-   * Check if a table exists.
-   *
-   * @param string $table_name
-   *   The table name.
-   *
-   * @return bool
-   *   TRUE if table exists.
-   */
-  public function tableExists($table_name) {
-    try {
-      $sql = "SELECT 1 FROM information_schema.tables WHERE table_name = ? AND table_type = 'BASE TABLE'";
-      $stmt = $this->executePrepared($sql, [$table_name]);
-      return $stmt->fetchColumn() !== FALSE;
-    }
-    catch (\Exception $e) {
-      $this->logger->warning('Error checking if table exists: @message', [
-        '@message' => $e->getMessage(),
-      ]);
-      return FALSE;
-    }
-  }
-
-  /**
-   * Quote a table name for safe SQL usage.
-   *
-   * @param string $table_name
-   *   The table name to quote.
-   *
-   * @return string
-   *   The quoted table name.
-   */
-  public function quoteTableName($table_name) {
-    $this->validateIdentifier($table_name, 'table name');
-    return '"' . str_replace('"', '""', $table_name) . '"';
-  }
-
-  /**
-   * Quote a column name for safe SQL usage.
-   *
-   * @param string $column_name
-   *   The column name to quote.
-   *
-   * @return string
-   *   The quoted column name.
-   */
-  public function quoteColumnName($column_name) {
-    $this->validateIdentifier($column_name, 'column name');
-    return '"' . str_replace('"', '""', $column_name) . '"';
-  }
-
-  /**
-   * Quote an index name for safe SQL usage.
-   *
-   * @param string $index_name
-   *   The index name to quote.
-   *
-   * @return string
-   *   The quoted index name.
-   */
-  public function quoteIndexName($index_name) {
-    $this->validateIdentifier($index_name, 'index name');
-    return '"' . str_replace('"', '""', $index_name) . '"';
-  }
-
-  /**
-   * Validates an identifier for safe SQL usage.
-   *
-   * @param string $identifier
-   *   The identifier to validate.
-   * @param string $type
-   *   The type of identifier (for error messages).
-   *
-   * @throws \InvalidArgumentException
-   *   If the identifier is invalid.
-   */
-  public function validateIdentifier($identifier, $type = 'identifier') {
-    if (empty($identifier)) {
-      throw new \InvalidArgumentException("Empty {$type} not allowed");
-    }
-    
-    if (!is_string($identifier)) {
-      throw new \InvalidArgumentException("{$type} must be a string");
-    }
-    
-    // PostgreSQL identifier length limit
-    if (strlen($identifier) > 63) {
-      throw new \InvalidArgumentException("{$type} '{$identifier}' exceeds maximum length of 63 characters");
-    }
-    
-    // Basic validation for SQL identifiers
-    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $identifier)) {
-      throw new \InvalidArgumentException("Invalid {$type}: '{$identifier}'. Must start with a letter or underscore and contain only letters, numbers, and underscores.");
-    }
-  }
-
-  /**
-   * Validates a data type for safe SQL usage.
-   *
-   * @param string $data_type
-   *   The data type to validate.
-   *
-   * @return string
-   *   The validated data type.
-   *
-   * @throws \InvalidArgumentException
-   *   If the data type is invalid.
-   */
-  public function validateDataType($data_type) {
-    $allowed_types = [
-      'VARCHAR', 'TEXT', 'INTEGER', 'BIGINT', 'DECIMAL', 'NUMERIC',
-      'BOOLEAN', 'TIMESTAMP', 'DATE', 'TIME', 'TSVECTOR', 'VECTOR',
-      'JSONB', 'UUID', 'BYTEA', 'REAL', 'DOUBLE PRECISION'
-    ];
-    
-    // Handle parameterized types like VARCHAR(255) or VECTOR(1536)
-    $base_type = preg_replace('/\([^)]*\)/', '', strtoupper(trim($data_type)));
-    
-    if (!in_array($base_type, $allowed_types)) {
-      throw new \InvalidArgumentException("Invalid data type: {$data_type}");
-    }
-    
-    return $data_type;
-  }
-
-  /**
-   * Gets the columns of a table.
+   * Get table columns.
    *
    * @param string $table_name
    *   The table name (unquoted).
@@ -552,6 +438,218 @@ class PostgreSQLConnector {
   public function quote($string) {
     $connection = $this->connect();
     return $connection->quote($string);
+  }
+
+  /**
+   * Quotes a table name for safe SQL usage.
+   *
+   * @param string $table_name
+   *   The table name to quote.
+   *
+   * @return string
+   *   The quoted table name.
+   */
+  public function quoteTableName($table_name) {
+    // Remove any existing quotes and validate the name
+    $table_name = trim($table_name, '"');
+    
+    // Basic validation - only allow alphanumeric and underscores
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $table_name)) {
+      throw new \InvalidArgumentException("Invalid table name: {$table_name}");
+    }
+    
+    return '"' . $table_name . '"';
+  }
+
+  /**
+   * Quotes a column name for safe SQL usage.
+   *
+   * @param string $column_name
+   *   The column name to quote.
+   *
+   * @return string
+   *   The quoted column name.
+   */
+  public function quoteColumnName($column_name) {
+    // Remove any existing quotes and validate the name
+    $column_name = trim($column_name, '"');
+    
+    // Basic validation - only allow alphanumeric and underscores
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $column_name)) {
+      throw new \InvalidArgumentException("Invalid column name: {$column_name}");
+    }
+    
+    return '"' . $column_name . '"';
+  }
+
+  /**
+   * Executes a search query.
+   *
+   * @param \Drupal\search_api\Query\QueryInterface $query
+   *   The search query.
+   *
+   * @return \Drupal\search_api\Query\ResultSetInterface
+   *   The search results.
+   *
+   * @throws \Drupal\search_api\SearchApiException
+   *   If the search fails.
+   */
+  public function search(QueryInterface $query) {
+    try {
+      $index = $query->getIndex();
+      $backend = $index->getServerInstance()->getBackend();
+      $backend_config = $backend->getConfiguration();
+      
+      // Initialize field mapper with backend configuration
+      $field_mapper = new FieldMapper($backend_config);
+      
+      // Determine which query builder to use based on backend configuration
+      $query_builder = $this->createQueryBuilder($field_mapper, $backend_config);
+      
+      // Build the SQL query
+      $query_info = $query_builder->buildSearchQuery($query);
+      $sql = $query_info['sql'];
+      $params = $query_info['params'];
+      
+      // Execute the query
+      $stmt = $this->executePrepared($sql, $params);
+      $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+      
+      // Create result set using Search API's ResultSet class
+      $result_set = new ResultSet($query);
+      
+      // Process results
+      $items = [];
+      foreach ($rows as $row) {
+        $item_id = $row['search_api_id'];
+        $relevance = $row['search_api_relevance'] ?? 1.0;
+        
+        // Create result item using Search API's Item class
+        $result_item = new Item($index, $item_id);
+        $result_item->setScore($relevance);
+        
+        $items[] = $result_item;
+      }
+      
+      // Set results on result set
+      $result_set->setResultItems($items);
+      $result_set->setResultCount(count($items));
+      
+      // Handle total count if needed
+      if ($query->getOption('skip result count')) {
+        $result_set->setResultCount(-1);
+      } else {
+        // Try to build count query, fall back to result count if method doesn't exist
+        try {
+          if (method_exists($query_builder, 'buildCountQuery')) {
+            $count_query_info = $query_builder->buildCountQuery($query);
+            $count_stmt = $this->executePrepared($count_query_info['sql'], $count_query_info['params']);
+            $total_count = (int) $count_stmt->fetchColumn();
+            $result_set->setResultCount($total_count);
+          } else {
+            // Fall back to the result count we already have
+            $result_set->setResultCount(count($items));
+          }
+        } catch (\Exception $e) {
+          // If count query fails, just use the result count
+          $this->logger->warning('Count query failed, using result count: @message', [
+            '@message' => $e->getMessage(),
+          ]);
+          $result_set->setResultCount(count($items));
+        }
+      }
+      
+      return $result_set;
+      
+    } catch (\Exception $e) {
+      $this->logger->error('Search execution failed: @message', [
+        '@message' => $e->getMessage(),
+      ]);
+      throw new SearchApiException('Search execution failed: ' . $e->getMessage(), 0, $e);
+    }
+  }
+
+  /**
+   * Creates the appropriate query builder based on backend configuration.
+   *
+   * @param \Drupal\search_api_postgresql\PostgreSQL\FieldMapper $field_mapper
+   *   The field mapper.
+   * @param array $backend_config
+   *   The backend configuration.
+   *
+   * @return \Drupal\search_api_postgresql\PostgreSQL\QueryBuilder
+   *   The query builder instance.
+   */
+  protected function createQueryBuilder(FieldMapper $field_mapper, array $backend_config) {
+    // Check if vector search is enabled
+    $ai_config = $backend_config['ai_embeddings'] ?? [];
+    $vector_enabled = !empty($ai_config['enabled']);
+    
+    if ($vector_enabled) {
+      // Determine which vector query builder to use
+      $provider = $ai_config['provider'] ?? 'openai';
+      
+      switch ($provider) {
+        case 'azure':
+          // Try to get Azure embedding service
+          try {
+            $embedding_service = \Drupal::getContainer()->get('search_api_postgresql.azure_embedding');
+            if (class_exists('Drupal\search_api_postgresql\PostgreSQL\AzureVectorQueryBuilder')) {
+              return new AzureVectorQueryBuilder(
+                $this,
+                $field_mapper,
+                $backend_config,
+                $embedding_service
+              );
+            }
+          } catch (\Exception $e) {
+            $this->logger->warning('Azure embedding service not available, falling back to standard search: @message', [
+              '@message' => $e->getMessage(),
+            ]);
+          }
+          break;
+          
+        default:
+          // Try to get general embedding service  
+          try {
+            $embedding_service = \Drupal::getContainer()->get('search_api_postgresql.embedding');
+            
+            // Check if enhanced query builder is available
+            if (class_exists('Drupal\search_api_postgresql\PostgreSQL\EnhancedVectorQueryBuilder')) {
+              return new EnhancedVectorQueryBuilder(
+                $this,
+                $field_mapper,
+                $backend_config,
+                $embedding_service
+              );
+            } elseif (class_exists('Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder')) {
+              return new VectorQueryBuilder(
+                $this,
+                $field_mapper,
+                $backend_config,
+                $embedding_service
+              );
+            }
+          } catch (\Exception $e) {
+            $this->logger->warning('Embedding service not available, falling back to standard search: @message', [
+              '@message' => $e->getMessage(),
+            ]);
+          }
+          break;
+      }
+    }
+    
+    // Fall back to standard query builder
+    if (class_exists('Drupal\search_api_postgresql\PostgreSQL\QueryBuilder')) {
+      return new QueryBuilder(
+        $this,
+        $field_mapper,
+        $backend_config
+      );
+    }
+    
+    // Throw an exception if no query builder is available
+    throw new SearchApiException('No query builder class found. Please ensure the module is properly installed.');
   }
 
   /**
