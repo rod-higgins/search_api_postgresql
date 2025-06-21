@@ -7,6 +7,7 @@
 
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\search_api\ServerInterface;
+use Drupal\Core\Form\FormStateInterface;
 
 /**
  * Implements hook_help().
@@ -26,7 +27,47 @@ function search_api_postgresql_help($route_name, RouteMatchInterface $route_matc
       $output .= '<li>' . t('Queue-based embedding generation') . '</li>';
       $output .= '<li>' . t('Comprehensive analytics and monitoring') . '</li>';
       $output .= '</ul>';
+      $output .= '<h3>' . t('Configuration') . '</h3>';
+      $output .= '<p>' . t('Configure PostgreSQL search servers at <a href=":url">Search API servers</a>.', [
+        ':url' => '/admin/config/search/search-api',
+      ]) . '</p>';
+      $output .= '<p>' . t('For AI features, ensure you have:') . '</p>';
+      $output .= '<ul>';
+      $output .= '<li>' . t('PostgreSQL pgvector extension installed') . '</li>';
+      $output .= '<li>' . t('API keys configured using the Key module') . '</li>';
+      $output .= '<li>' . t('Appropriate AI service (Azure OpenAI or OpenAI) credentials') . '</li>';
+      $output .= '</ul>';
+      $output .= '<h3>' . t('Administration') . '</h3>';
+      $output .= '<p>' . t('Access the main administration dashboard at <a href=":dashboard_url">Search API PostgreSQL Administration</a>.', [
+        ':dashboard_url' => '/admin/config/search/search-api-postgresql',
+      ]) . '</p>';
       return $output;
+
+    case 'entity.search_api_server.canonical':
+      $server = $route_match->getParameter('search_api_server');
+      if ($server && $server->getBackend() && in_array($server->getBackend()->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
+        $output = '<p>' . t('This server uses the PostgreSQL backend with the following features:') . '</p>';
+        $output .= '<ul>';
+        $output .= '<li>' . t('Native PostgreSQL full-text search') . '</li>';
+        
+        $config = $server->getBackend()->getConfiguration();
+        if (!empty($config['ai_embeddings']['enabled'])) {
+          $output .= '<li>' . t('AI-powered vector search enabled') . '</li>';
+          if (!empty($config['hybrid_search']['enabled'])) {
+            $output .= '<li>' . t('Hybrid search combining text and vector search') . '</li>';
+          }
+        }
+        $output .= '</ul>';
+        
+        // Add link to server-specific administration
+        $server_admin_url = '/admin/config/search/search-api-postgresql/server/' . $server->id() . '/status';
+        $output .= '<p>' . t('<a href=":url">View detailed server status and analytics</a>', [
+          ':url' => $server_admin_url,
+        ]) . '</p>';
+        
+        return $output;
+      }
+      break;
   }
 }
 
@@ -34,27 +75,61 @@ function search_api_postgresql_help($route_name, RouteMatchInterface $route_matc
  * Implements hook_cron().
  */
 function search_api_postgresql_cron() {
+  $settings = \Drupal::config('search_api_postgresql.settings');
+  
+  // Only run maintenance tasks if analytics are enabled
+  if (!$settings->get('analytics.enabled')) {
+    return;
+  }
+
+  $logger = \Drupal::logger('search_api_postgresql');
+
   try {
-    // Process embedding queue
-    $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
-    if ($queue_manager) {
-      $queue_manager->processQueue(['max_items' => 50, 'max_time' => 30]);
+    // Process embedding queue with configurable limits
+    if (\Drupal::hasService('search_api_postgresql.embedding_queue_manager')) {
+      $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
+      if ($queue_manager) {
+        $max_items = $settings->get('performance.cron_max_items') ?: 50;
+        $max_time = $settings->get('performance.cron_max_time') ?: 30;
+        
+        $processed = $queue_manager->processQueue([
+          'max_items' => $max_items, 
+          'max_time' => $max_time
+        ]);
+        
+        if ($processed > 0) {
+          $logger->info('Processed @count embedding queue items.', ['@count' => $processed]);
+        }
+      }
     }
 
     // Clean up old cache entries
-    $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
-    if ($cache_manager) {
-      $cache_manager->performMaintenance();
+    if (\Drupal::hasService('search_api_postgresql.cache_manager')) {
+      $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
+      if ($cache_manager) {
+        $cleaned = $cache_manager->performMaintenance();
+        if ($cleaned > 0) {
+          $logger->info('Cleaned up @count old cache entries.', ['@count' => $cleaned]);
+        }
+      }
     }
 
     // Update analytics aggregates
-    $analytics = \Drupal::service('search_api_postgresql.analytics');
-    if ($analytics) {
-      $analytics->aggregateDailyStats();
+    if (\Drupal::hasService('search_api_postgresql.analytics')) {
+      $analytics = \Drupal::service('search_api_postgresql.analytics');
+      if ($analytics) {
+        $aggregated = $analytics->aggregateDailyStats();
+        if ($aggregated > 0) {
+          $logger->info('Aggregated @count daily analytics records.', ['@count' => $aggregated]);
+        }
+      }
     }
+
+    // Log maintenance completion (only if any work was done)
+    $logger->debug('Completed cron maintenance tasks.');
   }
   catch (\Exception $e) {
-    \Drupal::logger('search_api_postgresql')->error('Error in cron: @message', [
+    $logger->error('Error in cron: @message', [
       '@message' => $e->getMessage(),
     ]);
   }
@@ -62,40 +137,154 @@ function search_api_postgresql_cron() {
 
 /**
  * Implements hook_entity_delete().
+ *
+ * Cleans up data when search entities are deleted.
+ */
+function search_api_postgresql_entity_delete($entity) {
+  // Clean up when search API servers are deleted
+  if ($entity->getEntityTypeId() === 'search_api_server') {
+    search_api_postgresql_search_api_server_delete($entity);
+  }
+  
+  // Clean up when search API indexes are deleted
+  if ($entity->getEntityTypeId() === 'search_api_index') {
+    search_api_postgresql_search_api_index_delete($entity);
+  }
+}
+
+/**
+ * Implements hook_search_api_server_delete().
+ *
+ * Cleans up server-specific data when a PostgreSQL search server is deleted.
  */
 function search_api_postgresql_search_api_server_delete(ServerInterface $server) {
-  // Clean up server-specific data
+  // Only clean up if this is a PostgreSQL backend server
   $backend = $server->getBackend();
-  if ($backend && in_array($backend->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
-    try {
-      $database = \Drupal::database();
-      $schema = $database->schema();
-      
-      // Check if tables exist before trying to delete
-      $tables_to_clean = [
-        'search_api_postgresql_analytics',
-        'search_api_postgresql_embedding_cache',
-        'search_api_postgresql_metrics',
-        'search_api_postgresql_daily_aggregates',
-      ];
-      
-      foreach ($tables_to_clean as $table) {
-        if ($schema->tableExists($table)) {
-          $database->delete($table)
+  if (!$backend || !in_array($backend->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
+    return;
+  }
+
+  $logger = \Drupal::logger('search_api_postgresql');
+
+  try {
+    $database = \Drupal::database();
+    $schema = $database->schema();
+    
+    // Check if tables exist before trying to delete
+    $tables_to_clean = [
+      'search_api_postgresql_analytics',
+      'search_api_postgresql_embedding_cache',
+      'search_api_postgresql_metrics',
+      'search_api_postgresql_daily_aggregates',
+    ];
+    
+    $cleaned_count = 0;
+    foreach ($tables_to_clean as $table) {
+      if ($schema->tableExists($table)) {
+        try {
+          $count = $database->delete($table)
             ->condition('server_id', $server->id())
             ->execute();
+          $cleaned_count += $count;
+        }
+        catch (\Exception $e) {
+          $logger->warning('Failed to clean table @table for server @server: @error', [
+            '@table' => $table,
+            '@server' => $server->id(),
+            '@error' => $e->getMessage(),
+          ]);
         }
       }
-      
-      \Drupal::logger('search_api_postgresql')->info('Cleaned up data for deleted server: @server', [
+    }
+    
+    if ($cleaned_count > 0) {
+      $logger->info('Cleaned up @count records for deleted server: @server', [
+        '@count' => $cleaned_count,
         '@server' => $server->id(),
       ]);
     }
-    catch (\Exception $e) {
-      \Drupal::logger('search_api_postgresql')->error('Error cleaning up server data: @message', [
-        '@message' => $e->getMessage(),
+    
+    // Clear related caches
+    $cache_tags = [
+      'search_api_postgresql:server:' . $server->id(),
+      'search_api_postgresql:analytics',
+      'search_api_postgresql:dashboard',
+    ];
+    
+    \Drupal::service('cache_tags.invalidator')->invalidateTags($cache_tags);
+    
+  }
+  catch (\Exception $e) {
+    $logger->error('Error cleaning up server data: @message', [
+      '@message' => $e->getMessage(),
+    ]);
+  }
+}
+
+/**
+ * Implements hook_search_api_index_delete().
+ *
+ * Cleans up index-specific data when a search index is deleted.
+ */
+function search_api_postgresql_search_api_index_delete($index) {
+  // Only clean up if the index is using a PostgreSQL backend
+  $server = $index->getServerInstance();
+  if (!$server) {
+    return;
+  }
+  
+  $backend = $server->getBackend();
+  if (!$backend || !in_array($backend->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
+    return;
+  }
+
+  $logger = \Drupal::logger('search_api_postgresql');
+
+  try {
+    $database = \Drupal::database();
+    $schema = $database->schema();
+    
+    $cleaned_count = 0;
+    
+    // Clean up index-specific metrics
+    if ($schema->tableExists('search_api_postgresql_metrics')) {
+      $count = $database->delete('search_api_postgresql_metrics')
+        ->condition('index_id', $index->id())
+        ->execute();
+      $cleaned_count += $count;
+    }
+    
+    // Clean up index-specific cache entries
+    if (\Drupal::hasService('search_api_postgresql.cache_manager')) {
+      $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
+      if ($cache_manager) {
+        // This would be implemented in the cache manager to clean by index
+        // For now, we'll clear all cache as a safety measure
+        $cache_manager->clear();
+      }
+    }
+    
+    if ($cleaned_count > 0) {
+      $logger->info('Cleaned up @count metrics records for deleted index: @index', [
+        '@count' => $cleaned_count,
+        '@index' => $index->id(),
       ]);
     }
+    
+    // Clear related caches
+    $cache_tags = [
+      'search_api_postgresql:index:' . $index->id(),
+      'search_api_postgresql:analytics',
+      'search_api_postgresql:dashboard',
+    ];
+    
+    \Drupal::service('cache_tags.invalidator')->invalidateTags($cache_tags);
+    
+  }
+  catch (\Exception $e) {
+    $logger->error('Error cleaning up index data: @message', [
+      '@message' => $e->getMessage(),
+    ]);
   }
 }
 
@@ -112,6 +301,7 @@ function search_api_postgresql_theme() {
         'icon' => '',
         'color' => 'blue',
       ],
+      'template' => 'search-api-postgresql-stat-card',
     ],
     'search_api_postgresql_metric_chart' => [
       'variables' => [
@@ -120,6 +310,7 @@ function search_api_postgresql_theme() {
         'type' => 'line',
         'unit' => '',
       ],
+      'template' => 'search-api-postgresql-metric-chart',
     ],
     'search_api_postgresql_cost_card' => [
       'variables' => [
@@ -130,104 +321,311 @@ function search_api_postgresql_theme() {
         'trend' => 0,
         'is_projection' => FALSE,
       ],
+      'template' => 'search-api-postgresql-cost-card',
+    ],
+    'search_api_postgresql_dashboard' => [
+      'variables' => [
+        'server' => NULL,
+        'stats' => [],
+        'charts' => [],
+        'alerts' => [],
+        'overview_stats' => [],
+        'servers' => [],
+        'indexes' => [],
+        'health_checks' => [],
+        'quick_actions' => [],
+        'auto_refresh' => TRUE,
+      ],
+      'template' => 'search-api-postgresql-dashboard',
     ],
   ];
 }
 
 /**
- * Implements hook_requirements().
+ * Implements hook_page_attachments().
+ *
+ * Attaches admin CSS/JS to relevant pages.
  */
-function search_api_postgresql_requirements($phase) {
-  $requirements = [];
-
-  if ($phase == 'runtime') {
-    // Check if pgvector extension is available
-    $requirements['search_api_postgresql_pgvector'] = [
-      'title' => t('PostgreSQL pgvector extension'),
-      'value' => t('Not checked'),
-      'severity' => REQUIREMENT_INFO,
-      'description' => t('The pgvector extension is required for AI-powered vector search functionality.'),
-    ];
-
-    // Check if Key module is enabled
-    $requirements['search_api_postgresql_key'] = [
-      'title' => t('Key module'),
-    ];
-
-    if (\Drupal::moduleHandler()->moduleExists('key')) {
-      $requirements['search_api_postgresql_key']['value'] = t('Enabled');
-      $requirements['search_api_postgresql_key']['severity'] = REQUIREMENT_OK;
-    }
-    else {
-      $requirements['search_api_postgresql_key']['value'] = t('Not enabled');
-      $requirements['search_api_postgresql_key']['severity'] = REQUIREMENT_WARNING;
-      $requirements['search_api_postgresql_key']['description'] = t('The Key module is recommended for secure storage of API credentials.');
-    }
-
-    // Check analytics tables
-    try {
-      $analytics = \Drupal::service('search_api_postgresql.analytics');
-      if ($analytics) {
-        $requirements['search_api_postgresql_analytics'] = [
-          'title' => t('Search API PostgreSQL Analytics'),
-          'value' => t('Tables initialized'),
-          'severity' => REQUIREMENT_OK,
-        ];
+function search_api_postgresql_page_attachments(array &$attachments) {
+  $route_match = \Drupal::routeMatch();
+  $route_name = $route_match->getRouteName();
+  
+  // Admin routes that should load the admin library (fixed route names)
+  $admin_routes = [
+    // Main admin routes
+    'search_api_postgresql.admin.dashboard',
+    'search_api_postgresql.admin.analytics',
+    'search_api_postgresql.admin.embedding_management',
+    'search_api_postgresql.admin.cache_management',
+    'search_api_postgresql.admin.queue_management',
+    'search_api_postgresql.admin.configuration_test',
+    'search_api_postgresql.admin.bulk_regenerate',
+    
+    // Server and index specific routes
+    'search_api_postgresql.admin.server_status',
+    'search_api_postgresql.admin.index_embeddings',
+    
+    // Search API routes when using PostgreSQL backend
+    'entity.search_api_server.canonical',
+    'entity.search_api_server.edit_form',
+    'entity.search_api_server.add_form',
+    'entity.search_api_index.canonical',
+    'entity.search_api_index.edit_form',
+  ];
+  
+  if (in_array($route_name, $admin_routes)) {
+    // Check if this is a PostgreSQL-related page
+    $should_attach = TRUE;
+    
+    // For Search API entity routes, only attach if using PostgreSQL backend
+    if (strpos($route_name, 'entity.search_api_') === 0) {
+      $should_attach = FALSE;
+      
+      if ($route_name === 'entity.search_api_server.canonical' || 
+          $route_name === 'entity.search_api_server.edit_form') {
+        $server = $route_match->getParameter('search_api_server');
+        if ($server && $server->getBackend()) {
+          $backend_id = $server->getBackend()->getPluginId();
+          $should_attach = in_array($backend_id, ['postgresql', 'postgresql_vector', 'azure_postgresql_vector']);
+        }
+      }
+      elseif ($route_name === 'entity.search_api_index.canonical' || 
+              $route_name === 'entity.search_api_index.edit_form') {
+        $index = $route_match->getParameter('search_api_index');
+        if ($index && $index->getServerInstance()) {
+          $server = $index->getServerInstance();
+          if ($server->getBackend()) {
+            $backend_id = $server->getBackend()->getPluginId();
+            $should_attach = in_array($backend_id, ['postgresql', 'postgresql_vector', 'azure_postgresql_vector']);
+          }
+        }
+      }
+      elseif ($route_name === 'entity.search_api_server.add_form') {
+        // Always attach on add form in case user selects PostgreSQL backend
+        $should_attach = TRUE;
       }
     }
-    catch (\Exception $e) {
-      $requirements['search_api_postgresql_analytics'] = [
-        'title' => t('Search API PostgreSQL Analytics'),
-        'value' => t('Error'),
-        'severity' => REQUIREMENT_ERROR,
-        'description' => t('Analytics tables could not be initialized: @error', [
-          '@error' => $e->getMessage(),
-        ]),
+    
+    if ($should_attach) {
+      $attachments['#attached']['library'][] = 'search_api_postgresql/admin';
+      
+      // Add Drupal settings for JavaScript
+      $settings = \Drupal::config('search_api_postgresql.settings');
+      $attachments['#attached']['drupalSettings']['searchApiPostgreSQL'] = [
+        'refreshInterval' => $settings->get('performance.refresh_interval') ?: 30000,
+        'autoRefresh' => $settings->get('display.auto_refresh') ?? TRUE,
+        'basePath' => \Drupal::request()->getBasePath(),
       ];
     }
   }
-
-  return $requirements;
 }
 
 /**
- * Implements hook_install().
+ * Implements hook_form_FORM_ID_alter() for search_api_server_form.
+ *
+ * Adds validation and additional configuration options to server forms.
  */
-function search_api_postgresql_install() {
-  // Initialize analytics tables
-  try {
-    $analytics = \Drupal::service('search_api_postgresql.analytics');
-    \Drupal::messenger()->addMessage(t('Search API PostgreSQL analytics tables initialized.'));
-  }
-  catch (\Exception $e) {
-    \Drupal::messenger()->addError(t('Failed to initialize analytics tables: @error', [
-      '@error' => $e->getMessage(),
-    ]));
-  }
-}
-
-/**
- * Implements hook_uninstall().
- */
-function search_api_postgresql_uninstall() {
-  // Remove analytics tables
-  $tables = [
-    'search_api_postgresql_analytics',
-    'search_api_postgresql_metrics',
-    'search_api_postgresql_daily_aggregates',
-    'search_api_postgresql_embedding_cache',
-  ];
-
-  $database = \Drupal::database();
-  $schema = $database->schema();
-
-  foreach ($tables as $table) {
-    if ($schema->tableExists($table)) {
-      $schema->dropTable($table);
+function search_api_postgresql_form_search_api_server_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  $server = $form_state->getFormObject()->getEntity();
+  
+  // Only modify if this is a PostgreSQL backend
+  if ($server && $server->getBackend() && 
+      in_array($server->getBackend()->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
+    
+    // Add custom validation
+    $form['#validate'][] = 'search_api_postgresql_server_form_validate';
+    
+    // Add helpful information
+    if (!empty($form['backend_config'])) {
+      $form['backend_config']['#prefix'] = '<div class="messages messages--info">' . 
+        t('This server uses the PostgreSQL backend. Ensure your database has the required extensions installed for optimal performance.') . 
+        '</div>';
+    }
+    
+    // Add link to test configuration if server exists
+    if (!$server->isNew()) {
+      $test_url = '/admin/config/search/search-api-postgresql/test-config';
+      $form['backend_config']['#suffix'] = '<p>' . 
+        t('<a href="@url" class="button">Test PostgreSQL Configuration</a>', ['@url' => $test_url]) . 
+        '</p>';
     }
   }
+}
 
-  // Remove configuration
-  \Drupal::configFactory()->getEditable('search_api_postgresql.settings')->delete();
-  \Drupal::configFactory()->getEditable('search_api_postgresql.dashboard')->delete();
+/**
+ * Validation callback for PostgreSQL server forms.
+ */
+function search_api_postgresql_server_form_validate($form, FormStateInterface $form_state) {
+  $values = $form_state->getValues();
+  
+  // Validate connection configuration
+  if (!empty($values['backend_config']['connection'])) {
+    $connection = $values['backend_config']['connection'];
+    
+    // Ensure either password or password_key is provided
+    if (empty($connection['password']) && empty($connection['password_key'])) {
+      $form_state->setErrorByName('backend_config][connection][password', 
+        t('Either a password or a password key reference must be provided.'));
+    }
+    
+    // Validate SSL configuration
+    if (!empty($connection['ssl_mode']) && $connection['ssl_mode'] !== 'disable') {
+      $settings = \Drupal::config('search_api_postgresql.settings');
+      if ($settings->get('security.require_https') && empty($connection['ssl_ca'])) {
+        $form_state->setErrorByName('backend_config][connection][ssl_ca', 
+          t('SSL certificate path is required when using secure SSL modes.'));
+      }
+    }
+    
+    // Validate database connection parameters
+    if (empty($connection['host'])) {
+      $form_state->setErrorByName('backend_config][connection][host', 
+        t('Database host is required.'));
+    }
+    
+    if (empty($connection['database'])) {
+      $form_state->setErrorByName('backend_config][connection][database', 
+        t('Database name is required.'));
+    }
+    
+    if (empty($connection['username'])) {
+      $form_state->setErrorByName('backend_config][connection][username', 
+        t('Database username is required.'));
+    }
+  }
+  
+  // Validate AI configuration if enabled
+  if (!empty($values['backend_config']['ai_embeddings']['enabled'])) {
+    $ai_config = $values['backend_config']['ai_embeddings'];
+    
+    if (empty($ai_config['provider'])) {
+      $form_state->setErrorByName('backend_config][ai_embeddings][provider', 
+        t('AI provider must be selected when embeddings are enabled.'));
+    }
+    
+    // Provider-specific validation
+    if (!empty($ai_config['provider'])) {
+      $provider_config = $ai_config[$ai_config['provider']] ?? [];
+      
+      if (empty($provider_config['api_key']) && empty($provider_config['api_key_key'])) {
+        $form_state->setErrorByName("backend_config][ai_embeddings][{$ai_config['provider']}][api_key", 
+          t('API key or key reference is required for the selected provider.'));
+      }
+      
+      // Validate model selection
+      if (empty($provider_config['model'])) {
+        $form_state->setErrorByName("backend_config][ai_embeddings][{$ai_config['provider']}][model", 
+          t('Model selection is required for the selected provider.'));
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter() for search_api_index_form.
+ *
+ * Adds PostgreSQL-specific options to index forms.
+ */
+function search_api_postgresql_form_search_api_index_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  $index = $form_state->getFormObject()->getEntity();
+  
+  // Only modify if index is using a PostgreSQL backend
+  $server = $index->getServerInstance();
+  if ($server && $server->getBackend() && 
+      in_array($server->getBackend()->getPluginId(), ['postgresql', 'postgresql_vector', 'azure_postgresql_vector'])) {
+    
+    // Add link to embedding management for existing indexes
+    if (!$index->isNew()) {
+      $embedding_url = '/admin/config/search/search-api-postgresql/index/' . $index->id() . '/embeddings';
+      $form['actions']['embedding_management'] = [
+        '#type' => 'link',
+        '#title' => t('Manage Embeddings'),
+        '#url' => \Drupal\Core\Url::fromUserInput($embedding_url),
+        '#attributes' => [
+          'class' => ['button', 'button--secondary'],
+        ],
+        '#weight' => 10,
+      ];
+    }
+  }
+}
+
+/**
+ * Implements hook_library_info_alter().
+ *
+ * Modifies library definitions as needed.
+ */
+function search_api_postgresql_library_info_alter(&$libraries, $extension) {
+  // Add version information to admin library
+  if ($extension === 'search_api_postgresql' && isset($libraries['admin'])) {
+    $module_info = \Drupal::service('extension.list.module')->getExtensionInfo('search_api_postgresql');
+    $libraries['admin']['version'] = $module_info['version'] ?? '1.x-dev';
+    
+    // Add dependencies based on module configuration
+    $settings = \Drupal::config('search_api_postgresql.settings');
+    if ($settings->get('performance.lazy_load_charts')) {
+      $libraries['admin']['dependencies'][] = 'core/drupal.ajax';
+    }
+  }
+}
+
+/**
+ * Implements hook_mail().
+ *
+ * Defines mail templates for notifications.
+ */
+function search_api_postgresql_mail($key, &$message, $params) {
+  switch ($key) {
+    case 'cost_threshold_exceeded':
+      $message['subject'] = t('Search API PostgreSQL: Cost threshold exceeded');
+      $message['body'][] = t('The daily cost threshold of $@threshold has been exceeded.', [
+        '@threshold' => $params['threshold'],
+      ]);
+      $message['body'][] = t('Current daily cost: $@cost', [
+        '@cost' => $params['current_cost'],
+      ]);
+      $message['body'][] = t('Please review your AI usage and consider adjusting your configuration.');
+      break;
+      
+    case 'error_threshold_exceeded':
+      $message['subject'] = t('Search API PostgreSQL: Error threshold exceeded');
+      $message['body'][] = t('The error threshold of @threshold errors has been exceeded.', [
+        '@threshold' => $params['threshold'],
+      ]);
+      $message['body'][] = t('Current error count: @count', [
+        '@count' => $params['error_count'],
+      ]);
+      $message['body'][] = t('Please check your configuration and system logs.');
+      break;
+  }
+}
+
+/**
+ * Implements hook_cron_queue_info().
+ *
+ * Defines cron queues for the module.
+ */
+function search_api_postgresql_cron_queue_info() {
+  $queues = [];
+  
+  $queues['search_api_postgresql_embedding'] = [
+    'worker callback' => 'search_api_postgresql_process_embedding_queue_item',
+    'time' => 60,
+  ];
+  
+  return $queues;
+}
+
+/**
+ * Queue worker callback for embedding generation.
+ */
+function search_api_postgresql_process_embedding_queue_item($data) {
+  if (\Drupal::hasService('search_api_postgresql.embedding_queue_manager')) {
+    $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
+    if ($queue_manager) {
+      return $queue_manager->processItem($data);
+    }
+  }
+  
+  throw new \Exception('Embedding queue manager service not available.');
 }

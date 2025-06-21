@@ -8,6 +8,281 @@
 use Drupal\Core\Database\Database;
 
 /**
+ * Implements hook_requirements().
+ */
+function search_api_postgresql_requirements($phase) {
+  $requirements = [];
+
+  // Runtime checks
+  if ($phase == 'runtime') {
+    // Check if pgvector extension is available
+    $requirements['search_api_postgresql_pgvector'] = [
+      'title' => t('PostgreSQL pgvector extension'),
+      'value' => t('Not checked'),
+      'severity' => REQUIREMENT_INFO,
+      'description' => t('The pgvector extension is required for AI-powered vector search functionality.'),
+    ];
+
+    // Check if Key module is enabled
+    $requirements['search_api_postgresql_key'] = [
+      'title' => t('Key module'),
+    ];
+
+    if (\Drupal::moduleHandler()->moduleExists('key')) {
+      $requirements['search_api_postgresql_key']['value'] = t('Enabled');
+      $requirements['search_api_postgresql_key']['severity'] = REQUIREMENT_OK;
+      $requirements['search_api_postgresql_key']['description'] = t('The Key module is enabled for secure storage of API credentials.');
+    }
+    else {
+      $requirements['search_api_postgresql_key']['value'] = t('Not enabled');
+      $requirements['search_api_postgresql_key']['severity'] = REQUIREMENT_WARNING;
+      $requirements['search_api_postgresql_key']['description'] = t('The Key module is recommended for secure storage of API credentials. Install and enable the Key module for enhanced security.');
+    }
+
+    // Check analytics service and tables
+    try {
+      if (\Drupal::hasService('search_api_postgresql.analytics')) {
+        $analytics = \Drupal::service('search_api_postgresql.analytics');
+        if ($analytics) {
+          $database = \Drupal::database();
+          $schema = $database->schema();
+          
+          // Check if all required analytics tables exist
+          $required_tables = [
+            'search_api_postgresql_analytics',
+            'search_api_postgresql_metrics',
+            'search_api_postgresql_daily_aggregates',
+          ];
+          
+          $missing_tables = [];
+          foreach ($required_tables as $table) {
+            if (!$schema->tableExists($table)) {
+              $missing_tables[] = $table;
+            }
+          }
+          
+          if (empty($missing_tables)) {
+            $requirements['search_api_postgresql_analytics'] = [
+              'title' => t('Search API PostgreSQL Analytics'),
+              'value' => t('Tables initialized'),
+              'severity' => REQUIREMENT_OK,
+              'description' => t('Analytics tables are properly configured and accessible.'),
+            ];
+          }
+          else {
+            $requirements['search_api_postgresql_analytics'] = [
+              'title' => t('Search API PostgreSQL Analytics'),
+              'value' => t('Missing tables'),
+              'severity' => REQUIREMENT_WARNING,
+              'description' => t('Some analytics tables are missing: @tables. They will be recreated automatically.', [
+                '@tables' => implode(', ', $missing_tables),
+              ]),
+            ];
+          }
+        }
+      }
+      else {
+        $requirements['search_api_postgresql_analytics'] = [
+          'title' => t('Search API PostgreSQL Analytics'),
+          'value' => t('Service not available'),
+          'severity' => REQUIREMENT_WARNING,
+          'description' => t('Analytics service is not available. This may be due to missing dependencies.'),
+        ];
+      }
+    }
+    catch (\Exception $e) {
+      $requirements['search_api_postgresql_analytics'] = [
+        'title' => t('Search API PostgreSQL Analytics'),
+        'value' => t('Error'),
+        'severity' => REQUIREMENT_ERROR,
+        'description' => t('Analytics service could not be initialized: @error', [
+          '@error' => $e->getMessage(),
+        ]),
+      ];
+    }
+
+    // Check embedding cache service and configuration
+    try {
+      if (\Drupal::hasService('search_api_postgresql.cache_manager')) {
+        $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
+        $config = \Drupal::config('search_api_postgresql.embedding_cache');
+        
+        if ($cache_manager && !$config->isNew()) {
+          $database = \Drupal::database();
+          $schema = $database->schema();
+          $cache_table = $config->get('table_name') ?: 'search_api_postgresql_embedding_cache';
+          
+          if ($schema->tableExists($cache_table)) {
+            $requirements['search_api_postgresql_cache'] = [
+              'title' => t('Embedding Cache'),
+              'value' => t('Configured'),
+              'severity' => REQUIREMENT_OK,
+              'description' => t('Embedding cache is properly configured and accessible.'),
+            ];
+          }
+          else {
+            $requirements['search_api_postgresql_cache'] = [
+              'title' => t('Embedding Cache'),
+              'value' => t('Missing table'),
+              'severity' => REQUIREMENT_WARNING,
+              'description' => t('Embedding cache table does not exist. It will be created automatically when needed.'),
+            ];
+          }
+        }
+        else {
+          $requirements['search_api_postgresql_cache'] = [
+            'title' => t('Embedding Cache'),
+            'value' => t('Not configured'),
+            'severity' => REQUIREMENT_INFO,
+            'description' => t('Embedding cache is not yet configured.'),
+          ];
+        }
+      }
+      else {
+        $requirements['search_api_postgresql_cache'] = [
+          'title' => t('Embedding Cache'),
+          'value' => t('Service not available'),
+          'severity' => REQUIREMENT_WARNING,
+          'description' => t('Cache manager service is not available.'),
+        ];
+      }
+    }
+    catch (\Exception $e) {
+      $requirements['search_api_postgresql_cache'] = [
+        'title' => t('Embedding Cache'),
+        'value' => t('Error'),
+        'severity' => REQUIREMENT_ERROR,
+        'description' => t('Embedding cache service error: @error', [
+          '@error' => $e->getMessage(),
+        ]),
+      ];
+    }
+
+    // Check queue manager service
+    try {
+      if (\Drupal::hasService('search_api_postgresql.embedding_queue_manager')) {
+        $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
+        if ($queue_manager) {
+          $requirements['search_api_postgresql_queue'] = [
+            'title' => t('Embedding Queue Manager'),
+            'value' => t('Available'),
+            'severity' => REQUIREMENT_OK,
+            'description' => t('Queue manager service is properly initialized.'),
+          ];
+        }
+      }
+      else {
+        $requirements['search_api_postgresql_queue'] = [
+          'title' => t('Embedding Queue Manager'),
+          'value' => t('Service not available'),
+          'severity' => REQUIREMENT_ERROR,
+          'description' => t('Queue manager service is required for background embedding processing.'),
+        ];
+      }
+    }
+    catch (\Exception $e) {
+      $requirements['search_api_postgresql_queue'] = [
+        'title' => t('Embedding Queue Manager'),
+        'value' => t('Error'),
+        'severity' => REQUIREMENT_ERROR,
+        'description' => t('Queue manager service error: @error', [
+          '@error' => $e->getMessage(),
+        ]),
+      ];
+    }
+
+    // Check dashboard configuration
+    $dashboard_config = \Drupal::config('search_api_postgresql.dashboard');
+    if ($dashboard_config && !$dashboard_config->isNew()) {
+      $requirements['search_api_postgresql_dashboard'] = [
+        'title' => t('Dashboard'),
+        'value' => t('Configured'),
+        'severity' => REQUIREMENT_OK,
+        'description' => t('Dashboard settings are configured.'),
+      ];
+    }
+
+    // Check for existing servers and their configuration
+    try {
+      $servers = \Drupal::entityTypeManager()
+        ->getStorage('search_api_server')
+        ->loadByProperties([
+          'backend' => [
+            'postgresql', 
+            'postgresql_vector', 
+            'azure_postgresql_vector'
+          ]
+        ]);
+
+      if (!empty($servers)) {
+        $server_count = count($servers);
+        $requirements['search_api_postgresql_servers'] = [
+          'title' => t('PostgreSQL Search Servers'),
+          'value' => t('@count active servers', ['@count' => $server_count]),
+          'severity' => REQUIREMENT_OK,
+          'description' => t('Found @count PostgreSQL search servers configured.', [
+            '@count' => $server_count,
+          ]),
+        ];
+      }
+    }
+    catch (\Exception $e) {
+      $requirements['search_api_postgresql_servers'] = [
+        'title' => t('PostgreSQL Search Servers'),
+        'value' => t('Error checking servers'),
+        'severity' => REQUIREMENT_WARNING,
+        'description' => t('Unable to check server status: @error', [
+          '@error' => $e->getMessage(),
+        ]),
+      ];
+    }
+  }
+
+  // Uninstall checks
+  if ($phase == 'uninstall') {
+    try {
+      $servers = \Drupal::entityTypeManager()
+        ->getStorage('search_api_server')
+        ->loadByProperties([
+          'backend' => [
+            'postgresql', 
+            'postgresql_vector', 
+            'azure_postgresql_vector'
+          ]
+        ]);
+
+      if (!empty($servers)) {
+        $server_list = [];
+        foreach ($servers as $server) {
+          $server_list[] = $server->label() . ' (' . $server->id() . ')';
+        }
+
+        $requirements['search_api_postgresql_active_servers'] = [
+          'title' => t('Active PostgreSQL Search Servers'),
+          'value' => t('@count active servers found', ['@count' => count($servers)]),
+          'severity' => REQUIREMENT_ERROR,
+          'description' => t('Cannot uninstall Search API PostgreSQL while servers are still using this backend. Please delete the following servers first: @servers', [
+            '@servers' => implode(', ', $server_list),
+          ]),
+        ];
+      }
+    }
+    catch (\Exception $e) {
+      $requirements['search_api_postgresql_uninstall_check'] = [
+        'title' => t('Uninstall Check'),
+        'value' => t('Error'),
+        'severity' => REQUIREMENT_ERROR,
+        'description' => t('Unable to verify server status for uninstall: @error', [
+          '@error' => $e->getMessage(),
+        ]),
+      ];
+    }
+  }
+
+  return $requirements;
+}
+
+/**
  * Implements hook_schema().
  */
 function search_api_postgresql_schema() {
@@ -77,7 +352,7 @@ function search_api_postgresql_schema() {
 
   // Performance metrics table
   $schema['search_api_postgresql_metrics'] = [
-    'description' => 'Performance metrics for Search API PostgreSQL',
+    'description' => 'Performance metrics for Search API PostgreSQL operations',
     'fields' => [
       'id' => [
         'type' => 'serial',
@@ -93,30 +368,34 @@ function search_api_postgresql_schema() {
       'index_id' => [
         'type' => 'varchar',
         'length' => 255,
-        'description' => 'Index ID (optional)',
+        'not null' => TRUE,
+        'description' => 'Index ID',
       ],
-      'metric_type' => [
+      'query_type' => [
         'type' => 'varchar',
         'length' => 100,
         'not null' => TRUE,
-        'description' => 'Metric type (search, cache, etc)',
+        'description' => 'Type of query (search, index, delete, etc.)',
       ],
-      'metric_name' => [
+      'execution_time' => [
+        'type' => 'float',
+        'not null' => TRUE,
+        'description' => 'Execution time in milliseconds',
+      ],
+      'memory_usage' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'description' => 'Memory usage in bytes',
+      ],
+      'result_count' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'description' => 'Number of results returned',
+      ],
+      'query_hash' => [
         'type' => 'varchar',
-        'length' => 255,
-        'not null' => TRUE,
-        'description' => 'Specific metric name',
-      ],
-      'value' => [
-        'type' => 'numeric',
-        'precision' => 15,
-        'scale' => 6,
-        'not null' => TRUE,
-        'description' => 'Metric value',
-      ],
-      'metadata' => [
-        'type' => 'text',
-        'description' => 'Additional metadata as JSON',
+        'length' => 64,
+        'description' => 'Hash of the query for anonymization',
       ],
       'timestamp' => [
         'type' => 'int',
@@ -127,8 +406,8 @@ function search_api_postgresql_schema() {
     ],
     'primary key' => ['id'],
     'indexes' => [
-      'metric_timestamp' => ['metric_type', 'metric_name', 'timestamp'],
-      'server_timestamp' => ['server_id', 'timestamp'],
+      'server_index_timestamp' => ['server_id', 'index_id', 'timestamp'],
+      'query_type_timestamp' => ['query_type', 'timestamp'],
       'timestamp' => ['timestamp'],
     ],
   ];
@@ -142,30 +421,24 @@ function search_api_postgresql_schema() {
         'not null' => TRUE,
         'description' => 'Primary key',
       ],
-      'date' => [
-        'type' => 'varchar',
-        'length' => 10,
-        'not null' => TRUE,
-        'description' => 'Date (YYYY-MM-DD)',
-      ],
       'server_id' => [
         'type' => 'varchar',
         'length' => 255,
         'not null' => TRUE,
         'description' => 'Server ID',
       ],
-      'operation' => [
+      'date' => [
         'type' => 'varchar',
-        'length' => 255,
+        'length' => 10,
         'not null' => TRUE,
-        'description' => 'Operation type',
+        'description' => 'Date in YYYY-MM-DD format',
       ],
-      'total_calls' => [
+      'total_queries' => [
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
         'default' => 0,
-        'description' => 'Total API calls',
+        'description' => 'Total number of queries',
       ],
       'total_cost' => [
         'type' => 'numeric',
@@ -175,6 +448,12 @@ function search_api_postgresql_schema() {
         'default' => 0,
         'description' => 'Total cost in USD',
       ],
+      'avg_response_time' => [
+        'type' => 'float',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Average response time in milliseconds',
+      ],
       'total_tokens' => [
         'type' => 'int',
         'unsigned' => TRUE,
@@ -182,79 +461,91 @@ function search_api_postgresql_schema() {
         'default' => 0,
         'description' => 'Total tokens processed',
       ],
-      'avg_duration' => [
-        'type' => 'numeric',
-        'precision' => 10,
-        'scale' => 2,
+      'error_count' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
         'not null' => TRUE,
         'default' => 0,
-        'description' => 'Average duration in milliseconds',
+        'description' => 'Number of errors',
+      ],
+    ],
+    'primary key' => ['id'],
+    'unique keys' => [
+      'server_date' => ['server_id', 'date'],
+    ],
+    'indexes' => [
+      'date' => ['date'],
+      'server_id' => ['server_id'],
+    ],
+  ];
+
+  // Embedding cache table
+  $schema['search_api_postgresql_embedding_cache'] = [
+    'description' => 'Cache for AI-generated embeddings',
+    'fields' => [
+      'id' => [
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary key',
+      ],
+      'cache_key' => [
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+        'description' => 'Cache key (hash of text + model)',
+      ],
+      'embedding' => [
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => TRUE,
+        'description' => 'Compressed embedding vector',
+      ],
+      'model' => [
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'description' => 'AI model used',
+      ],
+      'dimension' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Vector dimensions',
+      ],
+      'token_count' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of tokens in original text',
       ],
       'created' => [
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
-        'description' => 'Timestamp when aggregate was created',
+        'description' => 'Creation timestamp',
+      ],
+      'accessed' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Last access timestamp',
+      ],
+      'access_count' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Number of times accessed',
       ],
     ],
     'primary key' => ['id'],
     'unique keys' => [
-      'date_server_operation' => ['date', 'server_id', 'operation'],
+      'cache_key' => ['cache_key'],
     ],
     'indexes' => [
-      'date' => ['date'],
-      'server_date' => ['server_id', 'date'],
-    ],
-  ];
-
-  // CORRECTED: Embedding cache table - Updated to match DatabaseEmbeddingCache expectations
-  $schema['search_api_postgresql_embedding_cache'] = [
-    'description' => 'Cache table for embedding vectors.',
-    'fields' => [
-      'text_hash' => [
-        'type' => 'varchar',
-        'length' => 64,
-        'not null' => TRUE,
-        'description' => 'SHA256 hash of the text.',
-      ],
-      'embedding_data' => [
-        'type' => 'blob',
-        'size' => 'big',
-        'not null' => TRUE,
-        'description' => 'Serialized and possibly compressed embedding vector.',
-      ],
-      'dimensions' => [
-        'type' => 'int',
-        'not null' => TRUE,
-        'description' => 'Number of dimensions in the vector.',
-      ],
-      'created' => [
-        'type' => 'int',
-        'not null' => TRUE,
-        'description' => 'Unix timestamp when created.',
-      ],
-      'last_accessed' => [
-        'type' => 'int',
-        'not null' => TRUE,
-        'description' => 'Unix timestamp when last accessed.',
-      ],
-      'expires' => [
-        'type' => 'int',
-        'not null' => TRUE,
-        'description' => 'Unix timestamp when expires.',
-      ],
-      'hit_count' => [
-        'type' => 'int',
-        'not null' => TRUE,
-        'default' => 0,
-        'description' => 'Number of times accessed.',
-      ],
-    ],
-    'primary key' => ['text_hash'],
-    'indexes' => [
-      'expires' => ['expires'],
-      'last_accessed' => ['last_accessed'],
-      'created' => ['created'],
+      'model_created' => ['model', 'created'],
+      'accessed' => ['accessed'],
     ],
   ];
 
@@ -262,91 +553,292 @@ function search_api_postgresql_schema() {
 }
 
 /**
- * Add the daily aggregates table for analytics.
+ * Implements hook_install().
  */
-function search_api_postgresql_update_8001() {
-  $schema = Database::getConnection()->schema();
+function search_api_postgresql_install() {
+  $config_factory = \Drupal::configFactory();
+  $messenger = \Drupal::messenger();
+  $logger = \Drupal::logger('search_api_postgresql');
   
-  if (!$schema->tableExists('search_api_postgresql_daily_aggregates')) {
-    $table_spec = [
-      'description' => 'Daily aggregated statistics for Search API PostgreSQL',
-      'fields' => [
-        'id' => [
-          'type' => 'serial',
-          'not null' => TRUE,
-          'description' => 'Primary key',
+  try {
+    // Set up default module settings
+    $settings = $config_factory->getEditable('search_api_postgresql.settings');
+    if ($settings->isNew()) {
+      $settings->setData([
+        'analytics' => [
+          'enabled' => TRUE,
+          'track_costs' => TRUE,
+          'track_performance' => TRUE,
+          'anonymize_queries' => TRUE,
         ],
-        'date' => [
-          'type' => 'varchar',
-          'length' => 10,
-          'not null' => TRUE,
-          'description' => 'Date (YYYY-MM-DD)',
+        'security' => [
+          'require_https' => TRUE,
+          'validate_ssl' => TRUE,
+          'max_api_calls_per_minute' => 60,
         ],
-        'server_id' => [
-          'type' => 'varchar',
-          'length' => 255,
-          'not null' => TRUE,
-          'description' => 'Server ID',
+        'performance' => [
+          'default_timeout' => 30,
+          'max_concurrent_requests' => 5,
+          'cache_enabled' => TRUE,
+          'cache_ttl' => 3600,
+          'cron_max_items' => 50,
+          'cron_max_time' => 30,
         ],
-        'operation' => [
-          'type' => 'varchar',
-          'length' => 255,
-          'not null' => TRUE,
-          'description' => 'Operation type',
+      ])->save();
+      
+      $logger->info('Created default module settings.');
+    }
+
+    // Set up default embedding cache configuration
+    $cache_config = $config_factory->getEditable('search_api_postgresql.embedding_cache');
+    if ($cache_config->isNew()) {
+      $cache_config->setData([
+        'default_ttl' => 86400,
+        'max_entries' => 10000,
+        'cleanup_probability' => 0.01,
+        'enable_compression' => TRUE,
+        'table_name' => 'search_api_postgresql_embedding_cache',
+      ])->save();
+      
+      $logger->info('Created default embedding cache configuration.');
+    }
+
+    // Set up default dashboard configuration
+    $dashboard_config = $config_factory->getEditable('search_api_postgresql.dashboard');
+    if ($dashboard_config->isNew()) {
+      $dashboard_config->setData([
+        'display' => [
+          'items_per_page' => 20,
+          'refresh_interval' => 30,
+          'show_costs' => TRUE,
         ],
-        'total_calls' => [
-          'type' => 'int',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-          'default' => 0,
-          'description' => 'Total API calls',
+        'alerts' => [
+          'enabled' => TRUE,
+          'cost_threshold' => 10.0,
+          'error_threshold' => 10,
         ],
-        'total_cost' => [
-          'type' => 'numeric',
-          'precision' => 10,
-          'scale' => 6,
-          'not null' => TRUE,
-          'default' => 0,
-          'description' => 'Total cost in USD',
-        ],
-        'total_tokens' => [
-          'type' => 'int',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-          'default' => 0,
-          'description' => 'Total tokens processed',
-        ],
-        'avg_duration' => [
-          'type' => 'numeric',
-          'precision' => 10,
-          'scale' => 2,
-          'not null' => TRUE,
-          'default' => 0,
-          'description' => 'Average duration in milliseconds',
-        ],
-        'created' => [
-          'type' => 'int',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-          'description' => 'Timestamp when aggregate was created',
-        ],
-      ],
-      'primary key' => ['id'],
-      'unique keys' => [
-        'date_server_operation' => ['date', 'server_id', 'operation'],
-      ],
-      'indexes' => [
-        'date' => ['date'],
-        'server_date' => ['server_id', 'date'],
-      ],
+      ])->save();
+      
+      $logger->info('Created default dashboard configuration.');
+    }
+
+    // Initialize analytics service if available
+    if (\Drupal::hasService('search_api_postgresql.analytics')) {
+      try {
+        $analytics = \Drupal::service('search_api_postgresql.analytics');
+        if ($analytics) {
+          $logger->info('Analytics service initialized successfully.');
+          $messenger->addMessage(t('Search API PostgreSQL analytics service initialized.'));
+        }
+      }
+      catch (\Exception $e) {
+        $logger->error('Failed to initialize analytics service during install: @error', [
+          '@error' => $e->getMessage(),
+        ]);
+        $messenger->addWarning(t('Analytics service could not be initialized: @error', [
+          '@error' => $e->getMessage(),
+        ]));
+      }
+    }
+
+    // Validate cache manager service
+    if (\Drupal::hasService('search_api_postgresql.cache_manager')) {
+      try {
+        $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
+        if ($cache_manager) {
+          $logger->info('Cache manager service validated successfully.');
+        }
+      }
+      catch (\Exception $e) {
+        $logger->warning('Cache manager service validation failed: @error', [
+          '@error' => $e->getMessage(),
+        ]);
+      }
+    }
+
+    // Validate queue manager service
+    if (\Drupal::hasService('search_api_postgresql.embedding_queue_manager')) {
+      try {
+        $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
+        if ($queue_manager) {
+          $logger->info('Queue manager service validated successfully.');
+        }
+      }
+      catch (\Exception $e) {
+        $logger->warning('Queue manager service validation failed: @error', [
+          '@error' => $e->getMessage(),
+        ]);
+      }
+    }
+
+    $messenger->addMessage(t('Search API PostgreSQL module installed successfully.'));
+    $logger->info('Search API PostgreSQL module installation completed.');
+    
+  }
+  catch (\Exception $e) {
+    $logger->error('Error during module installation: @error', [
+      '@error' => $e->getMessage(),
+    ]);
+    $messenger->addError(t('Module installation encountered errors. Check the logs for details.'));
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function search_api_postgresql_uninstall() {
+  $logger = \Drupal::logger('search_api_postgresql');
+  $messenger = \Drupal::messenger();
+  
+  try {
+    // Safety check - this should be caught by hook_requirements, but double-check
+    $servers = \Drupal::entityTypeManager()
+      ->getStorage('search_api_server')
+      ->loadByProperties([
+        'backend' => [
+          'postgresql', 
+          'postgresql_vector', 
+          'azure_postgresql_vector'
+        ]
+      ]);
+
+    if (!empty($servers)) {
+      $server_names = [];
+      foreach ($servers as $server) {
+        $server_names[] = $server->label();
+      }
+      
+      $error_message = t('Cannot uninstall: Active servers found (@servers). Please delete all PostgreSQL search servers before uninstalling this module.', [
+        '@servers' => implode(', ', $server_names),
+      ]);
+      
+      $messenger->addError($error_message);
+      $logger->error('Uninstall blocked: @message', ['@message' => $error_message]);
+      
+      throw new \Exception('Cannot uninstall module while servers are active');
+    }
+
+    // Only proceed if no active servers
+    $database = \Drupal::database();
+    $schema = $database->schema();
+
+    // Remove module-specific tables (NOT user search indexes)
+    $tables = [
+      'search_api_postgresql_analytics',
+      'search_api_postgresql_metrics', 
+      'search_api_postgresql_daily_aggregates',
+      'search_api_postgresql_embedding_cache',
+    ];
+
+    $removed_tables = [];
+    foreach ($tables as $table) {
+      if ($schema->tableExists($table)) {
+        try {
+          $schema->dropTable($table);
+          $removed_tables[] = $table;
+          $logger->info('Dropped table: @table', ['@table' => $table]);
+        }
+        catch (\Exception $e) {
+          $logger->error('Failed to drop table @table: @error', [
+            '@table' => $table,
+            '@error' => $e->getMessage(),
+          ]);
+        }
+      }
+    }
+
+    // Remove all configuration objects
+    $config_factory = \Drupal::configFactory();
+    $configs_to_delete = [
+      'search_api_postgresql.settings',
+      'search_api_postgresql.dashboard',
+      'search_api_postgresql.embedding_cache',
+    ];
+
+    $removed_configs = [];
+    foreach ($configs_to_delete as $config_name) {
+      try {
+        $config = $config_factory->getEditable($config_name);
+        if (!$config->isNew()) {
+          $config->delete();
+          $removed_configs[] = $config_name;
+          $logger->info('Removed configuration: @config', ['@config' => $config_name]);
+        }
+      }
+      catch (\Exception $e) {
+        $logger->error('Failed to remove configuration @config: @error', [
+          '@config' => $config_name,
+          '@error' => $e->getMessage(),
+        ]);
+      }
+    }
+
+    // Clear caches to ensure clean removal
+    try {
+      \Drupal::cache()->deleteAll();
+      \Drupal::cache('config')->deleteAll();
+      
+      // Clear specific cache tags
+      $cache_tags = [
+        'search_api_postgresql',
+        'search_api_postgresql:analytics',
+        'search_api_postgresql:dashboard',
+        'search_api_postgresql:cache',
+      ];
+      
+      foreach ($cache_tags as $tag) {
+        \Drupal::service('cache_tags.invalidator')->invalidateTags([$tag]);
+      }
+      
+      $logger->info('Cleared module-related caches.');
+    }
+    catch (\Exception $e) {
+      $logger->warning('Failed to clear some caches during uninstall: @error', [
+        '@error' => $e->getMessage(),
+      ]);
+    }
+
+    // Log comprehensive uninstall summary
+    $summary_data = [
+      'tables' => count($removed_tables),
+      'configs' => count($removed_configs),
+      'table_list' => implode(', ', $removed_tables),
+      'config_list' => implode(', ', $removed_configs),
     ];
     
-    $schema->createTable('search_api_postgresql_daily_aggregates', $table_spec);
+    $logger->info('Uninstalled Search API PostgreSQL module. Removed @tables tables (@table_list) and @configs configurations (@config_list).', $summary_data);
+
+    $messenger->addMessage(t('Search API PostgreSQL module uninstalled successfully. Removed @tables tables and @configs configurations.', [
+      '@tables' => count($removed_tables),
+      '@configs' => count($removed_configs),
+    ]));
     
-    return t('Created the daily aggregates table for analytics.');
+  }
+  catch (\Exception $e) {
+    $logger->error('Error during module uninstall: @error', [
+      '@error' => $e->getMessage(),
+    ]);
+    
+    // Re-throw the exception to prevent uninstall if there are critical errors
+    throw $e;
+  }
+}
+
+/**
+ * Update hook to create daily aggregates table if it doesn't exist.
+ */
+function search_api_postgresql_update_8001() {
+  $schema = \Drupal::database()->schema();
+  $table_name = 'search_api_postgresql_daily_aggregates';
+  
+  if ($schema->tableExists($table_name)) {
+    return t('Daily aggregates table already exists.');
   }
   
-  return t('Daily aggregates table already exists.');
+  $table_schema = search_api_postgresql_schema()[$table_name];
+  $schema->createTable($table_name, $table_schema);
+  
+  return t('Created daily aggregates table.');
 }
 
 /**
@@ -360,102 +852,95 @@ function search_api_postgresql_update_8002() {
 }
 
 /**
- * Implements hook_requirements().
+ * Update configuration schema to match current version.
  */
-function search_api_postgresql_requirements($phase) {
-  $requirements = [];
-
-  // During uninstall, check for active servers using this backend
-  if ($phase == 'uninstall') {
-    $servers = \Drupal::entityTypeManager()
-      ->getStorage('search_api_server')
-      ->loadByProperties([
-        'backend' => [
-          'postgresql', 
-          'postgresql_vector', 
-          'azure_postgresql_vector'
-        ]
-      ]);
-
-    if (!empty($servers)) {
-      $server_list = [];
-      foreach ($servers as $server) {
-        $server_list[] = $server->label() . ' (' . $server->id() . ')';
+function search_api_postgresql_update_8003() {
+  $config_factory = \Drupal::configFactory();
+  
+  // Update settings configuration with new security and performance options
+  $settings = $config_factory->getEditable('search_api_postgresql.settings');
+  $current_data = $settings->getRawData();
+  
+  // Add missing configuration sections
+  $default_updates = [
+    'security.require_https' => TRUE,
+    'security.validate_ssl' => TRUE,
+    'security.max_api_calls_per_minute' => 60,
+    'performance.default_timeout' => 30,
+    'performance.max_concurrent_requests' => 5,
+    'performance.cache_enabled' => TRUE,
+    'performance.cache_ttl' => 3600,
+    'performance.cron_max_items' => 50,
+    'performance.cron_max_time' => 30,
+  ];
+  
+  $updated = FALSE;
+  foreach ($default_updates as $key => $default_value) {
+    $keys = explode('.', $key);
+    $current_value = $current_data;
+    
+    foreach ($keys as $nested_key) {
+      if (!isset($current_value[$nested_key])) {
+        // Key is missing, set the default
+        $settings->set($key, $default_value);
+        $updated = TRUE;
+        break;
       }
-
-      $requirements['search_api_postgresql_active_servers'] = [
-        'title' => t('Active PostgreSQL Search Servers'),
-        'value' => t('@count active servers found', ['@count' => count($servers)]),
-        'severity' => REQUIREMENT_ERROR,
-        'description' => t('Cannot uninstall Search API PostgreSQL while servers are still using this backend. Please delete the following servers first: @servers', [
-          '@servers' => implode(', ', $server_list),
-        ]),
-      ];
+      $current_value = $current_value[$nested_key];
     }
   }
-
-  return $requirements;
+  
+  if ($updated) {
+    $settings->save();
+    return t('Updated configuration with new security and performance settings.');
+  }
+  
+  return t('Configuration is already up to date.');
 }
 
 /**
- * Implements hook_uninstall().
+ * Validate and repair service configurations.
  */
-function search_api_postgresql_uninstall() {
-  // Safety check - this should be caught by hook_requirements, but double-check
-  $servers = \Drupal::entityTypeManager()
-    ->getStorage('search_api_server')
-    ->loadByProperties([
-      'backend' => [
-        'postgresql', 
-        'postgresql_vector', 
-        'azure_postgresql_vector'
-      ]
-    ]);
-
-  if (!empty($servers)) {
-    $server_names = [];
-    foreach ($servers as $server) {
-      $server_names[] = $server->label();
-    }
-    
-    \Drupal::messenger()->addError(t('Cannot uninstall: Active servers found (@servers). Please delete all PostgreSQL search servers before uninstalling this module.', [
-      '@servers' => implode(', ', $server_names),
-    ]));
-    
-    throw new \Exception('Cannot uninstall module while servers are active');
+function search_api_postgresql_update_8004() {
+  $config_factory = \Drupal::configFactory();
+  $updated_configs = [];
+  
+  // Ensure embedding cache configuration is complete
+  $cache_config = $config_factory->getEditable('search_api_postgresql.embedding_cache');
+  if ($cache_config->isNew() || !$cache_config->get('table_name')) {
+    $cache_config->setData([
+      'default_ttl' => 86400,
+      'max_entries' => 10000,
+      'cleanup_probability' => 0.01,
+      'enable_compression' => TRUE,
+      'table_name' => 'search_api_postgresql_embedding_cache',
+    ])->save();
+    $updated_configs[] = 'embedding_cache';
   }
-
-  // Only proceed if no active servers
-  $database = \Drupal::database();
-  $schema = $database->schema();
-
-  // Remove module-specific tables (NOT user search indexes)
-  $tables = [
-    'search_api_postgresql_analytics',
-    'search_api_postgresql_metrics', 
-    'search_api_postgresql_daily_aggregates',
-    'search_api_postgresql_embedding_cache',
-  ];
-
-  $removed_tables = [];
-  foreach ($tables as $table) {
-    if ($schema->tableExists($table)) {
-      $schema->dropTable($table);
-      $removed_tables[] = $table;
-    }
+  
+  // Ensure dashboard configuration is complete
+  $dashboard_config = $config_factory->getEditable('search_api_postgresql.dashboard');
+  if ($dashboard_config->isNew() || !$dashboard_config->get('display')) {
+    $dashboard_config->setData([
+      'display' => [
+        'items_per_page' => 20,
+        'refresh_interval' => 30,
+        'show_costs' => TRUE,
+      ],
+      'alerts' => [
+        'enabled' => TRUE,
+        'cost_threshold' => 10.0,
+        'error_threshold' => 10,
+      ],
+    ])->save();
+    $updated_configs[] = 'dashboard';
   }
-
-  // Remove configuration
-  \Drupal::configFactory()->getEditable('search_api_postgresql.settings')->delete();
-  \Drupal::configFactory()->getEditable('search_api_postgresql.dashboard')->delete();
-  \Drupal::configFactory()->getEditable('search_api_postgresql.embedding_cache')->delete();
-
-  // Log what was removed
-  if (!empty($removed_tables)) {
-    \Drupal::logger('search_api_postgresql')->info('Uninstalled Search API PostgreSQL module. Removed tables: @tables', [
-      '@tables' => implode(', ', $removed_tables),
+  
+  if (!empty($updated_configs)) {
+    return t('Updated service configurations: @configs', [
+      '@configs' => implode(', ', $updated_configs),
     ]);
   }
-
-  \Drupal::messenger()->addMessage(t('Search API PostgreSQL module uninstalled successfully. Analytics data has been removed.'));
+  
+  return t('All service configurations are up to date.');
 }
