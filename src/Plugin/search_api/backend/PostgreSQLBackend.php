@@ -391,7 +391,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#description' => $this->t('OpenAI organization ID if required.'),
     ];
 
-    // Test Connection Button
+    // Test Connection Button (update this section)
     $form['connection']['test_connection'] = [
       '#type' => 'button',
       '#value' => $this->t('Test Connection'),
@@ -400,12 +400,22 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         'wrapper' => 'connection-test-result',
         'method' => 'replace',
         'effect' => 'fade',
+        'progress' => [
+          'type' => 'throbber',
+          'message' => $this->t('Testing connection...'),
+        ],
       ],
+      '#suffix' => '<div class="test-connection-help">Click to verify database connectivity.</div>',
     ];
 
     $form['connection']['test_result'] = [
       '#type' => 'container',
-      '#attributes' => ['id' => 'connection-test-result'],
+      '#attributes' => [
+        'id' => 'connection-test-result',
+        'class' => ['connection-test-wrapper'],
+      ],
+      // Always include some content so the div renders
+      '#markup' => '<div class="test-result-placeholder" style="min-height: 1px;"></div>',
     ];
 
     // Advanced Configuration
@@ -437,6 +447,9 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       '#max' => 1000,
       '#description' => $this->t('Number of items to process in each indexing batch.'),
     ];
+
+    // Add the required libraries
+    $form['#attached']['library'][] = 'core/drupal.ajax';
 
     return $form;
   }
@@ -776,26 +789,37 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       $result = $test_connector->testConnection();
       
       if ($result['success']) {
-        $message = '<div class="messages messages--status">' . 
-                   $this->t('Connection successful! Database: @db, Version: @version', [
-                     '@db' => $result['database'] ?? 'Unknown',
-                     '@version' => $result['version'] ?? 'Unknown',
-                   ]) . '</div>';
+        $message = $this->t('Connection successful! Database: @db, Version: @version', [
+          '@db' => $result['database'] ?? 'Unknown',
+          '@version' => $result['version'] ?? 'Unknown',
+        ]);
+        $message_type = 'status';
       } else {
-        $message = '<div class="messages messages--error">' . 
-                   $this->t('Connection failed: @error', ['@error' => $result['error']]) . 
-                   '</div>';
+        $message = $this->t('Connection failed: @error', ['@error' => $result['error']]);
+        $message_type = 'error';
       }
       
     } catch (\Exception $e) {
-      $message = '<div class="messages messages--error">' . 
-                 $this->t('Connection test failed: @error', ['@error' => $e->getMessage()]) . 
-                 '</div>';
+      $message = $this->t('Connection test failed: @error', ['@error' => $e->getMessage()]);
+      $message_type = 'error';
     }
 
+    // Debug logging
+    \Drupal::logger('search_api_postgresql')->info('AJAX Response: @message', ['@message' => $message]);
+
+    // Return the exact element that should replace the wrapper
     return [
-      '#type' => 'markup',
-      '#markup' => $message,
+      '#type' => 'container',
+      '#attributes' => [
+        'id' => 'connection-test-result',
+        'class' => ['connection-test-result'],
+      ],
+      'message' => [
+        '#theme' => 'status_messages',
+        '#message_list' => [
+          $message_type => [$message],
+        ],
+      ],
     ];
   }
 
