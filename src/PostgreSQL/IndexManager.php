@@ -121,7 +121,7 @@ class IndexManager {
     foreach ($required_columns as $field_id => $field_info) {
       if (!in_array($field_id, $current_columns)) {
         $safe_field_id = $this->connector->quoteColumnName($field_id);
-        $safe_type = $this->connector->validateDataType($field_info['type']);
+        $safe_type = $this->fieldMapper->mapSearchApiTypeToPostgreSQL($field_info['type']);
         $sql = "ALTER TABLE {$table_name} ADD COLUMN {$safe_field_id} {$safe_type}";
         $this->connector->executeQuery($sql);
       }
@@ -364,7 +364,7 @@ class IndexManager {
 
     foreach ($fields as $field_id => $field_info) {
       $safe_field_id = $this->connector->quoteColumnName($field_id);
-      $safe_type = $this->connector->validateDataType($field_info['type']);
+      $safe_type = $this->fieldMapper->mapSearchApiTypeToPostgreSQL($field_info['type']);
       $sql .= "  {$safe_field_id} {$safe_type},\n";
     }
 
@@ -374,6 +374,37 @@ class IndexManager {
     $sql .= ");";
 
     return $sql;
+  }
+
+  /**
+   * Maps a Search API type to PostgreSQL type.
+   *
+   * @param string $search_api_type
+   *   The Search API field type.
+   *
+   * @return string
+   *   The corresponding PostgreSQL data type.
+   */
+  public function mapSearchApiTypeToPostgreSQL($search_api_type) {
+    $type_mapping = [
+      'text' => 'TEXT',
+      'string' => 'VARCHAR(255)',
+      'integer' => 'INTEGER',
+      'decimal' => 'DECIMAL',
+      'boolean' => 'BOOLEAN',
+      'date' => 'TIMESTAMP',
+      'uri' => 'TEXT',
+      'tokens' => 'TEXT',
+      'object' => 'JSONB',
+      'vector' => 'VECTOR(1536)', // Default embedding dimension
+    ];
+
+    if (isset($type_mapping[$search_api_type])) {
+      return $type_mapping[$search_api_type];
+    }
+
+    // Default fallback
+    return 'TEXT';
   }
 
   /**

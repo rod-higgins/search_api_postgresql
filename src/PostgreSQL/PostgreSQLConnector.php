@@ -161,6 +161,37 @@ class PostgreSQLConnector {
   }
 
   /**
+   * Check if a table exists.
+   *
+   * @param string $table_name
+   *   The table name (unquoted).
+   * @param string $schema_name
+   *   The schema name (defaults to 'public').
+   *
+   * @return bool
+   *   TRUE if the table exists.
+   */
+  public function tableExists($table_name, $schema_name = 'public') {
+    try {
+      $sql = "SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = ? 
+        AND table_name = ?
+      )";
+      $stmt = $this->executePrepared($sql, [$schema_name, $table_name]);
+      return (bool) $stmt->fetchColumn();
+    }
+    catch (\Exception $e) {
+      $this->logger->warning('Error checking if table exists @table in schema @schema: @message', [
+        '@table' => $table_name,
+        '@schema' => $schema_name,
+        '@message' => $e->getMessage(),
+      ]);
+      return FALSE;
+    }
+  }
+
+  /**
    * Test the database connection.
    *
    * @return array
