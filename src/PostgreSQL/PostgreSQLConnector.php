@@ -562,7 +562,7 @@ class PostgreSQLConnector {
   }
 
   /**
-   * Executes a search query.
+   * Executes a search query - FOLLOWS search_api_db PATTERNS.
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
@@ -589,62 +589,167 @@ class PostgreSQLConnector {
       $query_info = $query_builder->buildSearchQuery($query);
       $sql = $query_info['sql'];
       $params = $query_info['params'];
+      $results = $query->getResults();
       
-      // Execute the query
-      $stmt = $this->executePrepared($sql, $params);
-      $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+      // Handle result count first
+      $skip_count = $query->getOption('skip result count');
+      $count = NULL;
       
-      // Create result set using Search API's ResultSet class
-      $result_set = new ResultSet($query);
-      
-      // Process results
-      $items = [];
-      foreach ($rows as $row) {
-        $item_id = $row['search_api_id'];
-        $relevance = $row['search_api_relevance'] ?? 1.0;
-        
-        // Create result item using Search API's Item class
-        $result_item = new Item($index, $item_id);
-        $result_item->setScore($relevance);
-        
-        $items[] = $result_item;
-      }
-      
-      // Set results on result set
-      $result_set->setResultItems($items);
-      $result_set->setResultCount(count($items));
-      
-      // Handle total count if needed
-      if ($query->getOption('skip result count')) {
-        $result_set->setResultCount(-1);
-      } else {
-        // Try to build count query, fall back to result count if method doesn't exist
+      if (!$skip_count) {
         try {
+          // Try to build count query, fall back to result count if method doesn't exist
           if (method_exists($query_builder, 'buildCountQuery')) {
             $count_query_info = $query_builder->buildCountQuery($query);
             $count_stmt = $this->executePrepared($count_query_info['sql'], $count_query_info['params']);
-            $total_count = (int) $count_stmt->fetchColumn();
-            $result_set->setResultCount($total_count);
+            $count = (int) $count_stmt->fetchColumn();
           } else {
-            // Fall back to the result count we already have
-            $result_set->setResultCount(count($items));
+            // Execute main query to get count
+            $stmt = $this->executePrepared($sql, $params);
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            $count = count($rows);
           }
+          $results->setResultCount($count);
         } catch (\Exception $e) {
-          // If count query fails, just use the result count
-          $this->logger->warning('Count query failed, using result count: @message', [
+          $this->logger->warning('Count query failed: @message', [
             '@message' => $e->getMessage(),
           ]);
-          $result_set->setResultCount(count($items));
+          // Continue without count
         }
       }
       
-      return $result_set;
+      // Execute main query if we have results or skip_count is true
+      if ($skip_count || $count) {
+        // Execute the main query
+        $stmt = $this->executePrepared($sql, $params);
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        
+        $indexed_fields = $index->getFields(TRUE);
+        $retrieved_field_names = $query->getOption('search_api_retrieved_field_values', []);
+        
+        // Process each result row (like search_api_db)
+        foreach ($rows as $row) {
+          $item_id = $row['search_api_id'];
+          $relevance = $row['search_api_relevance'] ?? 1.0;
+          $item = $this->getFieldsHelper()->createItem($index, $item_id);
+          $item->setScore($relevance);
+          $this->extractRetrievedFieldValuesWhereAvailable($row, $indexed_fields, $retrieved_field_names, $item);
+          $results->addResultItem($item);
+        }
+        
+        // Set result count for skip_count case (like search_api_db)
+        if ($skip_count && !empty($rows)) {
+          $results->setResultCount(1);
+        }
+      }
       
+      return $results;
+      
+    } catch (\PDOException $e) {
+      if ($query instanceof \Drupal\Core\Cache\RefinableCacheableDependencyInterface) {
+        $query->mergeCacheMaxAge(0);
+      }
+      throw new SearchApiException('A database exception occurred while searching.', $e->getCode(), $e);
     } catch (\Exception $e) {
       $this->logger->error('Search execution failed: @message', [
         '@message' => $e->getMessage(),
       ]);
       throw new SearchApiException('Search execution failed: ' . $e->getMessage(), 0, $e);
+    }
+  }
+
+  /**
+   * Extract retrieved field values where available (like search_api_db).
+   *
+   * @param object $row
+   *   The database row.
+   * @param array $indexed_fields
+   *   The indexed fields.
+   * @param array $retrieved_field_names
+   *   The retrieved field names.
+   * @param \Drupal\search_api\Item\ItemInterface $item
+   *   The item to populate.
+   */
+  protected function extractRetrievedFieldValuesWhereAvailable($row, array $indexed_fields, array $retrieved_field_names, $item) {
+    // Convert row array to object if needed
+    if (is_array($row)) {
+      $row = (object) $row;
+    }
+    
+    foreach ($indexed_fields as $field_id => $field) {
+      // Skip if field not in retrieved fields and retrieved fields are specified
+      if (!empty($retrieved_field_names) && !in_array($field_id, $retrieved_field_names)) {
+        continue;
+      }
+      
+      // Skip if field not in row
+      if (!isset($row->{$field_id})) {
+        continue;
+      }
+      
+      try {
+        $field_value = $this->processFieldValue($row->{$field_id}, $field->getType());
+        $item_field = $item->getField($field_id);
+        if ($item_field) {
+          $item_field->setValues([$field_value]);
+        }
+      } catch (\Exception $e) {
+        $this->logger->warning('Failed to set field @field on item @item: @error', [
+          '@field' => $field_id,
+          '@item' => $item->getId(),
+          '@error' => $e->getMessage(),
+        ]);
+      }
+    }
+  }
+
+  /**
+   * Get the fields helper service.
+   *
+   * @return \Drupal\search_api\Utility\FieldsHelperInterface
+   *   The fields helper.
+   */
+  protected function getFieldsHelper() {
+    return \Drupal::service('search_api.fields_helper');
+  }
+
+  /**
+   * Process field value based on field type.
+   *
+   * @param mixed $value
+   *   The raw field value from database.
+   * @param string $field_type
+   *   The Search API field type.
+   *
+   * @return mixed
+   *   The processed field value.
+   */
+  protected function processFieldValue($value, $field_type) {
+    if ($value === null) {
+      return null;
+    }
+    
+    switch ($field_type) {
+      case 'boolean':
+        return (bool) $value;
+        
+      case 'integer':
+        return (int) $value;
+        
+      case 'decimal':
+        return (float) $value;
+        
+      case 'date':
+        // Convert timestamp to proper format if needed
+        if (is_numeric($value)) {
+          return (int) $value;
+        }
+        return strtotime($value);
+        
+      case 'text':
+      case 'string':
+      case 'postgresql_fulltext':
+      default:
+        return (string) $value;
     }
   }
 
