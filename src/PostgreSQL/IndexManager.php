@@ -121,7 +121,7 @@ class IndexManager {
     foreach ($required_columns as $field_id => $field_info) {
       if (!in_array($field_id, $current_columns)) {
         $safe_field_id = $this->connector->quoteColumnName($field_id);
-        $safe_type = $this->fieldMapper->mapSearchApiTypeToPostgreSQL($field_info['type']);
+        $safe_type = $field_info['type']; // FIXED: Use the PostgreSQL type directly
         $sql = "ALTER TABLE {$table_name} ADD COLUMN {$safe_field_id} {$safe_type}";
         $this->connector->executeQuery($sql);
       }
@@ -364,7 +364,7 @@ class IndexManager {
 
     foreach ($fields as $field_id => $field_info) {
       $safe_field_id = $this->connector->quoteColumnName($field_id);
-      $safe_type = $this->fieldMapper->mapSearchApiTypeToPostgreSQL($field_info['type']);
+      $safe_type = $field_info['type']; // FIXED
       $sql .= "  {$safe_field_id} {$safe_type},\n";
     }
 
