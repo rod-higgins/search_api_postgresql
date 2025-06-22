@@ -17,6 +17,7 @@ use Drupal\search_api_postgresql\Service\EmbeddingService;
 use Drupal\search_api_postgresql\Service\VectorSearchService;
 use Drupal\search_api_postgresql\PostgreSQL\FieldMapper;
 use Drupal\search_api_postgresql\PostgreSQL\IndexManager;
+use Drupal\search_api_postgresql\PostgreSQL\EnhancedIndexManager;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -886,10 +887,10 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   }
 
   /**
-   * Gets or creates an IndexManager instance.
-   * 
-   * Updated to ensure consistent configuration passing.
-   */
+ * Gets or creates an IndexManager instance.
+ * 
+ * Updated to use EnhancedIndexManager when AI embeddings are enabled.
+  */
   protected function getIndexManager() {
     if (!$this->indexManager) {
       // Ensure we have a connector
@@ -908,15 +909,39 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         }
       }
       
-      // Pass the complete configuration to IndexManager
-      $this->indexManager = new IndexManager(
-        $this->connector,
-        $fieldMapper,
-        $this->configuration, // Pass full configuration, not just connection config
-        $embedding_service
-      );
+      // Use EnhancedIndexManager when AI embeddings are enabled
+      if (!empty($this->configuration['ai_embeddings']['enabled']) && class_exists('\Drupal\search_api_postgresql\PostgreSQL\EnhancedIndexManager')) {
+        $this->indexManager = new \Drupal\search_api_postgresql\PostgreSQL\EnhancedIndexManager(
+          $this->connector,
+          $fieldMapper,
+          $this->configuration,
+          $embedding_service,
+          $this->getServerId() // Pass server ID for queue context
+        );
+      } else {
+        // Fall back to basic IndexManager
+        $this->indexManager = new IndexManager(
+          $this->connector,
+          $fieldMapper,
+          $this->configuration,
+          $embedding_service
+        );
+      }
     }
     
     return $this->indexManager;
+  }
+
+  /**
+   * Gets the server ID for this backend instance.
+   */
+  protected function getServerId() {
+    // Try to get server ID from the server entity
+    if ($this->server) {
+      return $this->server->id();
+    }
+    
+    // Fallback: try to find it from the configuration
+    return $this->configuration['server_id'] ?? 'default';
   }
 }
