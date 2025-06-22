@@ -363,6 +363,120 @@ class EmbeddingCacheManager {
   }
 
   /**
+   * Clears all cached embeddings.
+   *
+   * @return bool
+   *   TRUE if cache was cleared successfully.
+   */
+  public function clear() {
+    try {
+      $result = $this->cache->clear();
+      if ($result) {
+        $this->logger->info('Embedding cache cleared successfully');
+      }
+      return $result;
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to clear embedding cache: @message', ['@message' => $e->getMessage()]);
+      return FALSE;
+    }
+  }
+
+  /**
+   * Clears cached embeddings for a specific index.
+   *
+   * Note: Currently clears ALL cache entries. Future versions will implement
+   * index-specific cache tracking for more granular control.
+   *
+   * @param string $index_id
+   *   The index ID to clear cache for.
+   *
+   * @return bool
+   *   TRUE if cache was cleared successfully.
+   */
+  public function clearByIndex($index_id) {
+    try {
+      // TODO: Implement index-specific cache tracking in future versions
+      // For now, clear all cache but log the specific index for tracking
+      $result = $this->cache->clear();
+      if ($result) {
+        $this->logger->info('Embedding cache cleared (all entries) due to index operation: @index', [
+          '@index' => $index_id
+        ]);
+      }
+      return $result;
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to clear cache for index @index: @message', [
+        '@index' => $index_id,
+        '@message' => $e->getMessage()
+      ]);
+      return FALSE;
+    }
+  }
+
+  /**
+   * Sets multiple cache entries.
+   *
+   * @param array $items
+   *   Array of cache items keyed by cache key.
+   * @param int $ttl
+   *   Time to live in seconds.
+   *
+   * @return bool
+   *   TRUE if all items were cached successfully.
+   */
+  public function setMultiple(array $items, $ttl = NULL) {
+    try {
+      return $this->cache->setMultiple($items, $ttl);
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to set multiple cache items: @message', ['@message' => $e->getMessage()]);
+      return FALSE;
+    }
+  }
+
+  /**
+   * Gets multiple cache entries.
+   *
+   * @param array $keys
+   *   Array of cache keys.
+   *
+   * @return array
+   *   Array of cache values keyed by cache key.
+   */
+  public function getMultiple(array $keys) {
+    try {
+      return $this->cache->getMultiple($keys);
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to get multiple cache items: @message', ['@message' => $e->getMessage()]);
+      return [];
+    }
+  }
+
+  /**
+   * Gets cache statistics with additional metrics.
+   *
+   * @return array
+   *   Comprehensive cache statistics.
+   */
+  public function getStats() {
+    return $this->getCacheStatistics(); // Alias for backward compatibility
+  }
+
+  /**
+   * Performs cache maintenance.
+   *
+   * @return bool
+   *   TRUE if maintenance was successful.
+   */
+  public function maintenance() {
+    $results = $this->performMaintenance();
+    return $results['success'] ?? FALSE;
+  }
+
+  /**
    * Normalizes text for consistent caching.
    *
    * @param string $text

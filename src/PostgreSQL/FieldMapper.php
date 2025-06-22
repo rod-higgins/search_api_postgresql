@@ -523,7 +523,7 @@ class FieldMapper {
    * @throws \Drupal\search_api\SearchApiException
    *   If mapping fails.
    */
-  protected function mapSearchApiTypeToPostgreSQL($search_api_type) {
+  public function mapSearchApiTypeToPostgreSQL($search_api_type) {
     if (!isset($this->typeMapping[$search_api_type])) {
       throw new SearchApiException("No PostgreSQL mapping found for Search API type: '{$search_api_type}'");
     }

@@ -377,37 +377,6 @@ class IndexManager {
   }
 
   /**
-   * Maps a Search API type to PostgreSQL type.
-   *
-   * @param string $search_api_type
-   *   The Search API field type.
-   *
-   * @return string
-   *   The corresponding PostgreSQL data type.
-   */
-  public function mapSearchApiTypeToPostgreSQL($search_api_type) {
-    $type_mapping = [
-      'text' => 'TEXT',
-      'string' => 'VARCHAR(255)',
-      'integer' => 'INTEGER',
-      'decimal' => 'DECIMAL',
-      'boolean' => 'BOOLEAN',
-      'date' => 'TIMESTAMP',
-      'uri' => 'TEXT',
-      'tokens' => 'TEXT',
-      'object' => 'JSONB',
-      'vector' => 'VECTOR(1536)', // Default embedding dimension
-    ];
-
-    if (isset($type_mapping[$search_api_type])) {
-      return $type_mapping[$search_api_type];
-    }
-
-    // Default fallback
-    return 'TEXT';
-  }
-
-  /**
    * Creates full-text indexes.
    *
    * @param string $table_name
