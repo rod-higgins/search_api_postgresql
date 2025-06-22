@@ -274,7 +274,8 @@ class PostgreSQLConnector {
         '@message' => $e->getMessage(),
         '@sql' => $sql,
       ]);
-      throw new \Exception('Query execution failed: ' . $e->getMessage(), $e->getCode(), $e);
+      // FIX: Cast string code to integer
+      throw new \Exception('Query execution failed: ' . $e->getMessage(), (int) $e->getCode(), $e);
     }
   }
 
@@ -304,7 +305,8 @@ class PostgreSQLConnector {
         '@message' => $e->getMessage(),
         '@sql' => $sql,
       ]);
-      throw new \Exception('Prepared statement execution failed: ' . $e->getMessage(), $e->getCode(), $e);
+      // FIX: Cast string code to integer
+      throw new \Exception('Prepared statement execution failed: ' . $e->getMessage(), (int) $e->getCode(), $e);
     }
   }
 
@@ -326,7 +328,8 @@ class PostgreSQLConnector {
       $this->logger->error('Failed to begin transaction: @message', [
         '@message' => $e->getMessage(),
       ]);
-      throw new \Exception('Failed to begin transaction: ' . $e->getMessage(), $e->getCode(), $e);
+      // FIX: Cast string code to integer
+      throw new \Exception('Failed to begin transaction: ' . $e->getMessage(), (int) $e->getCode(), $e);
     }
   }
 
@@ -350,7 +353,8 @@ class PostgreSQLConnector {
       $this->logger->error('Failed to commit transaction: @message', [
         '@message' => $e->getMessage(),
       ]);
-      throw new \Exception('Failed to commit transaction: ' . $e->getMessage(), $e->getCode(), $e);
+      // FIX: Cast PDOException code (string) to integer for Exception constructor
+      throw new \Exception('Failed to commit transaction: ' . $e->getMessage(), (int) $e->getCode(), $e);
     }
   }
 
@@ -374,7 +378,8 @@ class PostgreSQLConnector {
       $this->logger->error('Failed to rollback transaction: @message', [
         '@message' => $e->getMessage(),
       ]);
-      throw new \Exception('Failed to rollback transaction: ' . $e->getMessage(), $e->getCode(), $e);
+      // FIX: Cast PDOException code (string) to integer for Exception constructor
+      throw new \Exception('Failed to rollback transaction: ' . $e->getMessage(), (int) $e->getCode(), $e);
     }
   }
 

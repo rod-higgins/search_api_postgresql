@@ -887,10 +887,10 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   }
 
   /**
- * Gets or creates an IndexManager instance.
- * 
- * Updated to use EnhancedIndexManager when AI embeddings are enabled.
-  */
+   * Gets or creates an IndexManager instance.
+   * 
+   * Updated to use EnhancedIndexManager when AI embeddings are enabled.
+    */
   protected function getIndexManager() {
     if (!$this->indexManager) {
       // Ensure we have a connector
