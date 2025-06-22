@@ -569,14 +569,11 @@ class QueryBuilder {
     // Validate field name for parameter generation
     $this->connector->validateIdentifier($field, 'field name');
 
-    // SPECIAL HANDLING for node_grants field - fix Database backend format
     if ($field === 'node_grants' && is_string($value)) {
       // Convert Database backend format (node_access__all) to PostgreSQL format (node_access_all:0)
-      if ($value === 'node_access__all') {
-        $value = 'node_access_all:0';
+      if ($value === 'node_access_all:0') {
+        $value = 'node_access__all';
       }
-      // Handle other possible conversions if needed
-      $value = str_replace('__', '_all:', $value);
     }
 
     // SPECIAL HANDLING for boolean fields - convert integer to boolean
@@ -588,13 +585,6 @@ class QueryBuilder {
       case 'IN':
         if (is_array($value)) {
           foreach ($value as $i => $val) {
-            // Apply same conversions for array values
-            if ($field === 'node_grants' && is_string($val)) {
-              if ($val === 'node_access__all') {
-                $val = 'node_access_all:0';
-              }
-              $val = str_replace('__', '_all:', $val);
-            }
             if (in_array($field, ['status', 'sticky']) && is_numeric($val)) {
               $val = (bool) $val;
             }
@@ -606,13 +596,6 @@ class QueryBuilder {
       case 'NOT IN':
         if (is_array($value)) {
           foreach ($value as $i => $val) {
-            // Apply same conversions for array values
-            if ($field === 'node_grants' && is_string($val)) {
-              if ($val === 'node_access__all') {
-                $val = 'node_access_all:0';
-              }
-              $val = str_replace('__', '_all:', $val);
-            }
             if (in_array($field, ['status', 'sticky']) && is_numeric($val)) {
               $val = (bool) $val;
             }
