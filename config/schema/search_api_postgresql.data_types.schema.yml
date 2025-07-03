@@ -1,0 +1,68 @@
+# Schema for custom Search API data types
+
+search_api.data_type.plugin.postgresql_fulltext:
+  type: mapping
+  label: 'PostgreSQL Full-text data type'
+  mapping:
+    text_search_config:
+      type: string
+      label: 'Text search configuration'
+    enable_stemming:
+      type: boolean
+      label: 'Enable stemming'
+    enable_phrase_search:
+      type: boolean
+      label: 'Enable phrase search'
+    enable_fuzzy_search:
+      type: boolean
+      label: 'Enable fuzzy search'
+    weight_title:
+      type: string
+      label: 'Title weight (A-D)'
+    weight_body:
+      type: string
+      label: 'Body weight (A-D)'
+    weight_keywords:
+      type: string
+      label: 'Keywords weight (A-D)'
+    weight_description:
+      type: string
+      label: 'Description weight (A-D)'
+    min_word_length:
+      type: integer
+      label: 'Minimum word length'
+    max_word_length:
+      type: integer
+      label: 'Maximum word length'
+    enable_highlighting:
+      type: boolean
+      label: 'Enable highlighting'
+    highlight_max_words:
+      type: integer
+      label: 'Highlight maximum words'
+    highlight_min_words:
+      type: integer
+      label: 'Highlight minimum words'
+    highlight_max_fragments:
+      type: integer
+      label: 'Highlight maximum fragments'
+    enable_ranking:
+      type: boolean
+      label: 'Enable ranking'
+    ranking_normalization:
+      type: integer
+      label: 'Ranking normalization'
+
+search_api.data_type.plugin.vector:
+  type: mapping
+  label: 'Vector data type for AI embeddings'
+  mapping:
+    dimension:
+      type: integer
+      label: 'Vector dimensions'
+    distance_metric:
+      type: string
+      label: 'Distance metric (cosine, l2, inner_product)'
+    normalize:
+      type: boolean
+      label: 'Normalize vectors'

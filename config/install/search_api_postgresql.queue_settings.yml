@@ -1,0 +1,10 @@
+# Default queue processing configuration
+enabled: true
+default_enabled: true
+batch_size: 100
+max_processing_time: 300
+priority_levels:
+  high: 100
+  normal: 50
+  low: 10
+servers: {}

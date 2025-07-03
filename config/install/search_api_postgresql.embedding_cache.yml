@@ -1,0 +1,6 @@
+# Default embedding cache settings
+default_ttl: 2592000
+max_entries: 100000
+cleanup_probability: 0.01
+enable_compression: true
+table_name: 'search_api_postgresql_embedding_cache'

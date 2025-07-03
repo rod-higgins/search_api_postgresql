@@ -1,0 +1,18 @@
+# Performance monitoring and optimization settings
+# This file is optional and only needed if you want to override defaults
+
+# Connection pool configuration
+connection_pool:
+  max_connections: 5
+  connection_timeout: 30
+  idle_timeout: 300
+  validation_query: 'SELECT 1'
+  retry_attempts: 3
+
+# Performance monitoring configuration  
+performance_monitor:
+  enabled: true
+  slow_query_threshold: 2.0  # seconds
+  memory_usage_threshold: 128  # MB
+  cache_hit_rate_threshold: 0.8  # 80%
+  sample_rate: 0.1  # 10% of operations
