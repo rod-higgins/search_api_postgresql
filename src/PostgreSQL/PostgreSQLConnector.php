@@ -210,10 +210,6 @@ class PostgreSQLConnector {
           'version' => '',
         ];
       }
-
-      $this->logger->info('Connection test successful. PostgreSQL version: @version', [
-        '@version' => $version,
-      ]);
       
       return [
         'success' => TRUE,
