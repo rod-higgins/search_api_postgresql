@@ -93,7 +93,7 @@ class EmbeddingManagementForm extends FormBase {
       '#value' => $this->t('Manage embeddings across all PostgreSQL servers and search indexes.'),
     ];
 
-    // Get all PostgreSQL servers
+    // Check if any servers have AI enabled
     $servers = $this->getPostgreSQLServers();
     
     if (empty($servers)) {
@@ -108,215 +108,312 @@ class EmbeddingManagementForm extends FormBase {
       return $form;
     }
 
-    // Server selection
-    $form['server_selection'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Server Selection'),
-      '#open' => TRUE,
-    ];
-
-    $server_options = [];
+    // Check if any servers have AI enabled
+    $has_ai_servers = FALSE;
     foreach ($servers as $server) {
-      $server_options[$server->id()] = $server->label();
+      if ($this->isAiEnabledForServer($server)) {
+        $has_ai_servers = TRUE;
+        break;
+      }
     }
 
-    $form['server_selection']['server_id'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Server'),
-      '#options' => $server_options,
-      '#empty_option' => $this->t('- All servers -'),
-      '#default_value' => '',
-      '#ajax' => [
-        'callback' => '::updateIndexOptions',
-        'wrapper' => 'index-options-wrapper',
-        'event' => 'change',
-      ],
-    ];
+    if (!$has_ai_servers) {
+      $form['no_ai'] = [
+        '#type' => 'markup',
+        '#markup' => '<div class="messages messages--info">' . 
+          '<h3>' . $this->t('Embedding Management Not Available') . '</h3>' .
+          '<p>' . $this->t('Embedding management is only available for servers with AI embedding features enabled.') . '</p>' .
+          '<p>' . $this->t('Your current PostgreSQL servers are configured for traditional search only.') . '</p>' .
+          '<p>' . $this->t('To enable embedding management:') . '</p>' .
+          '<ol>' .
+            '<li>' . $this->t('Configure AI embeddings (Azure OpenAI, OpenAI, etc.) on your PostgreSQL server') . '</li>' .
+            '<li>' . $this->t('Enable AI features in your server configuration') . '</li>' .
+            '<li>' . $this->t('Re-index your content to generate embeddings') . '</li>' .
+          '</ol>' .
+          '<p><a href="/admin/config/search/search-api" class="button button--primary">' . $this->t('Manage Search API') . '</a></p>' .
+          '</div>',
+      ];
+      
+      return $form;
+    }
 
-    // Index selection (updated via AJAX)
-    $form['server_selection']['index_wrapper'] = [
-      '#type' => 'container',
-      '#attributes' => ['id' => 'index-options-wrapper'],
-    ];
+    // If we reach here, we have AI-enabled servers, so proceed with the form
+    // But wrap everything in try-catch to handle any remaining issues
+    try {
+      // Server selection
+      $form['server_selection'] = [
+        '#type' => 'details',
+        '#title' => $this->t('Server Selection'),
+        '#open' => TRUE,
+      ];
 
-    $selected_server_id = $form_state->getValue('server_id');
-    $index_options = $this->getIndexOptions($selected_server_id);
-
-    $form['server_selection']['index_wrapper']['index_id'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Index'),
-      '#options' => $index_options,
-      '#empty_option' => $this->t('- All indexes -'),
-      '#default_value' => '',
-    ];
-
-    // Operation selection
-    $form['operations'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Operations'),
-      '#open' => TRUE,
-    ];
-
-    $form['operations']['operation'] = [
-      '#type' => 'radios',
-      '#title' => $this->t('Select operation'),
-      '#options' => [
-        'regenerate_all' => $this->t('Regenerate all embeddings'),
-        'regenerate_missing' => $this->t('Generate embeddings for items without embeddings'),
-        'validate_embeddings' => $this->t('Validate existing embeddings'),
-        'clear_embeddings' => $this->t('Clear all embeddings'),
-        'update_dimensions' => $this->t('Update vector dimensions'),
-      ],
-      '#default_value' => 'regenerate_missing',
-      '#required' => TRUE,
-    ];
-
-    // Advanced options
-    $form['advanced'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Advanced Options'),
-      '#open' => FALSE,
-    ];
-
-    $form['advanced']['batch_size'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Batch Size'),
-      '#description' => $this->t('Number of items to process in each batch.'),
-      '#default_value' => 50,
-      '#min' => 1,
-      '#max' => 1000,
-    ];
-
-    $form['advanced']['use_queue'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Use background queue processing'),
-      '#description' => $this->t('Process embeddings in the background via queue. Recommended for large operations.'),
-      '#default_value' => TRUE,
-    ];
-
-    $form['advanced']['priority'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Queue Priority'),
-      '#options' => [
-        'high' => $this->t('High'),
-        'normal' => $this->t('Normal'),
-        'low' => $this->t('Low'),
-      ],
-      '#default_value' => 'normal',
-      '#states' => [
-        'visible' => [
-          ':input[name="use_queue"]' => ['checked' => TRUE],
-        ],
-      ],
-    ];
-
-    $form['advanced']['force_overwrite'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Force overwrite existing embeddings'),
-      '#description' => $this->t('Regenerate embeddings even if they already exist.'),
-      '#default_value' => FALSE,
-      '#states' => [
-        'visible' => [
-          ':input[name="operation"]' => [
-            ['value' => 'regenerate_all'],
-            ['value' => 'regenerate_missing'],
-          ],
-        ],
-      ],
-    ];
-
-    // Cost estimation
-    $form['cost_estimation'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Cost Estimation'),
-      '#open' => FALSE,
-    ];
-
-    $form['cost_estimation']['estimate'] = [
-      '#type' => 'markup',
-      '#markup' => '<div id="cost-estimation-content">' . 
-        $this->t('Select a server and operation to see cost estimation.') . 
-        '</div>',
-    ];
-
-    // Current status
-    $form['status'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Current Status'),
-      '#open' => TRUE,
-    ];
-
-    $overall_stats = $this->getOverallEmbeddingStats();
-    
-    $form['status']['stats'] = [
-      '#theme' => 'table',
-      '#header' => [$this->t('Metric'), $this->t('Value')],
-      '#rows' => [
-        [$this->t('Total Items'), number_format($overall_stats['total_items'])],
-        [$this->t('Items with Embeddings'), number_format($overall_stats['items_with_embeddings'])],
-        [$this->t('Overall Coverage'), round($overall_stats['coverage'], 1) . '%'],
-        [$this->t('Queue Items Pending'), number_format($overall_stats['queue_pending'])],
-        [$this->t('Estimated Monthly Cost'), '$' . number_format($overall_stats['monthly_cost'], 2)],
-      ],
-    ];
-
-    // Recent activity
-    $form['recent_activity'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Recent Activity'),
-      '#open' => FALSE,
-    ];
-
-    $recent_activity = $this->getRecentActivity(10);
-    if (!empty($recent_activity)) {
-      $activity_rows = [];
-      foreach ($recent_activity as $activity) {
-        $activity_rows[] = [
-          $activity['timestamp'],
-          $activity['operation'],
-          $activity['server'],
-          $activity['items_processed'],
-          $activity['status'],
-        ];
+      $server_options = [];
+      foreach ($servers as $server) {
+        if ($this->isAiEnabledForServer($server)) {
+          $server_options[$server->id()] = $server->label();
+        }
       }
 
-      $form['recent_activity']['table'] = [
-        '#theme' => 'table',
-        '#header' => [
-          $this->t('Time'),
-          $this->t('Operation'),
-          $this->t('Server'),
-          $this->t('Items'),
-          $this->t('Status'),
+      $form['server_selection']['server_id'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Server'),
+        '#options' => $server_options,
+        '#empty_option' => $this->t('- All AI-enabled servers -'),
+        '#default_value' => '',
+        '#ajax' => [
+          'callback' => '::updateIndexOptions',
+          'wrapper' => 'index-options-wrapper',
+          'event' => 'change',
         ],
-        '#rows' => $activity_rows,
       ];
-    } else {
-      $form['recent_activity']['empty'] = [
+
+      // Index selection (updated via AJAX)
+      $form['server_selection']['index_wrapper'] = [
+        '#type' => 'container',
+        '#attributes' => ['id' => 'index-options-wrapper'],
+      ];
+
+      $selected_server_id = $form_state->getValue('server_id');
+      $index_options = $this->getIndexOptions($selected_server_id);
+
+      $form['server_selection']['index_wrapper']['index_id'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Index'),
+        '#options' => $index_options,
+        '#empty_option' => $this->t('- All indexes -'),
+        '#default_value' => '',
+      ];
+
+      // Operation selection
+      $form['operations'] = [
+        '#type' => 'details',
+        '#title' => $this->t('Operations'),
+        '#open' => TRUE,
+      ];
+
+      $form['operations']['operation'] = [
+        '#type' => 'radios',
+        '#title' => $this->t('Select operation'),
+        '#options' => [
+          'regenerate_all' => $this->t('Regenerate all embeddings'),
+          'regenerate_missing' => $this->t('Generate embeddings for items without embeddings'),
+          'validate_embeddings' => $this->t('Validate existing embeddings'),
+          'clear_embeddings' => $this->t('Clear all embeddings'),
+          'update_dimensions' => $this->t('Update vector dimensions'),
+        ],
+        '#default_value' => 'regenerate_missing',
+        '#required' => TRUE,
+      ];
+
+      // Advanced options
+      $form['advanced'] = [
+        '#type' => 'details',
+        '#title' => $this->t('Advanced Options'),
+        '#open' => FALSE,
+      ];
+
+      $form['advanced']['batch_size'] = [
+        '#type' => 'number',
+        '#title' => $this->t('Batch Size'),
+        '#description' => $this->t('Number of items to process in each batch.'),
+        '#default_value' => 50,
+        '#min' => 1,
+        '#max' => 1000,
+      ];
+
+      $form['advanced']['use_queue'] = [
+        '#type' => 'checkbox',
+        '#title' => $this->t('Use background queue processing'),
+        '#description' => $this->t('Process embeddings in the background via queue. Recommended for large operations.'),
+        '#default_value' => TRUE,
+      ];
+
+      $form['advanced']['priority'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Queue Priority'),
+        '#options' => [
+          'high' => $this->t('High'),
+          'normal' => $this->t('Normal'),
+          'low' => $this->t('Low'),
+        ],
+        '#default_value' => 'normal',
+        '#states' => [
+          'visible' => [
+            ':input[name="use_queue"]' => ['checked' => TRUE],
+          ],
+        ],
+      ];
+
+      $form['advanced']['force_overwrite'] = [
+        '#type' => 'checkbox',
+        '#title' => $this->t('Force overwrite existing embeddings'),
+        '#description' => $this->t('Regenerate embeddings even if they already exist.'),
+        '#default_value' => FALSE,
+        '#states' => [
+          'visible' => [
+            ':input[name="operation"]' => [
+              ['value' => 'regenerate_all'],
+              ['value' => 'regenerate_missing'],
+            ],
+          ],
+        ],
+      ];
+
+      // Cost estimation
+      $form['cost_estimation'] = [
+        '#type' => 'details',
+        '#title' => $this->t('Cost Estimation'),
+        '#open' => FALSE,
+      ];
+
+      $form['cost_estimation']['estimate'] = [
         '#type' => 'markup',
-        '#markup' => $this->t('No recent activity found.'),
+        '#markup' => '<div id="cost-estimation-content">' . 
+          $this->t('Select a server and operation to see cost estimation.') . 
+          '</div>',
       ];
+
+      // Current status
+      $form['status'] = [
+        '#type' => 'details',
+        '#title' => $this->t('Current Status'),
+        '#open' => TRUE,
+      ];
+
+      $overall_stats = $this->getOverallEmbeddingStats();
+      
+      $form['status']['stats'] = [
+        '#theme' => 'table',
+        '#header' => [$this->t('Metric'), $this->t('Value')],
+        '#rows' => [
+          [$this->t('Total Items'), number_format($overall_stats['total_items'])],
+          [$this->t('Items with Embeddings'), number_format($overall_stats['items_with_embeddings'])],
+          [$this->t('Overall Coverage'), round($overall_stats['coverage'], 1) . '%'],
+          [$this->t('Queue Items Pending'), number_format($overall_stats['queue_pending'])],
+          [$this->t('Estimated Monthly Cost'), '$' . number_format($overall_stats['monthly_cost'], 2)],
+        ],
+      ];
+
+      // Actions
+      $form['actions'] = [
+        '#type' => 'actions',
+      ];
+
+      $form['actions']['submit'] = [
+        '#type' => 'submit',
+        '#value' => $this->t('Execute Operation'),
+        '#button_type' => 'primary',
+      ];
+
+      $form['actions']['preview'] = [
+        '#type' => 'submit',
+        '#value' => $this->t('Preview Changes'),
+        '#submit' => ['::previewSubmit'],
+      ];
+
+      return $form;
+      
+    } catch (\Exception $e) {
+      // If anything fails, show an error message
+      $form['error'] = [
+        '#type' => 'markup',
+        '#markup' => '<div class="messages messages--error">' . 
+          '<h3>' . $this->t('Embedding Management Error') . '</h3>' .
+          '<p>' . $this->t('There was an error loading the embedding management interface: @error', ['@error' => $e->getMessage()]) . '</p>' .
+          '</div>',
+      ];
+      
+      return $form;
     }
+  }
 
-    // Actions
-    $form['actions'] = [
-      '#type' => 'actions',
+  /**
+   * Gets overall embedding statistics.
+   */
+  protected function getOverallEmbeddingStats() {
+    $stats = [
+      'total_items' => 0,
+      'items_with_embeddings' => 0,
+      'coverage' => 0,
+      'queue_pending' => 0,
+      'monthly_cost' => 0,
     ];
 
-    $form['actions']['submit'] = [
-      '#type' => 'submit',
-      '#value' => $this->t('Execute Operation'),
-      '#button_type' => 'primary',
-    ];
+    try {
+      $servers = $this->getPostgreSQLServers();
+      
+      foreach ($servers as $server) {
+        // Only process AI-enabled servers
+        if (!$this->isAiEnabledForServer($server)) {
+          continue;
+        }
 
-    $form['actions']['preview'] = [
-      '#type' => 'submit',
-      '#value' => $this->t('Preview Changes'),
-      '#submit' => ['::previewChanges'],
-      '#validate' => ['::validateForm'],
-    ];
+        $backend = $server->getBackend();
+        $indexes = $this->entityTypeManager
+          ->getStorage('search_api_index')
+          ->loadByProperties(['server' => $server->id()]);
 
-    return $form;
+        foreach ($indexes as $index) {
+          try {
+            if (method_exists($backend, 'getVectorStats')) {
+              $index_stats = $backend->getVectorStats($index);
+            } elseif (method_exists($backend, 'getAzureVectorStats')) {
+              $index_stats = $backend->getAzureVectorStats($index);
+            } else {
+              continue;
+            }
+
+            $stats['total_items'] += $index_stats['total_items'] ?? 0;
+            $stats['items_with_embeddings'] += $index_stats['items_with_embeddings'] ?? 0;
+          } catch (\Exception $e) {
+            // Skip indexes with errors
+            continue;
+          }
+        }
+      }
+
+      // Calculate coverage
+      if ($stats['total_items'] > 0) {
+        $stats['coverage'] = ($stats['items_with_embeddings'] / $stats['total_items']) * 100;
+      }
+
+      // Get queue stats safely
+      try {
+        $queue_stats = $this->queueManager->getQueueStats();
+        $stats['queue_pending'] = $queue_stats['items_pending'] ?? 0;
+      } catch (\Exception $e) {
+        $stats['queue_pending'] = 0;
+      }
+
+      // Get cost estimate safely
+      try {
+        $cost_data = $this->analyticsService->getCostAnalytics('30d');
+        $stats['monthly_cost'] = $cost_data['projected_monthly'] ?? 0;
+      } catch (\Exception $e) {
+        $stats['monthly_cost'] = 0;
+      }
+
+      return $stats;
+      
+    } catch (\Exception $e) {
+      // If anything fails, return default stats
+      return $stats;
+    }
+  }
+
+  /**
+   * Helper method to check if AI is enabled for a server.
+   */
+  protected function isAiEnabledForServer($server) {
+    try {
+      $backend = $server->getBackend();
+      $config = $backend->getConfiguration();
+      
+      return ($config['ai_embeddings']['enabled'] ?? FALSE) || 
+            ($config['azure_embedding']['enabled'] ?? FALSE);
+    } catch (\Exception $e) {
+      return FALSE;
+    }
   }
 
   /**
@@ -514,61 +611,6 @@ class EmbeddingManagementForm extends FormBase {
     }
 
     return $options;
-  }
-
-  /**
-   * Gets overall embedding statistics.
-   */
-  protected function getOverallEmbeddingStats() {
-    $stats = [
-      'total_items' => 0,
-      'items_with_embeddings' => 0,
-      'coverage' => 0,
-      'queue_pending' => 0,
-      'monthly_cost' => 0,
-    ];
-
-    $servers = $this->getPostgreSQLServers();
-    
-    foreach ($servers as $server) {
-      $backend = $server->getBackend();
-      $indexes = $this->entityTypeManager
-        ->getStorage('search_api_index')
-        ->loadByProperties(['server' => $server->id()]);
-
-      foreach ($indexes as $index) {
-        try {
-          if (method_exists($backend, 'getVectorStats')) {
-            $index_stats = $backend->getVectorStats($index);
-          } elseif (method_exists($backend, 'getAzureVectorStats')) {
-            $index_stats = $backend->getAzureVectorStats($index);
-          } else {
-            continue;
-          }
-
-          $stats['total_items'] += $index_stats['total_items'] ?? 0;
-          $stats['items_with_embeddings'] += $index_stats['items_with_embeddings'] ?? 0;
-        } catch (\Exception $e) {
-          // Skip indexes with errors
-          continue;
-        }
-      }
-    }
-
-    // Calculate coverage
-    if ($stats['total_items'] > 0) {
-      $stats['coverage'] = ($stats['items_with_embeddings'] / $stats['total_items']) * 100;
-    }
-
-    // Get queue stats
-    $queue_stats = $this->queueManager->getQueueStats();
-    $stats['queue_pending'] = $queue_stats['items_pending'] ?? 0;
-
-    // Get cost estimate
-    $cost_data = $this->analyticsService->getCostAnalytics('30d');
-    $stats['monthly_cost'] = $cost_data['projected_monthly'] ?? 0;
-
-    return $stats;
   }
 
   /**

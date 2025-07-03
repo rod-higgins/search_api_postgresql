@@ -181,78 +181,107 @@ class EmbeddingAnalyticsService {
    *   Cost analytics data.
    */
   public function getCostAnalytics($period = '7d', $server_id = NULL) {
-    $start_time = time() - $this->getPeriodSeconds($period);
-    
-    $query = $this->database->select($this->analyticsTable, 'a')
-      ->fields('a')
-      ->condition('timestamp', $start_time, '>=');
-    
-    if ($server_id) {
-      $query->condition('server_id', $server_id);
-    }
-    
-    $results = $query->execute()->fetchAll();
-    
-    $total_cost = 0;
-    $total_tokens = 0;
-    $api_calls = 0;
-    $by_operation = [];
-    
-    foreach ($results as $record) {
-      $total_cost += $record->cost_usd;
-      $total_tokens += $record->token_count;
-      $api_calls++;
-      
-      if (!isset($by_operation[$record->operation])) {
-        $by_operation[$record->operation] = [
-          'cost' => 0,
-          'tokens' => 0,
-          'calls' => 0,
-        ];
-      }
-      
-      $by_operation[$record->operation]['cost'] += $record->cost_usd;
-      $by_operation[$record->operation]['tokens'] += $record->token_count;
-      $by_operation[$record->operation]['calls']++;
-    }
-    
-    // Calculate projections
-    $days_in_period = $this->getPeriodSeconds($period) / 86400;
-    $daily_cost = $days_in_period > 0 ? $total_cost / $days_in_period : 0;
-    $projected_monthly = $daily_cost * 30;
-    
-    // Calculate trend
-    $trend = 0;
-    if ($days_in_period >= 2) {
-      $mid_time = $start_time + ($this->getPeriodSeconds($period) / 2);
-      
-      $first_half = $this->database->select($this->analyticsTable, 'a')
-        ->condition('timestamp', [$start_time, $mid_time], 'BETWEEN')
-        ->addExpression('SUM(cost_usd)', 'total_cost')
-        ->execute()
-        ->fetchField();
-      
-      $second_half = $this->database->select($this->analyticsTable, 'a')
-        ->condition('timestamp', $mid_time, '>')
-        ->addExpression('SUM(cost_usd)', 'total_cost')
-        ->execute()
-        ->fetchField();
-      
-      if ($first_half > 0) {
-        $trend = (($second_half - $first_half) / $first_half) * 100;
-      }
-    }
-    
-    return [
-      'current_cost' => $total_cost,
-      'tokens_used' => $total_tokens,
-      'api_calls' => $api_calls,
-      'projected_monthly' => $projected_monthly,
-      'projected_calls' => $api_calls * (30 / $days_in_period),
-      'projected_tokens' => $total_tokens * (30 / $days_in_period),
-      'trend' => $trend,
-      'by_operation' => $by_operation,
+    // Default response for non-AI backends
+    $default_response = [
+      'current_cost' => 0,
+      'tokens_used' => 0,
+      'api_calls' => 0,
+      'projected_monthly' => 0,
+      'projected_calls' => 0,
+      'projected_tokens' => 0,
+      'trend' => 0,
+      'by_operation' => [],
     ];
+
+    // Check if analytics table exists - if not, return defaults
+    if (!$this->database->schema()->tableExists($this->analyticsTable)) {
+      return $default_response;
+    }
+
+    try {
+      $start_time = time() - $this->getPeriodSeconds($period);
+      
+      // Wrap all database operations in try-catch
+      $query = $this->database->select($this->analyticsTable, 'a')
+        ->fields('a')
+        ->condition('timestamp', $start_time, '>=');
+      
+      if ($server_id) {
+        $query->condition('server_id', $server_id);
+      }
+      
+      $results = $query->execute()->fetchAll();
+      
+      $total_cost = 0;
+      $total_tokens = 0;
+      $api_calls = 0;
+      $by_operation = [];
+      
+      foreach ($results as $record) {
+        $total_cost += $record->cost_usd;
+        $total_tokens += $record->token_count;
+        $api_calls++;
+        
+        if (!isset($by_operation[$record->operation])) {
+          $by_operation[$record->operation] = [
+            'cost' => 0,
+            'tokens' => 0,
+            'calls' => 0,
+          ];
+        }
+        
+        $by_operation[$record->operation]['cost'] += $record->cost_usd;
+        $by_operation[$record->operation]['tokens'] += $record->token_count;
+        $by_operation[$record->operation]['calls']++;
+      }
+      
+      // Calculate projections
+      $days_in_period = $this->getPeriodSeconds($period) / 86400;
+      $daily_cost = $days_in_period > 0 ? $total_cost / $days_in_period : 0;
+      $projected_monthly = $daily_cost * 30;
+      
+      // Calculate trend - WRAP IN ADDITIONAL TRY-CATCH
+      $trend = 0;
+      if ($days_in_period >= 2) {
+        try {
+          $mid_time = $start_time + ($this->getPeriodSeconds($period) / 2);
+          
+          $first_half_query = $this->database->select($this->analyticsTable, 'a')
+            ->condition('timestamp', [$start_time, $mid_time], 'BETWEEN')
+            ->addExpression('SUM(cost_usd)', 'total_cost');
+          $first_half = $first_half_query->execute()->fetchField();
+          
+          $second_half_query = $this->database->select($this->analyticsTable, 'a')
+            ->condition('timestamp', $mid_time, '>')
+            ->addExpression('SUM(cost_usd)', 'total_cost');
+          $second_half = $second_half_query->execute()->fetchField();
+          
+          if ($first_half > 0) {
+            $trend = (($second_half - $first_half) / $first_half) * 100;
+          }
+        } catch (\Exception $e) {
+          // If trend calculation fails, just use 0
+          $trend = 0;
+          $this->logger->warning('Failed to calculate cost trend: @message', ['@message' => $e->getMessage()]);
+        }
+      }
+      
+      return [
+        'current_cost' => $total_cost,
+        'tokens_used' => $total_tokens,
+        'api_calls' => $api_calls,
+        'projected_monthly' => $projected_monthly,
+        'projected_calls' => $days_in_period > 0 ? $api_calls * (30 / $days_in_period) : 0,
+        'projected_tokens' => $days_in_period > 0 ? $total_tokens * (30 / $days_in_period) : 0,
+        'trend' => $trend,
+        'by_operation' => $by_operation,
+      ];
+      
+    } catch (\Exception $e) {
+      // If any database operation fails, log error and return defaults
+      $this->logger->error('Failed to get cost analytics: @message', ['@message' => $e->getMessage()]);
+      return $default_response;
+    }
   }
 
   /**

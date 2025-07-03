@@ -552,20 +552,26 @@ private function validateAiFeaturesConfiguration(array $config) {
    */
   protected function testDatabaseConnection(ServerInterface $server) {
     try {
-
-      $values = $form_state->getValues();
-      $connection_config = $values['backend_config']['connection'] ?? $this->configuration['connection'];
+      $backend = $server->getBackend();
       
-      if (method_exists($this, 'getDatabasePassword')) {
-        $reflection = new \ReflectionClass($this);
+      // Get configuration from the backend
+      $config = $backend->getConfiguration();
+      $connection_config = $config['connection'] ?? [];
+      
+      // Use the backend's password resolution method
+      if (method_exists($backend, 'getDatabasePassword')) {
+        $reflection = new \ReflectionClass($backend);
         $method = $reflection->getMethod('getDatabasePassword');
         $method->setAccessible(TRUE);
-        $connection_config['password'] = $method->invoke($this);
+        $connection_config['password'] = $method->invoke($backend);
       }
+
+      $connector = new PostgreSQLConnector($connection_config, $this->logger);
+      $result = $connector->testConnection();
       
-      // Test the connection
-      $test_connector = new PostgreSQLConnector($connection_config, $this->logger);
-      $result = $test_connector->testConnection();
+      if (!$result['success']) {
+        throw new \Exception($result['error'] ?? 'Connection test failed');
+      }
 
       $password_info = '';
       if (!empty($connection_config['password_key'])) {
@@ -650,16 +656,19 @@ private function validateAiFeaturesConfiguration(array $config) {
   protected function testPgVectorExtension(ServerInterface $server) {
     try {
       $backend = $server->getBackend();
-      $reflection = new \ReflectionClass($backend);
+      $config = $backend->getConfiguration();
+      $connection_config = $config['connection'] ?? [];
       
-      $connect_method = $reflection->getMethod('connect');
-      $connect_method->setAccessible(TRUE);
-      $connect_method->invoke($backend);
+      // Create a direct connection to test pgvector
+      $connector = new PostgreSQLConnector($connection_config, $this->logger);
       
-      $connector_property = $reflection->getProperty('connector');
-      $connector_property->setAccessible(TRUE);
-      $connector = $connector_property->getValue($backend);
+      // Test the connection first
+      $connection_test = $connector->testConnection();
+      if (!$connection_test['success']) {
+        throw new \Exception('Cannot connect to database: ' . ($connection_test['error'] ?? 'Unknown error'));
+      }
       
+      // Check for pgvector extension
       $available = $this->checkPgVectorExtension($connector);
       
       return [

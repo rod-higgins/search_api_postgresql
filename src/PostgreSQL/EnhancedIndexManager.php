@@ -397,15 +397,22 @@ class EnhancedIndexManager extends IndexManager {
     ];
 
     try {
+    
       // Get total items
       $total_sql = "SELECT COUNT(*) as total FROM {$table_name}";
       $total_stmt = $this->connector->executeQuery($total_sql);
       $stats['total_items'] = $total_stmt->fetchColumn();
 
-      // Get items with embeddings
-      $embedded_sql = "SELECT COUNT(*) as embedded FROM {$table_name} WHERE content_embedding IS NOT NULL";
-      $embedded_stmt = $this->connector->executeQuery($embedded_sql);
-      $stats['items_with_embeddings'] = $embedded_stmt->fetchColumn();
+      $columns = $this->connector->getTableColumns($table_name);
+      if (in_array('content_embedding', $columns)) {
+        // Only query embedding column if it exists
+        $embedded_sql = "SELECT COUNT(*) as embedded FROM {$table_name} WHERE content_embedding IS NOT NULL";
+        $embedded_stmt = $this->connector->executeQuery($embedded_sql);
+        $stats['items_with_embeddings'] = $embedded_stmt->fetchColumn();
+      } else {
+        // For non-AI backends, no items have embeddings
+        $stats['items_with_embeddings'] = 0;
+      }
 
       // Calculate coverage
       $stats['embedding_coverage'] = $stats['total_items'] > 0 

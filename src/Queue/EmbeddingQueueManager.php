@@ -286,7 +286,9 @@ class EmbeddingQueueManager {
       // Get additional stats from database if using DatabaseQueue
       if (method_exists($this->queue, 'schemaDefinition')) {
         $connection = \Drupal::database();
-        $table_name = 'queue_' . $this->queue->getName();
+        
+        // FIX: Use the queue name directly instead of calling getName()
+        $table_name = 'queue_search_api_postgresql_embedding';
         
         if ($connection->schema()->tableExists($table_name)) {
           // Get priority distribution
@@ -319,7 +321,7 @@ class EmbeddingQueueManager {
       return ['error' => $e->getMessage()];
     }
   }
-
+  
   /**
    * Processes queue items manually.
    *

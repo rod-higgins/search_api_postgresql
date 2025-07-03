@@ -215,123 +215,208 @@ class EmbeddingAdminController extends ControllerBase {
       '#value' => $this->t('Embedding Analytics'),
     ];
 
-    // Date range filter
-    $build['filters'] = [
-      '#type' => 'container',
-      '#attributes' => ['class' => ['analytics-filters']],
-    ];
+    // Check if any servers have AI enabled
+    $servers = $this->entityTypeManager
+      ->getStorage('search_api_server')
+      ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure']]);
 
-    $build['filters']['date_range'] = [
-      '#type' => 'select',
-      '#title' => $this->t('Time Period'),
-      '#options' => [
-        '24h' => $this->t('Last 24 hours'),
-        '7d' => $this->t('Last 7 days'),
-        '30d' => $this->t('Last 30 days'),
-        '90d' => $this->t('Last 90 days'),
-      ],
-      '#default_value' => '7d',
-      '#attributes' => [
-        'id' => 'analytics-date-range',
-        'onchange' => 'updateAnalytics(this.value)',
-      ],
-    ];
+    $has_ai_servers = FALSE;
+    foreach ($servers as $server) {
+      if ($this->isAiEnabledForServer($server)) {
+        $has_ai_servers = TRUE;
+        break;
+      }
+    }
 
-    // Cost tracking
-    $cost_data = $this->analyticsService->getCostAnalytics('7d');
-    
-    $build['cost_overview'] = [
-      '#type' => 'container',
-      '#attributes' => ['class' => ['cost-overview']],
-    ];
+    if (!$has_ai_servers) {
+      $build['no_ai'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'div',
+        '#value' => '<div class="messages messages--info">' . 
+          '<h3>' . $this->t('Analytics Not Available') . '</h3>' .
+          '<p>' . $this->t('Analytics are only available for servers with AI embedding features enabled.') . '</p>' .
+          '<p>' . $this->t('To enable analytics:') . '</p>' .
+          '<ol>' .
+            '<li>' . $this->t('Configure AI embeddings (Azure OpenAI, OpenAI, etc.) on your PostgreSQL server') . '</li>' .
+            '<li>' . $this->t('Enable AI features in your server configuration') . '</li>' .
+            '<li>' . $this->t('Re-index your content to generate embeddings') . '</li>' .
+          '</ol>' .
+          '<p><a href="/admin/config/search/search-api/server/search/edit" class="button button--primary">' . $this->t('Configure Server') . '</a></p>' .
+          '</div>',
+      ];
+      
+      return $build;
+    }
 
-    $build['cost_overview']['title'] = [
-      '#type' => 'html_tag',
-      '#tag' => 'h2',
-      '#value' => $this->t('Cost Analysis'),
-    ];
+    // If we reach here, we have AI-enabled servers, so proceed with analytics
+    // But wrap everything in try-catch to handle any remaining issues
+    try {
+      // Date range filter
+      $build['filters'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['analytics-filters']],
+      ];
 
-    $build['cost_overview']['current_period'] = [
-      '#theme' => 'search_api_postgresql_cost_card',
-      '#title' => $this->t('Current Period'),
-      '#cost' => $cost_data['current_cost'],
-      '#api_calls' => $cost_data['api_calls'],
-      '#tokens' => $cost_data['tokens_used'],
-      '#trend' => $cost_data['trend'],
-    ];
+      $build['filters']['date_range'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Time Period'),
+        '#options' => [
+          '24h' => $this->t('Last 24 hours'),
+          '7d' => $this->t('Last 7 days'),
+          '30d' => $this->t('Last 30 days'),
+          '90d' => $this->t('Last 90 days'),
+        ],
+        '#default_value' => '7d',
+        '#attributes' => [
+          'id' => 'analytics-date-range',
+          'onchange' => 'updateAnalytics(this.value)',
+        ],
+      ];
 
-    $build['cost_overview']['projected'] = [
-      '#theme' => 'search_api_postgresql_cost_card',
-      '#title' => $this->t('Monthly Projection'),
-      '#cost' => $cost_data['projected_monthly'],
-      '#api_calls' => $cost_data['projected_calls'],
-      '#tokens' => $cost_data['projected_tokens'],
-      '#is_projection' => TRUE,
-    ];
+      // Try to get cost data, but handle failures gracefully
+      try {
+        $cost_data = $this->analyticsService->getCostAnalytics('7d');
+      } catch (\Exception $e) {
+        $cost_data = [
+          'current_cost' => 0,
+          'tokens_used' => 0,
+          'api_calls' => 0,
+          'projected_monthly' => 0,
+          'projected_calls' => 0,
+          'projected_tokens' => 0,
+          'trend' => 0,
+          'by_operation' => [],
+        ];
+      }
+      
+      $build['cost_overview'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['cost-overview']],
+      ];
 
-    // Performance metrics
-    $perf_data = $this->analyticsService->getPerformanceMetrics('7d');
-    
-    $build['performance'] = [
-      '#type' => 'container',
-      '#attributes' => ['class' => ['performance-metrics']],
-    ];
+      $build['cost_overview']['title'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'h2',
+        '#value' => $this->t('Cost Analysis'),
+      ];
 
-    $build['performance']['title'] = [
-      '#type' => 'html_tag',
-      '#tag' => 'h2',
-      '#value' => $this->t('Performance Metrics'),
-    ];
+      $build['cost_overview']['current_period'] = [
+        '#theme' => 'search_api_postgresql_cost_card',
+        '#title' => $this->t('Current Period'),
+        '#cost' => $cost_data['current_cost'],
+        '#api_calls' => $cost_data['api_calls'],
+        '#tokens' => $cost_data['tokens_used'],
+        '#trend' => $cost_data['trend'],
+      ];
 
-    $build['performance']['search_latency'] = [
-      '#theme' => 'search_api_postgresql_metric_chart',
-      '#title' => $this->t('Search Latency'),
-      '#data' => $perf_data['search_latency'],
-      '#type' => 'line',
-      '#unit' => 'ms',
-    ];
+      $build['cost_overview']['projected'] = [
+        '#theme' => 'search_api_postgresql_cost_card',
+        '#title' => $this->t('Monthly Projection'),
+        '#cost' => $cost_data['projected_monthly'],
+        '#api_calls' => $cost_data['projected_calls'],
+        '#tokens' => $cost_data['projected_tokens'],
+        '#is_projection' => TRUE,
+      ];
 
-    $build['performance']['cache_hit_rate'] = [
-      '#theme' => 'search_api_postgresql_metric_chart',
-      '#title' => $this->t('Cache Hit Rate'),
-      '#data' => $perf_data['cache_hit_rate'],
-      '#type' => 'area',
-      '#unit' => '%',
-    ];
+      // Try to get performance data, but handle failures gracefully
+      try {
+        $perf_data = $this->analyticsService->getPerformanceMetrics('7d');
+      } catch (\Exception $e) {
+        $perf_data = [
+          'search_latency' => [],
+          'cache_hit_rate' => [],
+          'api_response_time' => [],
+          'throughput' => [],
+        ];
+      }
+      
+      $build['performance'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['performance-metrics']],
+      ];
 
-    // Usage patterns
-    $usage_data = $this->analyticsService->getUsagePatterns('7d');
-    
-    $build['usage'] = [
-      '#type' => 'container',
-      '#attributes' => ['class' => ['usage-patterns']],
-    ];
+      $build['performance']['title'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'h2',
+        '#value' => $this->t('Performance Metrics'),
+      ];
 
-    $build['usage']['title'] = [
-      '#type' => 'html_tag',
-      '#tag' => 'h2',
-      '#value' => $this->t('Usage Patterns'),
-    ];
+      $build['performance']['search_latency'] = [
+        '#theme' => 'search_api_postgresql_metric_chart',
+        '#title' => $this->t('Search Latency'),
+        '#data' => $perf_data['search_latency'],
+        '#type' => 'line',
+        '#unit' => 'ms',
+      ];
 
-    $build['usage']['query_volume'] = [
-      '#theme' => 'search_api_postgresql_metric_chart',
-      '#title' => $this->t('Search Query Volume'),
-      '#data' => $usage_data['query_volume'],
-      '#type' => 'bar',
-      '#unit' => 'queries',
-    ];
+      $build['performance']['cache_hit_rate'] = [
+        '#theme' => 'search_api_postgresql_metric_chart',
+        '#title' => $this->t('Cache Hit Rate'),
+        '#data' => $perf_data['cache_hit_rate'],
+        '#type' => 'area',
+        '#unit' => '%',
+      ];
 
-    $build['usage']['embedding_generation'] = [
-      '#theme' => 'search_api_postgresql_metric_chart',
-      '#title' => $this->t('Embedding Generation'),
-      '#data' => $usage_data['embedding_generation'],
-      '#type' => 'line',
-      '#unit' => 'embeddings',
-    ];
+      // Try to get usage data, but handle failures gracefully
+      try {
+        $usage_data = $this->analyticsService->getUsagePatterns('7d');
+      } catch (\Exception $e) {
+        $usage_data = [
+          'query_volume' => [],
+          'embedding_generation' => [],
+        ];
+      }
+      
+      $build['usage'] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['usage-patterns']],
+      ];
 
-    $build['#attached']['library'][] = 'search_api_postgresql/analytics';
-    
-    return $build;
+      $build['usage']['title'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'h2',
+        '#value' => $this->t('Usage Patterns'),
+      ];
+
+      $build['usage']['query_volume'] = [
+        '#theme' => 'search_api_postgresql_metric_chart',
+        '#title' => $this->t('Search Query Volume'),
+        '#data' => $usage_data['query_volume'],
+        '#type' => 'bar',
+        '#unit' => 'queries',
+      ];
+
+      $build['usage']['embedding_generation'] = [
+        '#theme' => 'search_api_postgresql_metric_chart',
+        '#title' => $this->t('Embedding Generation'),
+        '#data' => $usage_data['embedding_generation'],
+        '#type' => 'line',
+        '#unit' => 'embeddings',
+      ];
+
+      $build['#attached']['library'][] = 'search_api_postgresql/analytics';
+      
+      return $build;
+      
+    } catch (\Exception $e) {
+      // If anything fails, show an error message instead of crashing
+      $build['error'] = [
+        '#type' => 'html_tag',
+        '#tag' => 'div',
+        '#value' => '<div class="messages messages--error">' . 
+          '<h3>' . $this->t('Analytics Error') . '</h3>' .
+          '<p>' . $this->t('There was an error loading analytics data. This may be because:') . '</p>' .
+          '<ul>' .
+            '<li>' . $this->t('Analytics tables are not properly configured') . '</li>' .
+            '<li>' . $this->t('Database connection issues') . '</li>' .
+            '<li>' . $this->t('AI features are not fully set up') . '</li>' .
+          '</ul>' .
+          '<p>' . $this->t('Error: @error', ['@error' => $e->getMessage()]) . '</p>' .
+          '</div>',
+      ];
+      
+      return $build;
+    }
   }
 
   /**
@@ -921,9 +1006,6 @@ protected function getOverviewStatistics() {
   ];
 }
 
-/**
- * Builds the index status table.
- */
 protected function buildIndexStatusTable() {
   $servers = $this->entityTypeManager
     ->getStorage('search_api_server')
@@ -955,32 +1037,38 @@ protected function buildIndexStatusTable() {
     
     $status = $index->status() ? $this->t('Enabled') : $this->t('Disabled');
     
-    if ($ai_enabled) {
-      // ✅ Only get AI stats for AI-enabled indexes
-      try {
+    // GET BASIC STATS FOR ALL INDEXES (AI and non-AI)
+    try {
+      // Get basic index statistics from Search API
+      $tracker = $index->getTrackerInstance();
+      $basic_total = $tracker->getTotalItemsCount();
+      $basic_indexed = $tracker->getIndexedItemsCount();
+      
+      if ($ai_enabled) {
+        // Get AI-specific stats for AI-enabled indexes
         $stats = $this->getIndexEmbeddingStats($index);
-        $total_items = number_format($stats['total_items']);
+        $total_items = number_format($stats['total_items'] ?: $basic_total);
         $items_with_embeddings = number_format($stats['items_with_embeddings']);
         $coverage = round($stats['embedding_coverage'], 1) . '%';
         $ai_status = $this->t('Enabled');
-      } catch (\Exception $e) {
-        // Handle errors gracefully
-        $total_items = $this->t('Error');
-        $items_with_embeddings = $this->t('Error');
-        $coverage = $this->t('Error');
-        $ai_status = $this->t('Error');
-        
-        \Drupal::logger('search_api_postgresql')->warning(
-          'Failed to get embedding stats for AI-enabled index @index: @error', 
-          ['@index' => $index->id(), '@error' => $e->getMessage()]
-        );
+      } else {
+        // Show basic stats for non-AI indexes
+        $total_items = number_format($basic_total);
+        $items_with_embeddings = $this->t('N/A');
+        $coverage = $this->t('N/A');
+        $ai_status = $this->t('Disabled');
       }
-    } else {
-      // ✅ Show appropriate values for non-AI indexes
-      $total_items = $this->t('N/A');
-      $items_with_embeddings = $this->t('N/A');
-      $coverage = $this->t('N/A');
-      $ai_status = $this->t('Disabled');
+    } catch (\Exception $e) {
+      // Handle errors gracefully
+      $total_items = $this->t('Error');
+      $items_with_embeddings = $this->t('Error');
+      $coverage = $this->t('Error');
+      $ai_status = $this->t('Error');
+      
+      \Drupal::logger('search_api_postgresql')->warning(
+        'Failed to get stats for index @index: @error', 
+        ['@index' => $index->id(), '@error' => $e->getMessage()]
+      );
     }
     
     $rows[] = [
@@ -1047,7 +1135,7 @@ protected function buildIndexStatusTable() {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
       
-      // ✅ CHECK IF AI IS ENABLED FIRST!
+      // Check AI is enabled
       $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) || 
                     ($config['azure_embedding']['enabled'] ?? FALSE);
       
@@ -1149,8 +1237,9 @@ protected function buildIndexStatusTable() {
     ];
 
     foreach ($health_checks as $check_name => $check_result) {
-      $status_class = $check_result['status'] ? 'success' : 'error';
-      $status_icon = $check_result['status'] ? '✓' : '✗';
+      // FIX: Use 'success' key instead of 'status'
+      $status_class = $check_result['success'] ? 'success' : 'error';
+      $status_icon = $check_result['success'] ? '✓' : '✗';
       
       $build[$check_name] = [
         '#type' => 'html_tag',
