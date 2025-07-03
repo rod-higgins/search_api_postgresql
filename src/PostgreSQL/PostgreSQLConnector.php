@@ -94,12 +94,6 @@ class PostgreSQLConnector {
 
       $this->connection = new \PDO($dsn, $this->config['username'], $this->config['password'], $options);
       $this->connection->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-      
-      $this->logger->info('Successfully connected to PostgreSQL database @host:@port/@database', [
-        '@host' => $this->config['host'],
-        '@port' => $this->config['port'],
-        '@database' => $this->config['database'],
-      ]);
 
       return $this->connection;
     }
