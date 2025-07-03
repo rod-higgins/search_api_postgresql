@@ -294,6 +294,42 @@ class PostgreSQLFulltext extends DataTypePluginBase {
   /**
    * {@inheritdoc}
    */
+  public function setConfiguration(array $configuration) {
+    // Merge with defaults to ensure all required keys exist
+    $this->configuration = $configuration + $this->defaultConfiguration();
+  }
+
+  /**
+   * Ensures configuration is properly initialized.
+   */
+  protected function ensureConfiguration() {
+    if (empty($this->configuration)) {
+      $this->configuration = $this->defaultConfiguration();
+    } else {
+      // Merge with defaults to fill any missing keys
+      $this->configuration = $this->configuration + $this->defaultConfiguration();
+    }
+  }
+
+  /**
+   * Gets a configuration value with fallback to default.
+   *
+   * @param string $key
+   *   The configuration key.
+   * @param mixed $default
+   *   Optional default value.
+   *
+   * @return mixed
+   *   The configuration value.
+   */
+  protected function getConfigValue($key, $default = NULL) {
+    $this->ensureConfiguration();
+    return $this->configuration[$key] ?? $default;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getValue($value) {
     // Handle array input by joining values
     if (is_array($value)) {
@@ -350,8 +386,12 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     // Trim
     $text = trim($text);
     
+    // Get configuration values safely
+    $min_word_length = $this->getConfigValue('min_word_length', 3);
+    $max_word_length = $this->getConfigValue('max_word_length', 40);
+    
     // Apply word length filters
-    if ($this->configuration['min_word_length'] > 1 || $this->configuration['max_word_length'] < 100) {
+    if ($min_word_length > 1 || $max_word_length < 100) {
       $text = $this->filterWordsByLength($text);
     }
     
@@ -371,8 +411,9 @@ class PostgreSQLFulltext extends DataTypePluginBase {
    *   The filtered text.
    */
   protected function filterWordsByLength($text) {
-    $min_length = $this->configuration['min_word_length'];
-    $max_length = $this->configuration['max_word_length'];
+    // Get configuration with fallback defaults
+    $min_length = $this->configuration['min_word_length'] ?? 3;
+    $max_length = $this->configuration['max_word_length'] ?? 40;
     
     $words = preg_split('/\s+/', $text);
     $filtered_words = [];

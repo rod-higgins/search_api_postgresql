@@ -536,6 +536,61 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   /**
    * {@inheritdoc}
    */
+  public function supportsDataType($type) {
+    $supported_types = [
+      'text',
+      'string',
+      'integer',
+      'decimal',
+      'date',
+      'boolean',
+    ];
+    
+    // Add PostgreSQL-specific data types
+    if ($this->isPostgreSQLSupported()) {
+      $supported_types[] = 'postgresql_fulltext';
+    }
+    
+    // Add vector type if pgvector is available
+    if ($this->isVectorSupported()) {
+      $supported_types[] = 'vector';
+    }
+    
+    return in_array($type, $supported_types);
+  }
+
+  /**
+   * Check if PostgreSQL full-text search is supported.
+   */
+  protected function isPostgreSQLSupported() {
+    try {
+      $this->ensureConnector();
+      // Use the existing validation logic from PostgreSQLFulltext::validatePostgreSQLSupport()
+      $pdo = $this->connector->connect();
+      $stmt = $pdo->query("SELECT to_tsvector('english', 'test')");
+      return TRUE;
+    } catch (\Exception $e) {
+      return FALSE;
+    }
+  }
+
+  /**
+   * Check if vector search is supported.
+   */
+  protected function isVectorSupported() {
+    try {
+      $this->ensureConnector();
+      $pdo = $this->connector->connect();
+      $stmt = $pdo->query("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')");
+      return (bool) $stmt->fetchColumn();
+    } catch (\Exception $e) {
+      return FALSE;
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getSupportedFeatures() {
     return [
       'search_api_autocomplete',          // Standard Search API feature
