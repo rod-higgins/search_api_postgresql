@@ -965,7 +965,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       }
       
       // Use EnhancedIndexManager when AI embeddings are enabled
-      if (!empty($this->configuration['ai_embeddings']['enabled']) && class_exists('\Drupal\search_api_postgresql\PostgreSQL\EnhancedIndexManager')) {
+      if (($this->configuration['ai_embeddings']['enabled'] ?? 0) == 1 && class_exists('\Drupal\search_api_postgresql\PostgreSQL\EnhancedIndexManager')) {
         $this->indexManager = new \Drupal\search_api_postgresql\PostgreSQL\EnhancedIndexManager(
           $this->connector,
           $fieldMapper,

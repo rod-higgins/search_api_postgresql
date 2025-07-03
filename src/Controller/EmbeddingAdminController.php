@@ -848,50 +848,241 @@ class EmbeddingAdminController extends ControllerBase {
   /**
    * Gets overview statistics for the dashboard.
    */
-  protected function getOverviewStatistics() {
-    $servers = $this->entityTypeManager
-      ->getStorage('search_api_server')
-      ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure']]);
+  /**
+ * Gets overview statistics for the dashboard.
+ * FIXED: Only calls AI methods when AI is enabled.
+ */
+protected function getOverviewStatistics() {
+  $servers = $this->entityTypeManager
+    ->getStorage('search_api_server')
+    ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure']]);
 
-    $indexes = [];
-    $total_embeddings = 0;
-    $total_items = 0;
-    $enabled_servers = 0;
-    $ai_indexes = 0;
+  $indexes = [];
+  $total_embeddings = 0;
+  $total_items = 0;
+  $enabled_servers = 0;
+  $ai_indexes = 0;
 
-    foreach ($servers as $server) {
-      if ($server->status()) {
-        $enabled_servers++;
-      }
-
-      $server_indexes = $this->getServerIndexes($server);
-      $indexes = array_merge($indexes, $server_indexes);
-
-      foreach ($server_indexes as $index) {
-        $backend = $server->getBackend();
-        $config = $backend->getConfiguration();
-        
-        if (($config['ai_embeddings']['enabled'] ?? FALSE) || ($config['azure_embedding']['enabled'] ?? FALSE)) {
-          $ai_indexes++;
-        }
-
-        $stats = $this->getIndexEmbeddingStats($index);
-        $total_embeddings += $stats['items_with_embeddings'];
-        $total_items += $stats['total_items'];
-      }
+  foreach ($servers as $server) {
+    if ($server->status()) {
+      $enabled_servers++;
     }
 
-    $queue_stats = $this->queueManager->getQueueStats();
+    $server_indexes = $this->getServerIndexes($server);
+    $indexes = array_merge($indexes, $server_indexes);
 
+    foreach ($server_indexes as $index) {
+      $backend = $server->getBackend();
+      $config = $backend->getConfiguration();
+      
+      // Check if AI is enabled for this index
+      $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) || 
+                    ($config['azure_embedding']['enabled'] ?? FALSE);
+      
+      if ($ai_enabled) {
+        $ai_indexes++;
+        
+        // ✅ ONLY call AI methods when AI is enabled
+        try {
+          $stats = $this->getIndexEmbeddingStats($index);
+          $total_embeddings += $stats['items_with_embeddings'];
+          $total_items += $stats['total_items'];
+        } catch (\Exception $e) {
+          // Log error but don't break the dashboard
+          \Drupal::logger('search_api_postgresql')->warning(
+            'Failed to get embedding stats for index @index: @error', 
+            ['@index' => $index->id(), '@error' => $e->getMessage()]
+          );
+        }
+      }
+    }
+  }
+
+  // Get queue stats safely
+  $queue_items = 0;
+  try {
+    if ($this->queueManager) {
+      $queue_stats = $this->queueManager->getQueueStats();
+      $queue_items = $queue_stats['items_pending'] ?? 0;
+    }
+  } catch (\Exception $e) {
+    // Queue might not be available
+    $queue_items = 0;
+  }
+
+  return [
+    'total_servers' => count($servers),
+    'enabled_servers' => $enabled_servers,
+    'total_indexes' => count($indexes),
+    'ai_indexes' => $ai_indexes,
+    'total_embeddings' => $total_embeddings,
+    'embedding_coverage' => $total_items > 0 ? ($total_embeddings / $total_items) * 100 : 0,
+    'queue_items' => $queue_items,
+  ];
+}
+
+/**
+ * Builds the index status table.
+ */
+protected function buildIndexStatusTable() {
+  $servers = $this->entityTypeManager
+    ->getStorage('search_api_server')
+    ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure']]);
+
+  $indexes = [];
+  foreach ($servers as $server) {
+    $server_indexes = $this->getServerIndexes($server);
+    $indexes = array_merge($indexes, $server_indexes);
+  }
+
+  if (empty($indexes)) {
     return [
-      'total_servers' => count($servers),
-      'enabled_servers' => $enabled_servers,
-      'total_indexes' => count($indexes),
-      'ai_indexes' => $ai_indexes,
-      'total_embeddings' => $total_embeddings,
-      'embedding_coverage' => $total_items > 0 ? ($total_embeddings / $total_items) * 100 : 0,
-      'queue_items' => $queue_stats['items_pending'] ?? 0,
+      '#type' => 'html_tag',
+      '#tag' => 'p',
+      '#value' => $this->t('No indexes found on PostgreSQL servers.'),
     ];
+  }
+
+  $rows = [];
+  foreach ($indexes as $index) {
+    $server = $index->getServerInstance();
+    $backend = $server->getBackend();
+    $config = $backend->getConfiguration();
+    
+    // Check if AI is enabled for this index
+    $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) || 
+                  ($config['azure_embedding']['enabled'] ?? FALSE);
+    
+    $status = $index->status() ? $this->t('Enabled') : $this->t('Disabled');
+    
+    if ($ai_enabled) {
+      // ✅ Only get AI stats for AI-enabled indexes
+      try {
+        $stats = $this->getIndexEmbeddingStats($index);
+        $total_items = number_format($stats['total_items']);
+        $items_with_embeddings = number_format($stats['items_with_embeddings']);
+        $coverage = round($stats['embedding_coverage'], 1) . '%';
+        $ai_status = $this->t('Enabled');
+      } catch (\Exception $e) {
+        // Handle errors gracefully
+        $total_items = $this->t('Error');
+        $items_with_embeddings = $this->t('Error');
+        $coverage = $this->t('Error');
+        $ai_status = $this->t('Error');
+        
+        \Drupal::logger('search_api_postgresql')->warning(
+          'Failed to get embedding stats for AI-enabled index @index: @error', 
+          ['@index' => $index->id(), '@error' => $e->getMessage()]
+        );
+      }
+    } else {
+      // ✅ Show appropriate values for non-AI indexes
+      $total_items = $this->t('N/A');
+      $items_with_embeddings = $this->t('N/A');
+      $coverage = $this->t('N/A');
+      $ai_status = $this->t('Disabled');
+    }
+    
+    $rows[] = [
+      Link::createFromRoute($index->label(), 'search_api_postgresql.admin.index_embeddings', ['index_id' => $index->id()]),
+      Link::createFromRoute($server->label(), 'search_api_postgresql.admin.server_status', ['server_id' => $server->id()]),
+      $status,
+      $ai_status,
+      $total_items,
+      $items_with_embeddings,
+      $coverage,
+    ];
+  }
+
+  return [
+    '#theme' => 'table',
+    '#header' => [
+      $this->t('Index'),
+      $this->t('Server'),
+      $this->t('Status'),
+      $this->t('AI Features'),
+      $this->t('Total Items'),
+      $this->t('With Embeddings'),
+      $this->t('Coverage'),
+    ],
+    '#rows' => $rows,
+    '#attributes' => ['class' => ['index-status-table']],
+  ];
+}
+
+  /**
+   * Helper method to safely check if AI is enabled for a server.
+   */
+  protected function isAiEnabledForServer($server) {
+    try {
+      $backend = $server->getBackend();
+      $config = $backend->getConfiguration();
+      
+      return ($config['ai_embeddings']['enabled'] ?? FALSE) || 
+            ($config['azure_embedding']['enabled'] ?? FALSE);
+    } catch (\Exception $e) {
+      return FALSE;
+    }
+  }
+
+  /**
+   * Helper method to safely check if AI is enabled for an index.
+   */
+  protected function isAiEnabledForIndex($index) {
+    try {
+      $server = $index->getServerInstance();
+      return $this->isAiEnabledForServer($server);
+    } catch (\Exception $e) {
+      return FALSE;
+    }
+  }
+
+  /**
+   * Gets embedding statistics for an index.
+   * FIXED: Only calls AI methods when AI is enabled.
+   */
+  protected function getIndexEmbeddingStats($index) {
+    try {
+      $server = $index->getServerInstance();
+      $backend = $server->getBackend();
+      $config = $backend->getConfiguration();
+      
+      // ✅ CHECK IF AI IS ENABLED FIRST!
+      $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) || 
+                    ($config['azure_embedding']['enabled'] ?? FALSE);
+      
+      if (!$ai_enabled) {
+        // Return default stats for non-AI indexes
+        return [
+          'total_items' => 0,
+          'items_with_embeddings' => 0,
+          'embedding_coverage' => 0,
+          'pending_embeddings' => 0,
+        ];
+      }
+      
+      // Only call AI methods if AI is enabled
+      if (method_exists($backend, 'getVectorStats')) {
+        return $backend->getVectorStats($index);
+      } elseif (method_exists($backend, 'getAzureVectorStats')) {
+        return $backend->getAzureVectorStats($index);
+      }
+      
+      return [
+        'total_items' => 0,
+        'items_with_embeddings' => 0,
+        'embedding_coverage' => 0,
+        'pending_embeddings' => 0,
+      ];
+    } catch (\Exception $e) {
+      return [
+        'error' => $e->getMessage(),
+        'total_items' => 0,
+        'items_with_embeddings' => 0,
+        'embedding_coverage' => 0,
+        'pending_embeddings' => 0,
+      ];
+    }
   }
 
   /**
@@ -943,61 +1134,6 @@ class EmbeddingAdminController extends ControllerBase {
       ],
       '#rows' => $rows,
       '#attributes' => ['class' => ['server-status-table']],
-    ];
-  }
-
-  /**
-   * Builds the index status table.
-   */
-  protected function buildIndexStatusTable() {
-    $servers = $this->entityTypeManager
-      ->getStorage('search_api_server')
-      ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure']]);
-
-    $indexes = [];
-    foreach ($servers as $server) {
-      $server_indexes = $this->getServerIndexes($server);
-      $indexes = array_merge($indexes, $server_indexes);
-    }
-
-    if (empty($indexes)) {
-      return [
-        '#type' => 'html_tag',
-        '#tag' => 'p',
-        '#value' => $this->t('No indexes found on PostgreSQL servers.'),
-      ];
-    }
-
-    $rows = [];
-    foreach ($indexes as $index) {
-      $stats = $this->getIndexEmbeddingStats($index);
-      $server = $index->getServerInstance();
-      
-      $status = $index->status() ? $this->t('Enabled') : $this->t('Disabled');
-      $coverage = round($stats['embedding_coverage'], 1) . '%';
-      
-      $rows[] = [
-        Link::createFromRoute($index->label(), 'search_api_postgresql.admin.index_embeddings', ['index_id' => $index->id()]),
-        Link::createFromRoute($server->label(), 'search_api_postgresql.admin.server_status', ['server_id' => $server->id()]),
-        $status,
-        number_format($stats['total_items']),
-        number_format($stats['items_with_embeddings']),
-        $coverage,
-      ];
-    }
-
-    return [
-      '#theme' => 'table',
-      '#header' => [
-        $this->t('Index'),
-        $this->t('Server'),
-        $this->t('Status'),
-        $this->t('Total Items'),
-        $this->t('With Embeddings'),
-        $this->t('Coverage'),
-      ],
-      '#rows' => $rows,
-      '#attributes' => ['class' => ['index-status-table']],
     ];
   }
 
@@ -1098,37 +1234,6 @@ class EmbeddingAdminController extends ControllerBase {
     return $this->entityTypeManager
       ->getStorage('search_api_index')
       ->loadByProperties(['server' => $server->id()]);
-  }
-
-  /**
-   * Gets embedding statistics for an index.
-   */
-  protected function getIndexEmbeddingStats($index) {
-    try {
-      $server = $index->getServerInstance();
-      $backend = $server->getBackend();
-      
-      if (method_exists($backend, 'getVectorStats')) {
-        return $backend->getVectorStats($index);
-      } elseif (method_exists($backend, 'getAzureVectorStats')) {
-        return $backend->getAzureVectorStats($index);
-      }
-      
-      return [
-        'total_items' => 0,
-        'items_with_embeddings' => 0,
-        'embedding_coverage' => 0,
-        'pending_embeddings' => 0,
-      ];
-    } catch (\Exception $e) {
-      return [
-        'error' => $e->getMessage(),
-        'total_items' => 0,
-        'items_with_embeddings' => 0,
-        'embedding_coverage' => 0,
-        'pending_embeddings' => 0,
-      ];
-    }
   }
 
   /**
