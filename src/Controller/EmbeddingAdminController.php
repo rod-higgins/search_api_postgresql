@@ -828,7 +828,7 @@ class EmbeddingAdminController extends ControllerBase {
     // Get all PostgreSQL servers
     $servers = $this->entityTypeManager
       ->getStorage('search_api_server')
-      ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure']]);
+      ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure', 'postgresql_vector']]);
 
     if (empty($servers)) {
       $build['no_servers'] = [
@@ -847,43 +847,100 @@ class EmbeddingAdminController extends ControllerBase {
     foreach ($servers as $server) {
       $test_results = $this->validationService->runComprehensiveTests($server);
       
+      // Check if test results are valid
+      if (!is_array($test_results)) {
+        $test_results = [
+          'configuration' => ['success' => false, 'errors' => ['Failed to run tests'], 'warnings' => []],
+          'health' => ['overall' => false],
+          'overall' => ['success' => false, 'message' => 'Test execution failed'],
+        ];
+      }
+      
       $build['results'][$server->id()] = [
         '#type' => 'details',
         '#title' => $this->t('Server: @server', ['@server' => $server->label()]),
-        '#open' => !empty($test_results['failures']),
+        // Fix: Use the correct key structure from runComprehensiveTests
+        '#open' => !($test_results['overall']['success'] ?? true),
       ];
 
-      // Overall status
-      $overall_status = empty($test_results['failures']) ? 'success' : 'error';
-      $status_text = empty($test_results['failures']) ? $this->t('All tests passed') : $this->t('Some tests failed');
-      
+      // Fix: Use the correct key structure
+      $overall_status = ($test_results['overall']['success'] ?? false) ? 'success' : 'error';
+      $status_text = ($test_results['overall']['success'] ?? false) ? 
+        $this->t('All tests passed') : 
+        $this->t('Some tests failed');
+
       $build['results'][$server->id()]['status'] = [
         '#type' => 'html_tag',
-        '#tag' => 'p',
+        '#tag' => 'div',
+        '#attributes' => ['class' => ['test-status', 'test-status--' . $overall_status]],
         '#value' => $status_text,
-        '#attributes' => ['class' => ['test-overall-status', 'status-' . $overall_status]],
       ];
 
-      // Test results
-      foreach ($test_results['tests'] as $test_name => $test_result) {
-        $status_class = $test_result['success'] ? 'success' : 'error';
-        $status_icon = $test_result['success'] ? '✓' : '✗';
-        
-        $build['results'][$server->id()][$test_name] = [
-          '#type' => 'html_tag',
-          '#tag' => 'div',
-          '#value' => $status_icon . ' ' . $test_result['message'],
-          '#attributes' => ['class' => ['test-result', 'test-' . $status_class]],
+      // Configuration tests
+      if (!empty($test_results['configuration'])) {
+        $config_result = $test_results['configuration'];
+        $build['results'][$server->id()]['configuration'] = [
+          '#type' => 'details',
+          '#title' => $this->t('Configuration Tests'),
+          '#open' => !($config_result['success'] ?? true),
         ];
-
-        if (!empty($test_result['details'])) {
-          $build['results'][$server->id()][$test_name . '_details'] = [
-            '#type' => 'html_tag',
-            '#tag' => 'div',
-            '#value' => $test_result['details'],
-            '#attributes' => ['class' => ['test-details']],
+        
+        if (!empty($config_result['errors'])) {
+          $build['results'][$server->id()]['configuration']['errors'] = [
+            '#theme' => 'item_list',
+            '#title' => $this->t('Errors'),
+            '#items' => $config_result['errors'],
+            '#attributes' => ['class' => ['test-errors']],
           ];
         }
+        
+        if (!empty($config_result['warnings'])) {
+          $build['results'][$server->id()]['configuration']['warnings'] = [
+            '#theme' => 'item_list',
+            '#title' => $this->t('Warnings'),
+            '#items' => $config_result['warnings'],
+            '#attributes' => ['class' => ['test-warnings']],
+          ];
+        }
+      }
+
+      // Health tests
+      if (!empty($test_results['health'])) {
+        $health_result = $test_results['health'];
+        $build['results'][$server->id()]['health'] = [
+          '#type' => 'details',
+          '#title' => $this->t('Health Tests'),
+          '#open' => !($health_result['overall'] ?? true),
+        ];
+        
+        // Add health check details if available
+        if (is_array($health_result)) {
+          foreach ($health_result as $check_name => $check_result) {
+            if ($check_name === 'overall') continue;
+            
+            $build['results'][$server->id()]['health'][$check_name] = [
+              '#type' => 'html_tag',
+              '#tag' => 'div',
+              '#attributes' => ['class' => ['health-check']],
+              '#value' => $this->t('@check: @status', [
+                '@check' => ucfirst(str_replace('_', ' ', $check_name)),
+                '@status' => is_array($check_result) ? 
+                  (($check_result['success'] ?? false) ? $this->t('Passed') : $this->t('Failed')) :
+                  ($check_result ? $this->t('Passed') : $this->t('Failed'))
+              ]),
+            ];
+          }
+        }
+      }
+
+      // Overall result
+      if (!empty($test_results['overall']['message'])) {
+        $build['results'][$server->id()]['overall_message'] = [
+          '#type' => 'html_tag',
+          '#tag' => 'p',
+          '#value' => $test_results['overall']['message'],
+          '#attributes' => ['class' => ['test-overall-message']],
+        ];
       }
     }
 
