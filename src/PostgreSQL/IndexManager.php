@@ -301,18 +301,182 @@ class IndexManager {
       return;
     }
 
+    // Validate and sanitize item IDs
+    $valid_item_ids = [];
+    foreach ($item_ids as $id) {
+      if (is_string($id) && !empty(trim($id))) {
+        $valid_item_ids[] = trim($id);
+      }
+    }
+
+    if (empty($valid_item_ids)) {
+      $this->logger->warning('No valid item IDs provided for deletion');
+      return;
+    }
+
+    try {
+      // Process in batches to avoid parameter limits
+      $batch_size = 100; // PostgreSQL can handle many parameters, but let's be safe
+      $batches = array_chunk($valid_item_ids, $batch_size);
+      
+      $total_deleted = 0;
+      
+      foreach ($batches as $batch) {
+        $deleted_count = $this->deleteBatch($table_name, $batch);
+        $total_deleted += $deleted_count;
+      }
+      
+      if ($total_deleted > 0) {
+        $this->logger->info('Successfully deleted @count items from @table', [
+          '@count' => $total_deleted,
+          '@table' => $table_name,
+        ]);
+      }
+      
+    } catch (\Exception $e) {
+      $this->logger->error('Failed to delete items from @table: @error', [
+        '@table' => $table_name,
+        '@error' => $e->getMessage(),
+      ]);
+      
+      // Try graceful fallback: delete items one by one
+      $this->deleteItemsIndividually($table_name, $valid_item_ids);
+    }
+  }
+
+  /**
+   * Deletes a batch of items.
+   *
+   * @param string $table_name
+   *   The table name (quoted).
+   * @param array $item_ids
+   *   Array of item IDs to delete.
+   *
+   * @return int
+   *   Number of items deleted.
+   */
+  protected function deleteBatch($table_name, array $item_ids) {
+    if (empty($item_ids)) {
+      return 0;
+    }
+
+    // Create safe parameter names and map them to values
     $placeholders = [];
     $params = [];
-
-    foreach ($item_ids as $i => $id) {
-      $placeholders[] = ":id_{$i}";
-      $params[":id_{$i}"] = $id;
+    
+    foreach ($item_ids as $index => $id) {
+      // Create a safe parameter name using only index
+      $param_name = ":item_id_{$index}";
+      $placeholders[] = $param_name;
+      $params[$param_name] = $id;
     }
 
     $id_field = $this->connector->quoteColumnName('search_api_id');
     $sql = "DELETE FROM {$table_name} WHERE {$id_field} IN (" . implode(', ', $placeholders) . ")";
     
-    $this->connector->executeQuery($sql, $params);
+    $statement = $this->connector->executeQuery($sql, $params);
+    
+    // Return the number of affected rows
+    return $statement->rowCount();
+  }
+
+  /**
+   * Fallback method to delete items individually.
+   *
+   * @param string $table_name
+   *   The table name (quoted).
+   * @param array $item_ids
+   *   Array of item IDs to delete.
+   */
+  protected function deleteItemsIndividually($table_name, array $item_ids) {
+    $id_field = $this->connector->quoteColumnName('search_api_id');
+    $sql = "DELETE FROM {$table_name} WHERE {$id_field} = :item_id";
+    
+    $deleted_count = 0;
+    $failed_count = 0;
+    
+    foreach ($item_ids as $id) {
+      try {
+        $params = [':item_id' => $id];
+        $statement = $this->connector->executeQuery($sql, $params);
+        
+        if ($statement->rowCount() > 0) {
+          $deleted_count++;
+        }
+        
+      } catch (\Exception $e) {
+        $failed_count++;
+        $this->logger->warning('Failed to delete individual item @id: @error', [
+          '@id' => $id,
+          '@error' => $e->getMessage(),
+        ]);
+      }
+    }
+    
+    if ($deleted_count > 0 || $failed_count > 0) {
+      $this->logger->info('Individual deletion completed: @deleted deleted, @failed failed', [
+        '@deleted' => $deleted_count,
+        '@failed' => $failed_count,
+      ]);
+    }
+  }
+
+  /**
+   * Checks if an item exists in the index before attempting deletion.
+   *
+   * @param string $table_name
+   *   The table name (quoted).
+   * @param string $item_id
+   *   The item ID to check.
+   *
+   * @return bool
+   *   TRUE if the item exists, FALSE otherwise.
+   */
+  protected function itemExists($table_name, $item_id) {
+    try {
+      $id_field = $this->connector->quoteColumnName('search_api_id');
+      $sql = "SELECT 1 FROM {$table_name} WHERE {$id_field} = :item_id LIMIT 1";
+      
+      $statement = $this->connector->executeQuery($sql, [':item_id' => $item_id]);
+      return $statement->fetchColumn() !== false;
+      
+    } catch (\Exception $e) {
+      $this->logger->warning('Failed to check if item exists @id: @error', [
+        '@id' => $item_id,
+        '@error' => $e->getMessage(),
+      ]);
+      return false;
+    }
+  }
+
+  /**
+   * Safe delete method that checks existence first.
+   *
+   * @param string $table_name
+   *   The table name (quoted).
+   * @param array $item_ids
+   *   Array of item IDs to delete.
+   */
+  public function safeDeleteItems($table_name, array $item_ids) {
+    if (empty($item_ids)) {
+      return;
+    }
+
+    // First, check which items actually exist
+    $existing_items = [];
+    foreach ($item_ids as $id) {
+      if ($this->itemExists($table_name, $id)) {
+        $existing_items[] = $id;
+      }
+    }
+
+    if (!empty($existing_items)) {
+      $this->deleteItems($table_name, $existing_items);
+    } else {
+      $this->logger->debug('No items found to delete from @table', [
+        '@table' => $table_name,
+      ]);
+    }
   }
 
   /**
