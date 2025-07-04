@@ -234,37 +234,47 @@ class PostgreSQLConnector {
   }
 
   /**
-   * Execute a query.
-   *
-   * @param string $sql
-   *   The SQL query.
-   * @param array $params
-   *   Query parameters.
-   *
-   * @return \PDOStatement
-   *   The executed statement.
-   *
-   * @throws \Exception
-   *   If query execution fails.
+   * Execute a query with debugging.
    */
   public function executeQuery($sql, array $params = []) {
+    $start_time = microtime(true);
+    
+    // Log the query being executed
+    $this->logger->info('PostgreSQL Query: @sql with params: @params', [
+      '@sql' => $sql,
+      '@params' => json_encode($params)
+    ]);
+    
     try {
       $connection = $this->connect();
       
       if (empty($params)) {
-        return $connection->query($sql);
+        $result = $connection->query($sql);
       } else {
         $stmt = $connection->prepare($sql);
         $stmt->execute($params);
-        return $stmt;
+        $result = $stmt;
       }
+      
+      $elapsed = microtime(true) - $start_time;
+      
+      // Log slow queries
+      if ($elapsed > 1.0) {
+        $this->logger->warning('SLOW QUERY (@seconds seconds): @sql', [
+          '@seconds' => round($elapsed, 2),
+          '@sql' => $sql
+        ]);
+      }
+      
+      return $result;
     }
     catch (\PDOException $e) {
-      $this->logger->error('Query execution failed: @message. SQL: @sql', [
-        '@message' => $e->getMessage(),
+      $elapsed = microtime(true) - $start_time;
+      $this->logger->error('Query failed after @seconds seconds: @sql - Error: @error', [
+        '@seconds' => round($elapsed, 2),
         '@sql' => $sql,
+        '@error' => $e->getMessage()
       ]);
-      // FIX: Cast string code to integer
       throw new \Exception('Query execution failed: ' . $e->getMessage(), (int) $e->getCode(), $e);
     }
   }

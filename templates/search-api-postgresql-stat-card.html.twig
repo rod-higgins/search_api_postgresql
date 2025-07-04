@@ -1,0 +1,92 @@
+{#
+/**
+ * @file
+ * Default theme implementation for Search API PostgreSQL stat cards.
+ *
+ * Available variables:
+ * - attributes: HTML attributes for the stat card container.
+ * - title: The title/label for the stat card.
+ * - value: The main value/number to display.
+ * - subtitle: Optional subtitle text below the value.
+ * - icon: Optional icon identifier or markup.
+ * - color: Color theme for the card (blue, green, purple, orange, red).
+ * - trend: Optional trend indicator (positive, negative, or neutral).
+ * - link: Optional link URL for the entire card.
+ * - link_title: Optional link title attribute.
+ *
+ * @see template_preprocess_search_api_postgresql_stat_card()
+ */
+#}
+
+{%
+  set classes = [
+    'stat-card',
+    color ? 'color-' ~ color : 'color-blue',
+    trend ? 'has-trend' : '',
+    link ? 'clickable' : '',
+  ]
+%}
+
+{% if link %}
+  <a href="{{ link }}" {{ attributes.addClass(classes) }}{% if link_title %} title="{{ link_title }}"{% endif %}>
+{% else %}
+  <div{{ attributes.addClass(classes) }}>
+{% endif %}
+
+  {# Card Header with Title and Icon #}
+  <div class="stat-card-header">
+    {% if title %}
+      <h3 class="stat-card-title">{{ title }}</h3>
+    {% endif %}
+    
+    {% if icon %}
+      <div class="stat-card-icon">
+        {% if icon starts with '<' %}
+          {# Raw HTML/SVG icon #}
+          {{ icon|raw }}
+        {% else %}
+          {# Icon class or simple text #}
+          <span class="icon icon-{{ icon }}"></span>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+
+  {# Main Value #}
+  {% if value is not empty %}
+    <div class="stat-card-value">{{ value }}</div>
+  {% endif %}
+
+  {# Subtitle #}
+  {% if subtitle %}
+    <div class="stat-card-subtitle">{{ subtitle }}</div>
+  {% endif %}
+
+  {# Trend Indicator #}
+  {% if trend is not empty %}
+    <div class="stat-card-trend trend-{{ trend > 0 ? 'up' : (trend < 0 ? 'down' : 'neutral') }}">
+      {% if trend > 0 %}
+        <span class="trend-icon">↗</span>
+        <span class="trend-text">{{ 'Trending up'|t }}</span>
+      {% elseif trend < 0 %}
+        <span class="trend-icon">↘</span>
+        <span class="trend-text">{{ 'Trending down'|t }}</span>
+      {% else %}
+        <span class="trend-icon">→</span>
+        <span class="trend-text">{{ 'Stable'|t }}</span>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {# Loading State (if needed) #}
+  {% if loading %}
+    <div class="stat-card-loading">
+      <div class="loading-spinner"></div>
+    </div>
+  {% endif %}
+
+{% if link %}
+  </a>
+{% else %}
+  </div>
+{% endif %}

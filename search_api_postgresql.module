@@ -319,6 +319,17 @@ function search_api_postgresql_theme() {
       ],
       'template' => 'search-api-postgresql-index-analytics',
     ],
+    // ADD THIS MISSING THEME HOOK:
+    'search_api_postgresql_stat_card' => [
+      'variables' => [
+        'title' => NULL,
+        'value' => NULL,
+        'subtitle' => NULL,
+        'icon' => NULL,
+        'color' => 'blue',
+      ],
+      'template' => 'search-api-postgresql-stat-card',
+    ],
   ];
 }
 

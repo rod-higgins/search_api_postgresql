@@ -71,6 +71,13 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   protected $indexManager;
 
   /**
+   * Cached results for support checks.
+   *
+   * @var array
+   */
+  protected static $supportCache = [];
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
@@ -546,17 +553,61 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       'boolean',
     ];
     
-    // Add PostgreSQL-specific data types
-    if ($this->isPostgreSQLSupported()) {
+    // Add PostgreSQL-specific data types with caching
+    if ($this->isPostgreSQLSupportedCached()) {
       $supported_types[] = 'postgresql_fulltext';
     }
     
-    // Add vector type if pgvector is available
-    if ($this->isVectorSupported()) {
+    // Add vector type if pgvector is available with caching
+    if ($this->isVectorSupportedCached()) {
       $supported_types[] = 'vector';
     }
     
     return in_array($type, $supported_types);
+  }
+
+  /**
+   * Cached version of isPostgreSQLSupported().
+   */
+  protected function isPostgreSQLSupportedCached() {
+    $cache_key = 'postgresql_supported_' . md5(serialize($this->configuration['connection']));
+    
+    if (!isset(self::$supportCache[$cache_key])) {
+      try {
+        $this->ensureConnector();
+        $pdo = $this->connector->connect();
+        $pdo->setAttribute(\PDO::ATTR_TIMEOUT, 3);
+        $stmt = $pdo->query("SELECT to_tsvector('english', 'test')");
+        self::$supportCache[$cache_key] = TRUE;
+      } catch (\Exception $e) {
+        $this->logger->debug('PostgreSQL FTS check failed: @error', ['@error' => $e->getMessage()]);
+        self::$supportCache[$cache_key] = FALSE;
+      }
+    }
+    
+    return self::$supportCache[$cache_key];
+  }
+
+  /**
+   * Cached version of isVectorSupported().
+   */
+  protected function isVectorSupportedCached() {
+    $cache_key = 'vector_supported_' . md5(serialize($this->configuration['connection']));
+    
+    if (!isset(self::$supportCache[$cache_key])) {
+      try {
+        $this->ensureConnector();
+        $pdo = $this->connector->connect();
+        $pdo->setAttribute(\PDO::ATTR_TIMEOUT, 3);
+        $stmt = $pdo->query("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')");
+        self::$supportCache[$cache_key] = (bool) $stmt->fetchColumn();
+      } catch (\Exception $e) {
+        $this->logger->debug('Vector support check failed: @error', ['@error' => $e->getMessage()]);
+        self::$supportCache[$cache_key] = FALSE;
+      }
+    }
+    
+    return self::$supportCache[$cache_key];
   }
 
   /**
@@ -607,6 +658,10 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    * {@inheritdoc}
    */
   public function viewSettings() {
+    // Add timing debug
+    $start_time = microtime(true);
+    $this->logger->info('viewSettings() called - starting');
+    
     $info = [];
     
     // Database connection info
@@ -616,11 +671,15 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       'info' => $this->configuration['connection']['database'] . ' @ ' . $connection_string,
     ];
     
+    $this->logger->info('viewSettings() - connection info added');
+    
     // SSL mode
     $info[] = [
       'label' => $this->t('SSL Mode'),
       'info' => $this->configuration['connection']['ssl_mode'] ?? 'prefer',
     ];
+    
+    $this->logger->info('viewSettings() - SSL mode added');
     
     // Full-text search configuration
     $info[] = [
@@ -628,23 +687,31 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       'info' => $this->configuration['fts_configuration'] ?? 'english',
     ];
     
-    // AI embeddings status
-    if (!empty($this->configuration['ai_embeddings']['enabled'])) {
-      $provider = $this->configuration['ai_embeddings']['provider'] ?? 'azure';
-      $model = $this->configuration['ai_embeddings'][$provider]['model'] ?? 'text-embedding-3-small';
+    $this->logger->info('viewSettings() - FTS config added');
+    
+    // Simple item count
+    try {
+      $this->ensureConnector();
+      $sql = "SELECT COUNT(*) FROM \"search_api_search_index\"";
+      $stmt = $this->connector->executeQuery($sql);
+      $count = $stmt->fetchColumn();
+      
       $info[] = [
-        'label' => $this->t('AI Embeddings'),
-        'info' => $this->t('Enabled (@provider, @model)', [
-          '@provider' => ucfirst($provider),
-          '@model' => $model,
-        ]),
+        'label' => $this->t('Indexed Items'),
+        'info' => number_format($count),
       ];
-    } else {
+      
+      $this->logger->info('viewSettings() - item count added: @count', ['@count' => $count]);
+    } catch (\Exception $e) {
       $info[] = [
-        'label' => $this->t('AI Embeddings'),
-        'info' => $this->t('Disabled'),
+        'label' => $this->t('Indexed Items'),
+        'info' => $this->t('Error loading count'),
       ];
+      $this->logger->error('viewSettings() - count failed: @error', ['@error' => $e->getMessage()]);
     }
+    
+    $elapsed = microtime(true) - $start_time;
+    $this->logger->info('viewSettings() completed in @seconds seconds', ['@seconds' => round($elapsed, 2)]);
     
     return $info;
   }
@@ -945,7 +1012,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    * Gets or creates an IndexManager instance.
    * 
    * Updated to use EnhancedIndexManager when AI embeddings are enabled.
-    */
+   */
   protected function getIndexManager() {
     if (!$this->indexManager) {
       // Ensure we have a connector
@@ -955,8 +1022,12 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       $fieldMapper = new FieldMapper($this->configuration);
       $embedding_service = null;
       
+      // Check if AI is enabled via ANY configuration path
+      $ai_enabled = ($this->configuration['ai_embeddings']['enabled'] ?? FALSE) || 
+                    ($this->configuration['azure_embedding']['enabled'] ?? FALSE);
+      
       // Initialize embedding service if vector search is enabled
-      if (!empty($this->configuration['ai_embeddings']['enabled'])) {
+      if (isset($ai_enabled) && $ai_enabled) {
         try {
           $embedding_service = \Drupal::service('search_api_postgresql.embedding_service');
         } catch (\Exception $e) {
@@ -965,13 +1036,13 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       }
       
       // Use EnhancedIndexManager when AI embeddings are enabled
-      if (($this->configuration['ai_embeddings']['enabled'] ?? 0) == 1 && class_exists('\Drupal\search_api_postgresql\PostgreSQL\EnhancedIndexManager')) {
+      if (isset($ai_enabled) && $ai_enabled && class_exists('\Drupal\search_api_postgresql\PostgreSQL\EnhancedIndexManager')) {
         $this->indexManager = new \Drupal\search_api_postgresql\PostgreSQL\EnhancedIndexManager(
           $this->connector,
           $fieldMapper,
           $this->configuration,
           $embedding_service,
-          $this->getServerId() // Pass server ID for queue context
+          $this->getServerId()
         );
       } else {
         // Fall back to basic IndexManager
@@ -983,6 +1054,13 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         );
       }
     }
+
+    // log index manager being used
+    $this->logger->info('Created IndexManager: @type for server @server, AI enabled: @ai', [
+      '@type' => get_class($this->indexManager),
+      '@server' => $this->getServerId(),
+      '@ai' => $ai_enabled ? 'Yes' : 'No'
+    ]);
     
     return $this->indexManager;
   }
