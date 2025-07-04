@@ -333,7 +333,117 @@ class EmbeddingAnalyticsService {
         ],
       ];
     }
-  } 
+  }
+  
+  /**
+   * Gets server metrics for a specific time period.
+   *
+   * @param string $server_id
+   *   The server ID.
+   * @param string $period
+   *   The time period (1h, 24h, 7d, 30d, 90d).
+   *
+   * @return array
+   *   Server metrics data.
+   */
+  public function getServerMetrics($server_id, $period = '24h') {
+    $period_seconds = $this->getPeriodSeconds($period);
+    $start_time = time() - $period_seconds;
+    
+    $metrics = [
+      'search_queries' => 0,
+      'avg_query_time' => 0,
+      'api_calls' => 0,
+      'cache_hit_rate' => 0,
+      'total_cost' => 0,
+      'total_tokens' => 0,
+      'error_rate' => 0,
+      'period' => $period,
+      'start_time' => $start_time,
+      'end_time' => time(),
+    ];
+    
+    try {
+      // Get search query metrics
+      $query_metrics_query = $this->database->select($this->metricsTable, 'm');
+      $query_metrics_query->condition('server_id', $server_id);
+      $query_metrics_query->condition('metric_type', 'search');
+      $query_metrics_query->condition('timestamp', $start_time, '>=');
+      $query_metrics_query->fields('m', ['metric_name', 'value']);
+      $query_metrics = $query_metrics_query->execute()->fetchAll();
+      
+      $search_queries = 0;
+      $total_query_time = 0;
+      $query_count = 0;
+      
+      foreach ($query_metrics as $metric) {
+        if ($metric->metric_name === 'query') {
+          $search_queries++;
+        } elseif ($metric->metric_name === 'query_time') {
+          $total_query_time += $metric->value;
+          $query_count++;
+        }
+      }
+      
+      $metrics['search_queries'] = $search_queries;
+      $metrics['avg_query_time'] = $query_count > 0 ? round($total_query_time / $query_count, 2) : 0;
+      
+      // Get API call metrics
+      $api_stats_query = $this->database->select($this->analyticsTable, 'a');
+      $api_stats_query->condition('server_id', $server_id);
+      $api_stats_query->condition('timestamp', $start_time, '>=');
+      $api_stats_query->addExpression('COUNT(*)', 'total_calls');
+      $api_stats_query->addExpression('SUM(cost_usd)', 'total_cost');
+      $api_stats_query->addExpression('SUM(token_count)', 'total_tokens');
+      $api_stats = $api_stats_query->execute()->fetchAssoc();
+      
+      if ($api_stats) {
+        $metrics['api_calls'] = (int) $api_stats['total_calls'];
+        $metrics['total_cost'] = (float) $api_stats['total_cost'];
+        $metrics['total_tokens'] = (int) $api_stats['total_tokens'];
+      }
+      
+      // Calculate cache hit rate
+      $cache_hits_query = $this->database->select($this->metricsTable, 'm');
+      $cache_hits_query->condition('server_id', $server_id);
+      $cache_hits_query->condition('metric_type', 'cache');
+      $cache_hits_query->condition('metric_name', 'hit');
+      $cache_hits_query->condition('timestamp', $start_time, '>=');
+      $cache_hits = $cache_hits_query->countQuery()->execute()->fetchField();
+      
+      $cache_misses_query = $this->database->select($this->metricsTable, 'm');
+      $cache_misses_query->condition('server_id', $server_id);
+      $cache_misses_query->condition('metric_type', 'cache');
+      $cache_misses_query->condition('metric_name', 'miss');
+      $cache_misses_query->condition('timestamp', $start_time, '>=');
+      $cache_misses = $cache_misses_query->countQuery()->execute()->fetchField();
+      
+      $cache_total = $cache_hits + $cache_misses;
+      if ($cache_total > 0) {
+        $metrics['cache_hit_rate'] = round(($cache_hits / $cache_total) * 100, 2);
+      }
+      
+      // Calculate error rate
+      $error_count_query = $this->database->select($this->metricsTable, 'm');
+      $error_count_query->condition('server_id', $server_id);
+      $error_count_query->condition('metric_type', 'error');
+      $error_count_query->condition('timestamp', $start_time, '>=');
+      $error_count = $error_count_query->countQuery()->execute()->fetchField();
+      
+      $total_operations = $metrics['search_queries'] + $metrics['api_calls'];
+      if ($total_operations > 0) {
+        $metrics['error_rate'] = round(($error_count / $total_operations) * 100, 2);
+      }
+      
+    } catch (\Exception $e) {
+      $this->logger->error('Failed to get server metrics for @server: @message', [
+        '@server' => $server_id,
+        '@message' => $e->getMessage(),
+      ]);
+    }
+    
+    return $metrics;
+  }
 
   /**
    * Gets performance metrics for a period.

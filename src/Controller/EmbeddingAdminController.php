@@ -541,7 +541,7 @@ class EmbeddingAdminController extends ControllerBase {
         [$this->t('Vector Similarity Searches'), number_format($server_metrics['vector_searches'])],
         [$this->t('Hybrid Searches'), number_format($server_metrics['hybrid_searches'])],
         [$this->t('Total Embeddings Generated'), number_format($server_metrics['embeddings_generated'])],
-        [$this->t('API Cost (USD)'), '$' . number_format($server_metrics['api_cost'], 4)],
+        [$this->t('API Cost (AUD)'), '$' . number_format($server_metrics['api_cost'], 4)],
       ],
     ];
 
@@ -805,6 +805,13 @@ class EmbeddingAdminController extends ControllerBase {
     $build['#attached']['library'][] = 'search_api_postgresql/admin';
     
     return $build;
+  }
+
+  /**
+   * Formats currency for display in the admin interface.
+   */
+  protected function formatCurrency($amount, $currency = 'AUD') {
+    return '$' . number_format($amount, 2) . ' ' . $currency;
   }
 
   /**
