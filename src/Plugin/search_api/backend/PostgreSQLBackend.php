@@ -875,6 +875,16 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    * {@inheritdoc}
    */
   public function search(QueryInterface $query) {
+    // Check if this is an admin page stats query (empty keys)
+    $keys = $query->getOriginalKeys();
+    if (empty($keys) || $keys === '') {
+      // Return empty results for admin page statistics  
+      $results = $query->getResults();
+      $results->setResultCount(0);
+      return $results;
+    }
+    
+    // Normal search execution
     try {
       $this->ensureConnector();
       return $this->connector->search($query);

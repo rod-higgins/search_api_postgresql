@@ -238,7 +238,6 @@ class PostgreSQLConnector {
    */
   public function executeQuery($sql, array $params = []) {
     $start_time = microtime(true);
-    
     try {
       $connection = $this->connect();
       
