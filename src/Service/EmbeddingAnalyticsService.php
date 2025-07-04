@@ -285,6 +285,57 @@ class EmbeddingAnalyticsService {
   }
 
   /**
+   * Gets cache analytics data.
+   *
+   * @return array
+   *   Cache analytics data.
+   */
+  public function getCacheAnalytics() {
+    try {
+      // Get cache-related metrics from the metrics table
+      $query = $this->database->select($this->metricsTable, 'm')
+        ->fields('m', ['metric_name', 'value', 'timestamp'])
+        ->condition('metric_type', 'cache')
+        ->orderBy('timestamp', 'DESC')
+        ->range(0, 100);
+      
+      $cache_metrics = $query->execute()->fetchAll();
+      
+      // Get general analytics that might be cache-related
+      $cost_query = $this->database->select($this->analyticsTable, 'a')
+        ->fields('a', ['operation', 'cost_usd', 'duration_ms', 'timestamp'])
+        ->condition('operation', ['cache_hit', 'cache_miss', 'cache_clear'], 'IN')
+        ->orderBy('timestamp', 'DESC')
+        ->range(0, 50);
+      
+      $cost_analytics = $cost_query->execute()->fetchAll();
+      
+      return [
+        'cache_metrics' => $cache_metrics,
+        'cost_analytics' => $cost_analytics,
+        'summary' => [
+          'total_cache_operations' => count($cost_analytics),
+          'recent_metrics' => count($cache_metrics),
+          'timestamp' => time(),
+        ],
+      ];
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to get cache analytics: @message', ['@message' => $e->getMessage()]);
+      return [
+        'cache_metrics' => [],
+        'cost_analytics' => [],
+        'summary' => [
+          'total_cache_operations' => 0,
+          'recent_metrics' => 0,
+          'timestamp' => time(),
+          'error' => $e->getMessage(),
+        ],
+      ];
+    }
+  } 
+
+  /**
    * Gets performance metrics for a period.
    *
    * @param string $period

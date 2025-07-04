@@ -314,7 +314,7 @@ class CacheManagementForm extends FormBase {
    * Export cache statistics.
    */
   protected function exportStatistics() {
-    $stats = $this->cacheManager->getStatistics();
+    $stats = $this->cacheManager->getCacheStatistics();
     $analytics = $this->analyticsService->getCacheAnalytics();
     
     $export_data = [
