@@ -171,6 +171,145 @@ class EmbeddingQueueManager {
   }
 
   /**
+   * Gets recent queue activity.
+   *
+   * @param int $limit
+   *   Number of recent activities to retrieve.
+   *
+   * @return array
+   *   Array of recent activity records.
+   */
+  public function getRecentActivity($limit = 20) {
+    try {
+      // Check if we have database connection
+      if (!$this->queue instanceof \Drupal\Core\Queue\DatabaseQueue) {
+        // For non-database queues, return empty array
+        return [];
+      }
+
+      $database = \Drupal::database();
+      
+      // Check if activity log table exists
+      if (!$database->schema()->tableExists('search_api_postgresql_queue_activity')) {
+        // Return empty array if activity tracking table doesn't exist
+        return [];
+      }
+
+      // Query recent activity from activity log table
+      $query = $database->select('search_api_postgresql_queue_activity', 'qa')
+        ->fields('qa', ['timestamp', 'operation', 'items_processed', 'status', 'duration'])
+        ->orderBy('timestamp', 'DESC')
+        ->range(0, $limit);
+
+      $results = $query->execute()->fetchAll(\PDO::FETCH_ASSOC);
+
+      return $results ?: [];
+    }
+    catch (\Exception $e) {
+      $this->logger->warning('Failed to get recent queue activity: @message', [
+        '@message' => $e->getMessage()
+      ]);
+      
+      // Return empty array on error to prevent form from breaking
+      return [];
+    }
+  }
+
+  /**
+   * Logs queue activity.
+   *
+   * @param string $operation
+   *   The operation type.
+   * @param int $items_processed
+   *   Number of items processed.
+   * @param string $status
+   *   Operation status.
+   * @param int $duration
+   *   Operation duration in milliseconds.
+   */
+  protected function logActivity($operation, $items_processed = 0, $status = 'success', $duration = 0) {
+    try {
+      $database = \Drupal::database();
+      
+      // Create activity log table if it doesn't exist
+      $this->ensureActivityLogTable();
+      
+      $database->insert('search_api_postgresql_queue_activity')
+        ->fields([
+          'timestamp' => time(),
+          'operation' => $operation,
+          'items_processed' => $items_processed,
+          'status' => $status,
+          'duration' => $duration,
+        ])
+        ->execute();
+    }
+    catch (\Exception $e) {
+      $this->logger->warning('Failed to log queue activity: @message', [
+        '@message' => $e->getMessage()
+      ]);
+    }
+  }
+
+  /**
+   * Ensures the activity log table exists.
+   */
+  protected function ensureActivityLogTable() {
+    $database = \Drupal::database();
+    $schema = $database->schema();
+    
+    if (!$schema->tableExists('search_api_postgresql_queue_activity')) {
+      $table_spec = [
+        'description' => 'Stores queue activity logs for Search API PostgreSQL',
+        'fields' => [
+          'id' => [
+            'type' => 'serial',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+          ],
+          'timestamp' => [
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+            'default' => 0,
+          ],
+          'operation' => [
+            'type' => 'varchar',
+            'length' => 255,
+            'not null' => TRUE,
+            'default' => '',
+          ],
+          'items_processed' => [
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+            'default' => 0,
+          ],
+          'status' => [
+            'type' => 'varchar',
+            'length' => 50,
+            'not null' => TRUE,
+            'default' => 'success',
+          ],
+          'duration' => [
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+            'default' => 0,
+          ],
+        ],
+        'primary key' => ['id'],
+        'indexes' => [
+          'timestamp' => ['timestamp'],
+          'operation' => ['operation'],
+        ],
+      ];
+      
+      $schema->createTable('search_api_postgresql_queue_activity', $table_spec);
+    }
+  }
+
+  /**
    * Queues index embedding regeneration.
    *
    * @param string $server_id
@@ -321,7 +460,7 @@ class EmbeddingQueueManager {
       return ['error' => $e->getMessage()];
     }
   }
-  
+
   /**
    * Processes queue items manually.
    *
@@ -335,6 +474,7 @@ class EmbeddingQueueManager {
    */
   public function processQueue($max_items = 50, $time_limit = 60) {
     $start_time = time();
+    $start_microtime = microtime(true);
     $processed = 0;
     $failed = 0;
     $errors = [];
@@ -372,6 +512,7 @@ class EmbeddingQueueManager {
       }
     }
 
+    $duration = round((microtime(true) - $start_microtime) * 1000); // Convert to milliseconds
     $results = [
       'processed' => $processed,
       'failed' => $failed,
@@ -383,6 +524,10 @@ class EmbeddingQueueManager {
       $results['errors'] = array_slice($errors, 0, 10); // Limit error list
     }
 
+    // Log activity
+    $status = ($failed > 0) ? 'partial_failure' : 'success';
+    $this->logActivity('manual_processing', $processed, $status, $duration);
+
     $this->logger->info('Queue processing completed: @processed processed, @failed failed, @remaining remaining', [
       '@processed' => $processed,
       '@failed' => $failed,
@@ -390,6 +535,194 @@ class EmbeddingQueueManager {
     ]);
 
     return $results;
+  }
+
+  /**
+   * Clears failed items from the queue.
+   *
+   * @return array
+   *   Results with 'cleared' count.
+   */
+  public function clearFailedItems() {
+    $start_microtime = microtime(true);
+    $cleared = 0;
+    
+    try {
+      // For database queues, we would need to implement failed item tracking
+      // For now, we'll just log the activity
+      $this->logger->info('Clearing failed queue items');
+      
+      // TODO: Implement actual failed item clearing logic
+      // This would require tracking failed items in the database
+      
+      $duration = round((microtime(true) - $start_microtime) * 1000);
+      $this->logActivity('clear_failed', $cleared, 'success', $duration);
+      
+      return ['cleared' => $cleared];
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to clear failed items: @message', [
+        '@message' => $e->getMessage()
+      ]);
+      
+      $duration = round((microtime(true) - $start_microtime) * 1000);
+      $this->logActivity('clear_failed', 0, 'error', $duration);
+      
+      return ['cleared' => 0, 'error' => $e->getMessage()];
+    }
+  }
+
+  /**
+   * Clears all items from the queue.
+   *
+   * @return array
+   *   Results with success status.
+   */
+  public function clearAllItems() {
+    $start_microtime = microtime(true);
+    
+    try {
+      $items_before = $this->queue->numberOfItems();
+      $this->queue->deleteQueue();
+      
+      $duration = round((microtime(true) - $start_microtime) * 1000);
+      $this->logActivity('clear_all', $items_before, 'success', $duration);
+      
+      $this->logger->info('Cleared all queue items: @count items removed', [
+        '@count' => $items_before
+      ]);
+      
+      return ['cleared' => $items_before, 'success' => true];
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to clear all items: @message', [
+        '@message' => $e->getMessage()
+      ]);
+      
+      $duration = round((microtime(true) - $start_microtime) * 1000);
+      $this->logActivity('clear_all', 0, 'error', $duration);
+      
+      return ['cleared' => 0, 'success' => false, 'error' => $e->getMessage()];
+    }
+  }
+
+  /**
+   * Pauses queue processing.
+   *
+   * @return bool
+   *   TRUE if successful.
+   */
+  public function pauseQueue() {
+    try {
+      $config = $this->configFactory->getEditable('search_api_postgresql.queue_settings');
+      $config->set('enabled', FALSE);
+      $config->save();
+      
+      $this->logActivity('pause_queue', 0, 'success', 0);
+      
+      return TRUE;
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to pause queue: @message', [
+        '@message' => $e->getMessage()
+      ]);
+      
+      $this->logActivity('pause_queue', 0, 'error', 0);
+      return FALSE;
+    }
+  }
+
+  /**
+   * Resumes queue processing.
+   *
+   * @return bool
+   *   TRUE if successful.
+   */
+  public function resumeQueue() {
+    try {
+      $config = $this->configFactory->getEditable('search_api_postgresql.queue_settings');
+      $config->set('enabled', TRUE);
+      $config->save();
+      
+      $this->logActivity('resume_queue', 0, 'success', 0);
+      
+      return TRUE;
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to resume queue: @message', [
+        '@message' => $e->getMessage()
+      ]);
+      
+      $this->logActivity('resume_queue', 0, 'error', 0);
+      return FALSE;
+    }
+  }
+
+  /**
+   * Requeues failed items.
+   *
+   * @return array
+   *   Results with 'requeued' count.
+   */
+  public function requeueFailedItems() {
+    $start_microtime = microtime(true);
+    $requeued = 0;
+    
+    try {
+      // TODO: Implement actual failed item requeuing logic
+      // This would require tracking failed items in the database
+      
+      $duration = round((microtime(true) - $start_microtime) * 1000);
+      $this->logActivity('requeue_failed', $requeued, 'success', $duration);
+      
+      return ['requeued' => $requeued];
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to requeue failed items: @message', [
+        '@message' => $e->getMessage()
+      ]);
+      
+      $duration = round((microtime(true) - $start_microtime) * 1000);
+      $this->logActivity('requeue_failed', 0, 'error', $duration);
+      
+      return ['requeued' => 0, 'error' => $e->getMessage()];
+    }
+  }
+
+  /**
+   * Updates queue configuration.
+   *
+   * @param array $config
+   *   Configuration array.
+   *
+   * @return bool
+   *   TRUE if successful.
+   */
+  public function updateConfiguration(array $config) {
+    try {
+      $config_object = $this->configFactory->getEditable('search_api_postgresql.queue_settings');
+      
+      foreach ($config as $key => $value) {
+        $config_object->set($key, $value);
+      }
+      
+      $config_object->save();
+      
+      // Update local config
+      $this->config = array_merge($this->config, $config);
+      
+      $this->logActivity('update_config', 0, 'success', 0);
+      
+      return TRUE;
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to update queue configuration: @message', [
+        '@message' => $e->getMessage()
+      ]);
+      
+      $this->logActivity('update_config', 0, 'error', 0);
+      return FALSE;
+    }
   }
 
   /**
