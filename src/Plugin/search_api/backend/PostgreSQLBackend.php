@@ -774,7 +774,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     try {
       $this->ensureConnector();
       $this->updateIndexSchema($index);
-      $this->logger->info('Successfully updated schema for index @index', ['@index' => $index->id()]);
     } catch (\Exception $e) {
       $this->logger->error('Failed to update index @index: @error', [
         '@index' => $index->id(),
@@ -1054,13 +1053,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         );
       }
     }
-
-    // log index manager being used
-    $this->logger->info('Created IndexManager: @type for server @server, AI enabled: @ai', [
-      '@type' => get_class($this->indexManager),
-      '@server' => $this->getServerId(),
-      '@ai' => $ai_enabled ? 'Yes' : 'No'
-    ]);
     
     return $this->indexManager;
   }

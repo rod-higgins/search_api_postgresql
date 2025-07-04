@@ -12,64 +12,26 @@ use Drupal\Core\Form\FormStateInterface;
  * Implements hook_help().
  */
 function search_api_postgresql_help($route_name, $route_match) {
-  switch ($route_name) {
-    case 'help.page.search_api_postgresql':
-      $output = '<h3>' . t('About') . '</h3>';
-      $output .= '<p>' . t('The Search API PostgreSQL module provides a PostgreSQL backend for the Search API module. It supports full-text search, vector embeddings, and AI-powered search capabilities.') . '</p>';
+  if ($route_name == 'help.page.search_api_postgresql') {
+    $output = '<h3>' . t('About') . '</h3>';
+    $output .= '<p>' . t('The Search API PostgreSQL module provides a PostgreSQL backend for the Search API module with support for full-text search, vector embeddings, and AI-powered search capabilities.') . '</p>';
 
-      $output .= '<h3>' . t('Features') . '</h3>';
-      $output .= '<ul>';
-      $output .= '<li>' . t('Native PostgreSQL full-text search with configurable ranking') . '</li>';
-      $output .= '<li>' . t('Vector search using pgvector extension for semantic search') . '</li>';
-      $output .= '<li>' . t('AI-powered embeddings integration with Azure OpenAI') . '</li>';
-      $output .= '<li>' . t('Hybrid search combining traditional and semantic search') . '</li>';
-      $output .= '<li>' . t('Advanced analytics and monitoring') . '</li>';
-      $output .= '<li>' . t('Configurable caching and performance optimization') . '</li>';
-      $output .= '</ul>';
+    $output .= '<h3>' . t('Features') . '</h3>';
+    $output .= '<ul>';
+    $output .= '<li>' . t('Native PostgreSQL full-text search') . '</li>';
+    $output .= '<li>' . t('Vector search using pgvector extension') . '</li>';
+    $output .= '<li>' . t('AI-powered embeddings integration') . '</li>';
+    $output .= '<li>' . t('Hybrid search combining traditional and semantic search') . '</li>';
+    $output .= '</ul>';
 
-      $output .= '<h3>' . t('Configuration') . '</h3>';
-      $output .= '<p>' . t('To configure a PostgreSQL search server:') . '</p>';
-      $output .= '<ol>';
-      $output .= '<li>' . t('Go to the <a href=":search_api">Search API configuration page</a>', [':search_api' => Url::fromRoute('entity.search_api_server.collection')->toString()]) . '</li>';
-      $output .= '<li>' . t('Add a new server and select "PostgreSQL" as the backend') . '</li>';
-      $output .= '<li>' . t('Configure database connection settings') . '</li>';
-      $output .= '<li>' . t('Optionally enable AI embeddings and vector search') . '</li>';
-      $output .= '</ol>';
+    $output .= '<h3>' . t('Requirements') . '</h3>';
+    $output .= '<ul>';
+    $output .= '<li>' . t('PostgreSQL 12 or higher') . '</li>';
+    $output .= '<li>' . t('pgvector extension (for vector search features)') . '</li>';
+    $output .= '<li>' . t('Key module (for secure API key storage)') . '</li>';
+    $output .= '</ul>';
 
-      $output .= '<h3>' . t('Requirements') . '</h3>';
-      $output .= '<ul>';
-      $output .= '<li>' . t('PostgreSQL 12 or higher') . '</li>';
-      $output .= '<li>' . t('pgvector extension (for vector search)') . '</li>';
-      $output .= '<li>' . t('Key module (for secure API key storage)') . '</li>';
-      $output .= '</ul>';
-
-      return $output;
-
-    case 'entity.search_api_server.canonical':
-      $server = $route_match->getParameter('search_api_server');
-      if ($server && $server->getBackend()->getPluginId() === 'postgresql') {
-        $output = '<p>' . t('This server uses the PostgreSQL backend with the following features:') . '</p>';
-        $output .= '<ul>';
-        $output .= '<li>' . t('Native PostgreSQL full-text search') . '</li>';
-        
-        $config = $server->getBackend()->getConfiguration();
-        if (!empty($config['ai_embeddings']['enabled'])) {
-          $output .= '<li>' . t('AI-powered vector search enabled') . '</li>';
-          if (!empty($config['hybrid_search']['enabled'])) {
-            $output .= '<li>' . t('Hybrid search combining text and vector search') . '</li>';
-          }
-        }
-        $output .= '</ul>';
-        
-        // Add link to server-specific administration
-        $server_admin_url = '/admin/config/search/search-api-postgresql/server/' . $server->id() . '/status';
-        $output .= '<p>' . t('<a href=":url">View detailed server status and analytics</a>', [
-          ':url' => $server_admin_url,
-        ]) . '</p>';
-        
-        return $output;
-      }
-      break;
+    return $output;
   }
 }
 

@@ -239,12 +239,6 @@ class PostgreSQLConnector {
   public function executeQuery($sql, array $params = []) {
     $start_time = microtime(true);
     
-    // Log the query being executed
-    $this->logger->info('PostgreSQL Query: @sql with params: @params', [
-      '@sql' => $sql,
-      '@params' => json_encode($params)
-    ]);
-    
     try {
       $connection = $this->connect();
       
