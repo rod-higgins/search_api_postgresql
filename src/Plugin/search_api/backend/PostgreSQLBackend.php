@@ -875,25 +875,180 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    * {@inheritdoc}
    */
   public function search(QueryInterface $query) {
-    // Check if this is an admin page stats query (empty keys)
-    $keys = $query->getOriginalKeys();
-    if (empty($keys) || $keys === '') {
-      // Return empty results for admin page statistics  
-      $results = $query->getResults();
-      $results->setResultCount(0);
-      return $results;
-    }
-    
-    // Normal search execution
     try {
       $this->ensureConnector();
-      return $this->connector->search($query);
+      
+      // Follow search_api_db pattern exactly
+      $index = $query->getIndex();
+      
+      // Get field information (like search_api_db does)
+      $fields = $this->getFieldInfo($index);
+      $fields['search_api_id'] = [
+        'column' => 'search_api_id',  // Our PostgreSQL table uses search_api_id
+      ];
+
+      // Create database query (like search_api_db does)
+      $db_query = $this->createDbQuery($query, $fields);
+      
+      // Get results object (like search_api_db)
+      $results = $query->getResults();
+
+      // Handle result count first (exactly like search_api_db)
+      $skip_count = $query->getOption('skip result count');
+      $count = NULL;
+      
+      if (!$skip_count) {
+        try {
+          $count_query = $db_query->countQuery();
+          $count = $count_query->execute()->fetchField();
+          $results->setResultCount($count);
+        } catch (\Exception $e) {
+          $this->logger->warning('Count query failed: @message', [
+            '@message' => $e->getMessage(),
+          ]);
+          // Continue without count - don't fail completely
+        }
+      }
+      
+      // Everything else can be skipped if the count is 0 (exactly like search_api_db)
+      if ($skip_count || $count) {
+        // Apply pagination (like search_api_db)
+        $query_options = $query->getOptions();
+        if (isset($query_options['offset']) || isset($query_options['limit'])) {
+          $offset = $query_options['offset'] ?? 0;
+          $limit = $query_options['limit'] ?? 1000000;
+          $db_query->range($offset, $limit);
+        }
+
+        // Apply sorting (like search_api_db)
+        $this->setQuerySort($query, $db_query, $fields);
+
+        // Execute query (like search_api_db)
+        $result = $db_query->execute();
+
+        $indexed_fields = $index->getFields(TRUE);
+        $retrieved_field_names = $query->getOption('search_api_retrieved_field_values', []);
+        
+        // Process results (like search_api_db)
+        $item = NULL; // Initialize for skip_count check
+        foreach ($result as $row) {
+          $item = $this->getFieldsHelper()->createItem($index, $row->search_api_id);
+          $item->setScore($row->search_api_relevance ?? 1.0);
+          $this->extractRetrievedFieldValuesWhereAvailable($row, $indexed_fields, $retrieved_field_names, $item);
+          $results->addResultItem($item);
+        }
+        
+        // Handle skip_count case (exactly like search_api_db)
+        if ($skip_count && !empty($item)) {
+          $results->setResultCount(1);
+        }
+      }
+      
+      return $results;
+      
+    } catch (\PDOException $e) {
+      // Follow search_api_db error handling pattern exactly
+      if ($query instanceof \Drupal\Core\Cache\RefinableCacheableDependencyInterface) {
+        $query->mergeCacheMaxAge(0);
+      }
+      throw new SearchApiException('A database exception occurred while searching.', $e->getCode(), $e);
     } catch (\Exception $e) {
-      $this->logger->error('Search failed for query @query: @error', [
-        '@query' => $query->getOriginalKeys(),
-        '@error' => $e->getMessage(),
+      $this->logger->error('Search execution failed: @message', [
+        '@message' => $e->getMessage(),
       ]);
-      throw new SearchApiException('Search failed: ' . $e->getMessage(), 0, $e);
+      throw new SearchApiException('Search execution failed: ' . $e->getMessage(), 0, $e);
+    }
+  }
+
+  /**
+   * Extract retrieved field values where available.
+   *
+   * @param array $row
+   *   The database row.
+   * @param array $indexed_fields
+   *   The indexed fields.
+   * @param array $retrieved_field_names
+   *   The retrieved field names.
+   * @param \Drupal\search_api\Item\ItemInterface $item
+   *   The item to populate.
+   */
+  protected function extractRetrievedFieldValuesWhereAvailable($row, array $indexed_fields, array $retrieved_field_names, $item) {
+    // Convert row array to object if needed (for consistency)
+    if (is_array($row)) {
+      $row = (object) $row;
+    }
+    
+    foreach ($indexed_fields as $field_id => $field) {
+      // Skip if field not in retrieved fields and retrieved fields are specified
+      if (!empty($retrieved_field_names) && !in_array($field_id, $retrieved_field_names)) {
+        continue;
+      }
+      
+      // Skip if field not in row
+      if (!isset($row->{$field_id})) {
+        continue;
+      }
+      
+      try {
+        $field_value = $this->processFieldValue($row->{$field_id}, $field->getType());
+        $item_field = $item->getField($field_id);
+        if ($item_field) {
+          $item_field->setValues([$field_value]);
+        }
+      } catch (\Exception $e) {
+        $this->logger->warning('Failed to set field @field on item @item: @error', [
+          '@field' => $field_id,
+          '@item' => $item->getId(),
+          '@error' => $e->getMessage(),
+        ]);
+      }
+    }
+  }
+
+  /**
+   * Get the fields helper service.
+   *
+   * @return \Drupal\search_api\Utility\FieldsHelperInterface
+   *   The fields helper.
+   */
+  public function getFieldsHelper() {
+    return \Drupal::service('search_api.fields_helper');
+  }
+
+  /**
+   * Process field value based on field type.
+   *
+   * @param mixed $value
+   *   The raw field value from database.
+   * @param string $field_type
+   *   The Search API field type.
+   *
+   * @return mixed
+   *   The processed field value.
+   */
+  protected function processFieldValue($value, $field_type) {
+    if ($value === NULL) {
+      return NULL;
+    }
+
+    switch ($field_type) {
+      case 'boolean':
+        return (bool) $value;
+
+      case 'date':
+        // Convert timestamp to ISO date string
+        return is_numeric($value) ? date('c', $value) : $value;
+
+      case 'decimal':
+        return (float) $value;
+
+      case 'integer':
+        return (int) $value;
+
+      case 'text':
+      case 'string':
+      default:
+        return (string) $value;
     }
   }
 
@@ -905,6 +1060,364 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    */
   public function getModuleHandler() {
     return $this->moduleHandler ?: \Drupal::moduleHandler();
+  }
+
+  /**
+   * Gets field information for an index.
+   *
+   * @param \Drupal\search_api\IndexInterface $index
+   *   The search index.
+   *
+   * @return array
+   *   Field information array.
+   */
+  protected function getFieldInfo(IndexInterface $index) {
+    $fields = [];
+    
+    foreach ($index->getFields() as $field_id => $field) {
+      $fields[$field_id] = [
+        'column' => $field_id,
+        'type' => $field->getType(),
+        'boost' => $field->getBoost(),
+      ];
+    }
+    
+    return $fields;
+  }
+
+  /**
+   * Creates a database query for the given Search API query (like search_api_db).
+   *
+   * @param \Drupal\search_api\Query\QueryInterface $query
+   *   The Search API query.
+   * @param array $fields
+   *   Field information.
+   *
+   * @return object
+   *   A query result object that mimics Drupal's SelectInterface.
+   */
+  protected function createDbQuery(QueryInterface $query, array $fields) {
+    // Build SQL query using our existing connector approach
+    // but return an object that search() can work with
+    
+    $index = $query->getIndex();
+    $table_name = $this->getIndexTableNameForManager($index);
+    
+    // Build SQL parts
+    $select_fields = ['search_api_id'];
+    foreach ($fields as $field_id => $field_info) {
+      if ($field_id !== 'search_api_id') {
+        $select_fields[] = $field_id;
+      }
+    }
+    
+    // Add relevance calculation
+    $keys = $query->getKeys();
+    if ($keys) {
+      $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
+      $fts_config = $this->configuration['fts_configuration'] ?? 'english';
+      $processed_keys = $this->processSearchKeys($search_text);
+      
+      $select_fields[] = "ts_rank(search_vector, to_tsquery('{$fts_config}', '{$processed_keys}')) AS search_api_relevance";
+      $where_clause = "search_vector @@ to_tsquery('{$fts_config}', '{$processed_keys}')";
+    } else {
+      $select_fields[] = "1.0 AS search_api_relevance";
+      $where_clause = "1=1";
+    }
+    
+    // Build base SQL
+    $sql = "SELECT " . implode(', ', $select_fields) . " FROM {$table_name} WHERE {$where_clause}";
+    
+    // Add conditions
+    $condition_sql = $this->buildConditionsFromQuery($query, $fields);
+    if ($condition_sql) {
+      $sql .= " AND " . $condition_sql;
+    }
+    
+    // Create a query object that mimics what search() expects
+    return new class($sql, $this->connector, $keys ? $processed_keys : NULL, $fts_config ?? 'english') {
+      private $sql;
+      private $connector;
+      private $searchKeys;
+      private $ftsConfig;
+      private $offset = 0;
+      private $limit = NULL;
+      private $orderBy = [];
+      
+      public function __construct($sql, $connector, $searchKeys, $ftsConfig) {
+        $this->sql = $sql;
+        $this->connector = $connector;
+        $this->searchKeys = $searchKeys;
+        $this->ftsConfig = $ftsConfig;
+      }
+      
+      public function countQuery() {
+        $count_sql = preg_replace('/^SELECT .+ FROM/', 'SELECT COUNT(*) FROM', $this->sql);
+        return new class($count_sql, $this->connector) {
+          private $sql;
+          private $connector;
+          
+          public function __construct($sql, $connector) {
+            $this->sql = $sql;
+            $this->connector = $connector;
+          }
+          
+          public function execute() {
+            $stmt = $this->connector->executeQuery($this->sql);
+            return new class($stmt) {
+              private $stmt;
+              public function __construct($stmt) { $this->stmt = $stmt; }
+              public function fetchField() { return $this->stmt->fetchColumn(); }
+            };
+          }
+        };
+      }
+      
+      public function range($offset, $limit) {
+        $this->offset = $offset;
+        $this->limit = $limit;
+        return $this;
+      }
+      
+      public function orderBy($field, $direction = 'ASC') {
+        $this->orderBy[] = "{$field} {$direction}";
+        return $this;
+      }
+      
+      public function execute() {
+        $final_sql = $this->sql;
+        
+        if (!empty($this->orderBy)) {
+          $final_sql .= " ORDER BY " . implode(', ', $this->orderBy);
+        }
+        
+        if ($this->limit !== NULL) {
+          $final_sql .= " LIMIT {$this->limit}";
+          if ($this->offset > 0) {
+            $final_sql .= " OFFSET {$this->offset}";
+          }
+        }
+        
+        $stmt = $this->connector->executeQuery($final_sql);
+        return $stmt->fetchAll(\PDO::FETCH_OBJ);
+      }
+    };
+  }
+
+  /**
+   * Builds conditions SQL from Search API query.
+   *
+   * @param \Drupal\search_api\Query\QueryInterface $query
+   *   The Search API query.
+   * @param array $fields
+   *   Field information.
+   *
+   * @return string|null
+   *   SQL condition string or NULL.
+   */
+  protected function buildConditionsFromQuery(QueryInterface $query, array $fields) {
+    $condition_group = $query->getConditionGroup();
+    return $this->buildConditionGroupSql($condition_group, $fields);
+  }
+
+  /**
+   * Builds SQL for a condition group.
+   *
+   * @param \Drupal\search_api\Query\ConditionGroupInterface $condition_group
+   *   The condition group.
+   * @param array $fields
+   *   Field information.
+   *
+   * @return string|null
+   *   SQL condition string or NULL.
+   */
+  protected function buildConditionGroupSql($condition_group, array $fields) {
+    $conditions = $condition_group->getConditions();
+    
+    if (empty($conditions)) {
+      return NULL;
+    }
+    
+    $conjunction = $condition_group->getConjunction();
+    $sql_conditions = [];
+    
+    foreach ($conditions as $condition) {
+      if ($condition instanceof \Drupal\search_api\Query\ConditionGroupInterface) {
+        $nested_sql = $this->buildConditionGroupSql($condition, $fields);
+        if ($nested_sql) {
+          $sql_conditions[] = "({$nested_sql})";
+        }
+      } else {
+        $field = $condition->getField();
+        $value = $condition->getValue();
+        $operator = $condition->getOperator();
+        
+        if (isset($fields[$field]) || in_array($field, ['search_api_id', 'search_api_datasource', 'search_api_language'])) {
+          $sql_conditions[] = $this->buildConditionSql($field, $value, $operator);
+        }
+      }
+    }
+    
+    if (empty($sql_conditions)) {
+      return NULL;
+    }
+    
+    $conjunction_sql = $conjunction === 'OR' ? ' OR ' : ' AND ';
+    return implode($conjunction_sql, $sql_conditions);
+  }
+
+  /**
+   * Builds SQL for a single condition.
+   *
+   * @param string $field
+   *   Field name.
+   * @param mixed $value
+   *   Field value.
+   * @param string $operator
+   *   Comparison operator.
+   *
+   * @return string
+   *   SQL condition string.
+   */
+  protected function buildConditionSql($field, $value, $operator) {
+    $quoted_field = $this->connector->quoteColumnName($field);
+    
+    switch ($operator) {
+      case '=':
+        return "{$quoted_field} = " . $this->quote($value);
+      
+      case '<>':
+      case '!=':
+        return "{$quoted_field} != " . $this->quote($value);
+      
+      case '<':
+        return "{$quoted_field} < " . $this->quote($value);
+      
+      case '<=':
+        return "{$quoted_field} <= " . $this->quote($value);
+      
+      case '>':
+        return "{$quoted_field} > " . $this->quote($value);
+      
+      case '>=':
+        return "{$quoted_field} >= " . $this->quote($value);
+      
+      case 'IN':
+        if (is_array($value) && !empty($value)) {
+          $quoted_values = array_map([$this, 'quote'], $value);
+          return "{$quoted_field} IN (" . implode(', ', $quoted_values) . ")";
+        }
+        return '1=0'; // Empty IN should match nothing
+      
+      case 'NOT IN':
+        if (is_array($value) && !empty($value)) {
+          $quoted_values = array_map([$this, 'quote'], $value);
+          return "{$quoted_field} NOT IN (" . implode(', ', $quoted_values) . ")";
+        }
+        return '1=1'; // Empty NOT IN should match everything
+      
+      case 'IS NULL':
+        return "{$quoted_field} IS NULL";
+      
+      case 'IS NOT NULL':
+        return "{$quoted_field} IS NOT NULL";
+      
+      default:
+        // Default to equality
+        return "{$quoted_field} = " . $this->quote($value);
+    }
+  }
+
+  /**
+   * Processes search keys for PostgreSQL tsquery.
+   *
+   * @param string $keys
+   *   The search keys.
+   *
+   * @return string
+   *   Processed search string for tsquery.
+   */
+  protected function processSearchKeys($keys) {
+    // Simple processing - escape special characters for tsquery
+    $processed = preg_replace('/[&|!():\'"<>]/', ' ', $keys);
+    $processed = preg_replace('/\s+/', ' & ', trim($processed));
+    return $processed;
+  }
+
+  /**
+   * Extracts text from complex search keys structure.
+   *
+   * @param mixed $keys
+   *   The search keys.
+   *
+   * @return string
+   *   The extracted text.
+   */
+  protected function extractTextFromKeys($keys) {
+    if (is_string($keys)) {
+      return $keys;
+    }
+
+    $text_parts = [];
+    foreach ($keys as $key => $value) {
+      if ($key === '#conjunction') {
+        continue;
+      }
+      
+      if (is_array($value)) {
+        $text_parts[] = $this->extractTextFromKeys($value);
+      } else {
+        $text_parts[] = $value;
+      }
+    }
+
+    return implode(' ', $text_parts);
+  }
+
+  /**
+   * Get Drupal database connection for query building.
+   */
+  protected function getDrupalConnection() {
+    // Use the same connection as our connector
+    return $this->connector->connect();
+  }
+
+  /**
+   * Add quote method to connector if needed.
+   */
+  protected function quote($value) {
+    if (method_exists($this->connector, 'quote')) {
+      return $this->connector->quote($value);
+    }
+    
+    // Fallback: use PDO quote method
+    $pdo = $this->connector->connect();
+    return $pdo->quote($value);
+  }
+
+  /**
+   * Sets the query sort (like search_api_db).
+   *
+   * @param \Drupal\search_api\Query\QueryInterface $query
+   *   The Search API query.
+   * @param object $db_query
+   *   The database query object.
+   * @param array $fields
+   *   Field information.
+   */
+  protected function setQuerySort(QueryInterface $query, $db_query, array $fields) {
+    $sorts = $query->getSorts();
+    
+    if (empty($sorts)) {
+      // Default sort by relevance if no sorts specified
+      $db_query->orderBy('search_api_relevance', 'DESC');
+      return;
+    }
+    
+    foreach ($sorts as $field => $order) {
+      $direction = strtoupper($order) === 'DESC' ? 'DESC' : 'ASC';
+      $db_query->orderBy($field, $direction);
+    }
   }
 
   /**
