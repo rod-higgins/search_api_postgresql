@@ -78,6 +78,20 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   protected static $supportCache = [];
 
   /**
+   * Array of warnings that occurred during the query.
+   *
+   * @var array
+   */
+  protected $warnings = [];
+
+  /**
+   * Array of ignored search keys.
+   *
+   * @var array  
+   */
+  protected $ignored = [];
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
@@ -875,8 +889,14 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    * {@inheritdoc}
    */
   public function search(QueryInterface $query) {
+    // Initialize warnings/ignored arrays like search_api_db does
+    $this->ignored = $this->warnings = [];
+    
     try {
       $this->ensureConnector();
+      
+      // Debug logging
+      $this->logger->debug('Starting search for index: @index', ['@index' => $query->getIndex()->id()]);
       
       // Follow search_api_db pattern exactly
       $index = $query->getIndex();
@@ -887,8 +907,14 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         'column' => 'search_api_id',  // Our PostgreSQL table uses search_api_id
       ];
 
+      $this->logger->debug('Fields: @fields', ['@fields' => print_r($fields, TRUE)]);
+
       // Create database query (like search_api_db does)
       $db_query = $this->createDbQuery($query, $fields);
+      
+      if (!$db_query) {
+        throw new SearchApiException('Failed to create database query');
+      }
       
       // Get results object (like search_api_db)
       $results = $query->getResults();
@@ -899,8 +925,10 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       
       if (!$skip_count) {
         try {
+          $this->logger->debug('Getting result count...');
           $count_query = $db_query->countQuery();
           $count = $count_query->execute()->fetchField();
+          $this->logger->debug('Result count: @count', ['@count' => $count]);
           $results->setResultCount($count);
         } catch (\Exception $e) {
           $this->logger->warning('Count query failed: @message', [
@@ -917,91 +945,127 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         if (isset($query_options['offset']) || isset($query_options['limit'])) {
           $offset = $query_options['offset'] ?? 0;
           $limit = $query_options['limit'] ?? 1000000;
+          $this->logger->debug('Applying pagination: offset=@offset, limit=@limit', [
+            '@offset' => $offset,
+            '@limit' => $limit
+          ]);
           $db_query->range($offset, $limit);
         }
 
-        // Apply sorting (like search_api_db)
+        // Apply sorting
         $this->setQuerySort($query, $db_query, $fields);
 
-        // Execute query (like search_api_db)
+        // Execute query and process results
+        $this->logger->debug('Executing main query...');
         $result = $db_query->execute();
+        
+        if (!$result) {
+          throw new SearchApiException('Query execution returned no results object');
+        }
 
         $indexed_fields = $index->getFields(TRUE);
         $retrieved_field_names = $query->getOption('search_api_retrieved_field_values', []);
         
-        // Process results (like search_api_db)
-        $item = NULL; // Initialize for skip_count check
+        $item_count = 0;
         foreach ($result as $row) {
-          $item = $this->getFieldsHelper()->createItem($index, $row->search_api_id);
-          $item->setScore($row->search_api_relevance ?? 1.0);
+          $item_count++;
+          
+          if (!$row || !isset($row->item_id)) {
+            $this->logger->warning('Invalid result row @count: @row', [
+              '@count' => $item_count,
+              '@row' => print_r($row, TRUE)
+            ]);
+            continue;
+          }
+          
+          $item = $this->getFieldsHelper()->createItem($index, $row->item_id);
+          $item->setScore($row->score / 1000); // Divide by 1000 like search_api_db
           $this->extractRetrievedFieldValuesWhereAvailable($row, $indexed_fields, $retrieved_field_names, $item);
           $results->addResultItem($item);
         }
         
-        // Handle skip_count case (exactly like search_api_db)
+        $this->logger->debug('Processed @count result items', ['@count' => $item_count]);
+        
         if ($skip_count && !empty($item)) {
           $results->setResultCount(1);
         }
       }
-      
-      return $results;
-      
-    } catch (\PDOException $e) {
-      // Follow search_api_db error handling pattern exactly
-      if ($query instanceof \Drupal\Core\Cache\RefinableCacheableDependencyInterface) {
-        $query->mergeCacheMaxAge(0);
-      }
-      throw new SearchApiException('A database exception occurred while searching.', $e->getCode(), $e);
     } catch (\Exception $e) {
-      $this->logger->error('Search execution failed: @message', [
-        '@message' => $e->getMessage(),
+      $this->logger->error('Failed to execute search on @index: @error', [
+        '@index' => $index->id() ?? 'unknown',
+        '@error' => $e->getMessage(),
       ]);
-      throw new SearchApiException('Search execution failed: ' . $e->getMessage(), 0, $e);
+      
+      // Log the full stack trace for debugging
+      $this->logger->error('Stack trace: @trace', ['@trace' => $e->getTraceAsString()]);
+      
+      throw new SearchApiException('Search failed: ' . $e->getMessage(), 0, $e);
+    }
+
+    // Add additional warnings and ignored keys (like search_api_db)
+    $metadata = [
+      'warnings' => 'addWarning',
+      'ignored' => 'addIgnoredSearchKey',
+    ];
+    foreach ($metadata as $property => $method) {
+      foreach (array_keys($this->$property) as $value) {
+        $results->$method($value);
+      }
+    }
+    
+    return $results;
+  }
+
+  /**
+   * Sets the query sort (adapted from search_api_db).
+   *
+   * @param \Drupal\search_api\Query\QueryInterface $query
+   *   The Search API query.
+   * @param object $db_query
+   *   The database query object.
+   * @param array $fields
+   *   Field information.
+   */
+  protected function setQuerySort(QueryInterface $query, $db_query, array $fields) {
+    $sort = $query->getSorts();
+    if (!$sort) {
+      // Default sort by relevance for searches with keys
+      if ($query->getKeys()) {
+        $db_query->orderBy('search_api_relevance', 'DESC');
+      }
+      return;
+    }
+
+    foreach ($sort as $field_id => $direction) {
+      $direction = strtoupper($direction);
+      
+      if ($field_id === 'search_api_relevance') {
+        $db_query->orderBy('search_api_relevance', $direction);
+      } elseif ($field_id === 'search_api_id') {
+        $db_query->orderBy('search_api_id', $direction);
+      } elseif (isset($fields[$field_id])) {
+        $db_query->orderBy($field_id, $direction);
+      }
     }
   }
 
   /**
-   * Extract retrieved field values where available.
-   *
-   * @param array $row
-   *   The database row.
-   * @param array $indexed_fields
-   *   The indexed fields.
-   * @param array $retrieved_field_names
-   *   The retrieved field names.
-   * @param \Drupal\search_api\Item\ItemInterface $item
-   *   The item to populate.
+   * Extracts retrieved field values where available (adapted from search_api_db).
    */
-  protected function extractRetrievedFieldValuesWhereAvailable($row, array $indexed_fields, array $retrieved_field_names, $item) {
-    // Convert row array to object if needed (for consistency)
-    if (is_array($row)) {
-      $row = (object) $row;
-    }
-    
-    foreach ($indexed_fields as $field_id => $field) {
-      // Skip if field not in retrieved fields and retrieved fields are specified
-      if (!empty($retrieved_field_names) && !in_array($field_id, $retrieved_field_names)) {
+  public function extractRetrievedFieldValuesWhereAvailable($result_row, array $indexed_fields, array $retrieved_fields, ItemInterface $item) {
+    foreach ($retrieved_fields as $retrieved_field_name) {
+      $retrieved_field_value = $result_row->{$retrieved_field_name} ?? NULL;
+      if (!isset($retrieved_field_value)) {
         continue;
       }
-      
-      // Skip if field not in row
-      if (!isset($row->{$field_id})) {
+
+      if (!array_key_exists($retrieved_field_name, $indexed_fields)) {
         continue;
       }
-      
-      try {
-        $field_value = $this->processFieldValue($row->{$field_id}, $field->getType());
-        $item_field = $item->getField($field_id);
-        if ($item_field) {
-          $item_field->setValues([$field_value]);
-        }
-      } catch (\Exception $e) {
-        $this->logger->warning('Failed to set field @field on item @item: @error', [
-          '@field' => $field_id,
-          '@item' => $item->getId(),
-          '@error' => $e->getMessage(),
-        ]);
-      }
+      $retrieved_field = clone $indexed_fields[$retrieved_field_name];
+
+      $retrieved_field->addValue($retrieved_field_value);
+      $item->setField($retrieved_field_name, $retrieved_field);
     }
   }
 
@@ -1086,122 +1150,482 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   }
 
   /**
-   * Creates a database query for the given Search API query (like search_api_db).
-   *
-   * @param \Drupal\search_api\Query\QueryInterface $query
-   *   The Search API query.
-   * @param array $fields
-   *   Field information.
-   *
-   * @return object
-   *   A query result object that mimics Drupal's SelectInterface.
-   */
-  protected function createDbQuery(QueryInterface $query, array $fields) {
-    // Build SQL query using our existing connector approach
-    // but return an object that search() can work with
+ * Creates a database query for the given Search API query (like search_api_db).
+ *
+ * @param \Drupal\search_api\Query\QueryInterface $query
+ *   The Search API query.
+ * @param array $fields
+ *   Field information.
+ *
+ * @return object
+ *   A query result object that mimics Drupal's SelectInterface.
+ */
+protected function createDbQuery(QueryInterface $query, array $fields) {
+  $index = $query->getIndex();
+  $table_name = $this->getIndexTableNameForManager($index);
+  
+  // Debug logging
+  $this->logger->debug('Creating query for table: @table', ['@table' => $table_name]);
+  
+  // Build SQL parts
+  $select_fields = ['search_api_id'];
+  foreach ($fields as $field_id => $field_info) {
+    if ($field_id !== 'search_api_id') {
+      $select_fields[] = $field_id;
+    }
+  }
+  
+  // Get and validate keys (like search_api_db does)
+  $keys = $query->getKeys();
+  $keys_set = (boolean) $keys;
+  
+  // Debug logging
+  $this->logger->debug('Search keys: @keys', ['@keys' => print_r($keys, TRUE)]);
+  
+  /// Process keys if they exist
+  if ($keys) {
+    $original_keys = $keys;
     
-    $index = $query->getIndex();
-    $table_name = $this->getIndexTableNameForManager($index);
+    $this->logger->debug('About to process keys inline: @keys', [
+      '@keys' => print_r($keys, TRUE)
+    ]);
     
-    // Build SQL parts
-    $select_fields = ['search_api_id'];
-    foreach ($fields as $field_id => $field_info) {
-      if ($field_id !== 'search_api_id') {
-        $select_fields[] = $field_id;
+    // Inline key preparation logic (same as prepareKeysForPostgreSQL but direct)
+    $processed_keys = NULL;
+    
+    if (is_scalar($keys)) {
+      $processed_keys = trim($keys) !== '' ? $keys : NULL;
+    } elseif ($keys && is_array($keys)) {
+      // Count actual search terms (non-metadata keys)
+      $search_terms = 0;
+      foreach ($keys as $key => $value) {
+        if ($key !== '#conjunction' && $key !== '#negation' && !empty($value)) {
+          $search_terms++;
+        }
+      }
+      
+      // Only set to NULL if we have no actual search terms
+      if ($search_terms > 0) {
+        $processed_keys = $keys;  // Keep original keys
       }
     }
     
-    // Add relevance calculation
-    $keys = $query->getKeys();
-    if ($keys) {
-      $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
-      $fts_config = $this->configuration['fts_configuration'] ?? 'english';
-      $processed_keys = $this->processSearchKeys($search_text);
+    $keys = $processed_keys;
+    
+    $this->logger->debug('Inline key processing: original=@original, processed=@processed', [
+      '@original' => print_r($original_keys, TRUE),
+      '@processed' => print_r($keys, TRUE)
+    ]);
+  } else {
+    $this->logger->debug('Keys is falsy: @keys', ['@keys' => print_r($keys, TRUE)]);
+  }
+  
+  $where_clauses = [];
+  $query_params = [];
+  
+  // Only create fulltext search if we have valid, meaningful keys
+  // This is the critical check that was missing!
+  $key_validation_result = $keys && (!is_array($keys) || count($keys) > 2 || (!isset($keys['#negation']) && count($keys) > 1));
+  $this->logger->debug('Key validation: keys_exist=@exist, validation_result=@result', [
+    '@exist' => $keys ? 'true' : 'false',
+    '@result' => $key_validation_result ? 'true' : 'false'
+  ]);
+  
+  if ($key_validation_result) {
+    // We have valid search keys - create fulltext search
+    $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
+    $processed_keys = $this->processSearchKeys($search_text);
+    
+    $this->logger->debug('Fulltext search: search_text=@text, processed_keys=@keys', [
+      '@text' => $search_text,
+      '@keys' => $processed_keys
+    ]);
+    
+    // Only proceed if processed keys are not empty
+    if (!empty(trim($processed_keys))) {
       
-      $select_fields[] = "ts_rank(search_vector, to_tsquery('{$fts_config}', '{$processed_keys}')) AS search_api_relevance";
-      $where_clause = "search_vector @@ to_tsquery('{$fts_config}', '{$processed_keys}')";
+      // Check server configuration for AI enablement
+      $ai_enabled = $this->isAiSearchEnabled();
+      
+      if ($ai_enabled) {
+        // Use AI-enhanced vector search
+        $fts_config = $this->configuration['fts_configuration'] ?? 'english';
+        $select_fields[] = "ts_rank(search_vector, to_tsquery(?, ?)) AS search_api_relevance";
+        $where_clauses[] = "search_vector @@ to_tsquery(?, ?)";
+        $query_params[] = $fts_config;
+        $query_params[] = $processed_keys;
+        $query_params[] = $fts_config;
+        $query_params[] = $processed_keys;
+        $has_fulltext = TRUE;
+        $this->logger->debug('Using AI-enhanced vector search with config=@config', ['@config' => $fts_config]);
+      } else {
+        // Use traditional PostgreSQL full-text search
+        $fts_config = $this->configuration['fts_configuration'] ?? 'english';
+        $text_search_sql = $this->buildPostgreSQLTextSearch($fields, $search_text, $fts_config);
+        $select_fields[] = "1.0 AS search_api_relevance";  // Could enhance with text ranking later
+        $where_clauses[] = $text_search_sql;
+        $has_fulltext = FALSE; // Not using AI vectors
+        $this->logger->debug('Using traditional PostgreSQL text search');
+      }
     } else {
+      // Empty processed keys - fall back to basic query
       $select_fields[] = "1.0 AS search_api_relevance";
-      $where_clause = "1=1";
+      $has_fulltext = FALSE;
+      $this->logger->debug('Processed keys were empty, falling back to basic query');
     }
+  } elseif ($keys_set) {
+    // Keys were set but invalid/empty - add warning like search_api_db does
+    $msg = $this->t('No valid search keys were present in the query.');
+    $this->warnings[(string) $msg] = 1;
+    // Fall back to basic query
+    $select_fields[] = "1.0 AS search_api_relevance";
+    $has_fulltext = FALSE;
+    $this->logger->debug('Keys were set but invalid, falling back to basic query');
+  } else {
+    // No keys at all - basic query
+    $select_fields[] = "1.0 AS search_api_relevance";
+    $has_fulltext = FALSE;
+    $this->logger->debug('No keys provided, using basic query');
+  }
+  
+  // Add conditions from query filters
+  $condition_sql = $this->buildConditionsFromQuery($query, $fields);
+  if ($condition_sql) {
+    $where_clauses[] = $condition_sql;
+  }
+  
+  // Build WHERE clause
+  $where_clause = !empty($where_clauses) ? implode(' AND ', $where_clauses) : '1=1';
+  
+  // Build base SQL
+  $base_sql = "SELECT " . implode(', ', $select_fields) . " FROM {$table_name} WHERE {$where_clause}";
+  
+  // Debug logging
+  $this->logger->debug('Generated SQL: @sql with params: @params', [
+    '@sql' => $base_sql,
+    '@params' => print_r($query_params, TRUE)
+  ]);
+  
+  // Validate connector before proceeding
+  if (!$this->connector) {
+    throw new \Drupal\search_api\SearchApiException('Database connector is not available');
+  }
+  
+  // Create a query object that mimics what search() expects
+  $connector = $this->connector;
+  $logger = $this->logger;
+  
+  return new class($base_sql, $query_params, $connector, $logger, $has_fulltext ?? FALSE) {
+    private $sql;
+    private $params;
+    private $connector;
+    private $logger;
+    private $hasFulltext;
+    private $offset = 0;
+    private $limit = NULL;
+    private $orderBy = [];
     
-    // Build base SQL
-    $sql = "SELECT " . implode(', ', $select_fields) . " FROM {$table_name} WHERE {$where_clause}";
-    
-    // Add conditions
-    $condition_sql = $this->buildConditionsFromQuery($query, $fields);
-    if ($condition_sql) {
-      $sql .= " AND " . $condition_sql;
-    }
-    
-    // Create a query object that mimics what search() expects
-    return new class($sql, $this->connector, $keys ? $processed_keys : NULL, $fts_config ?? 'english') {
-      private $sql;
-      private $connector;
-      private $searchKeys;
-      private $ftsConfig;
-      private $offset = 0;
-      private $limit = NULL;
-      private $orderBy = [];
+    public function __construct($sql, $params, $connector, $logger, $hasFulltext) {
+      $this->sql = $sql;
+      $this->params = $params;
+      $this->connector = $connector;
+      $this->logger = $logger;
+      $this->hasFulltext = $hasFulltext;
       
-      public function __construct($sql, $connector, $searchKeys, $ftsConfig) {
-        $this->sql = $sql;
-        $this->connector = $connector;
-        $this->searchKeys = $searchKeys;
-        $this->ftsConfig = $ftsConfig;
+      // Validate inputs
+      if (!$this->connector) {
+        throw new \Drupal\search_api\SearchApiException('Connector is null in query object');
+      }
+      if (empty($this->sql)) {
+        throw new \Drupal\search_api\SearchApiException('SQL is empty in query object');
+      }
+    }
+    
+    /**
+     * Creates a count query from this query.
+     */
+    public function countQuery() {
+      // Extract the FROM and WHERE parts for counting
+      $count_sql = preg_replace('/^SELECT .+ FROM/', 'SELECT COUNT(*) FROM', $this->sql);
+      
+      // For count queries, we need to adjust parameters since we're removing the SELECT part
+      // The original query might have parameters in both SELECT and WHERE clauses
+      // For fulltext queries, the SELECT has ts_rank(search_vector, to_tsquery(?, ?))
+      // and the WHERE has search_vector @@ to_tsquery(?, ?)
+      // The count query only needs the WHERE parameters
+      
+      $count_params = $this->params;
+      
+      // If this is a fulltext query, we need to remove the first 2 parameters 
+      // (which were used for ts_rank in the SELECT clause)
+      if ($this->hasFulltext && count($this->params) >= 4) {
+        // Remove the first 2 parameters (used by ts_rank)
+        $count_params = array_slice($this->params, 2);
       }
       
-      public function countQuery() {
-        $count_sql = preg_replace('/^SELECT .+ FROM/', 'SELECT COUNT(*) FROM', $this->sql);
-        return new class($count_sql, $this->connector) {
-          private $sql;
-          private $connector;
-          
-          public function __construct($sql, $connector) {
-            $this->sql = $sql;
-            $this->connector = $connector;
-          }
-          
-          public function execute() {
-            $stmt = $this->connector->executeQuery($this->sql);
-            return new class($stmt) {
+      return new class($count_sql, $count_params, $this->connector, $this->logger) {
+        private $sql;
+        private $params;
+        private $connector;
+        private $logger;
+        
+        public function __construct($sql, $params, $connector, $logger) {
+          $this->sql = $sql;
+          $this->params = $params;
+          $this->connector = $connector;
+          $this->logger = $logger;
+        }
+        
+        public function execute() {
+          try {
+            $this->logger->debug('Executing count query: @sql with params: @params', [
+              '@sql' => $this->sql,
+              '@params' => print_r($this->params, TRUE)
+            ]);
+            
+            $stmt = $this->connector->executeQuery($this->sql, $this->params);
+            
+            if (!$stmt) {
+              $this->logger->error('Count query execution returned null statement: @sql', ['@sql' => $this->sql]);
+              throw new \Drupal\search_api\SearchApiException('Count query execution failed: No statement returned');
+            }
+            
+            return new class($stmt, $this->logger) {
               private $stmt;
-              public function __construct($stmt) { $this->stmt = $stmt; }
-              public function fetchField() { return $this->stmt->fetchColumn(); }
+              private $logger;
+              
+              public function __construct($stmt, $logger) { 
+                $this->stmt = $stmt; 
+                $this->logger = $logger;
+              }
+              
+              public function fetchField() { 
+                if (!$this->stmt) {
+                  $this->logger->error('Statement is null when trying to fetchField');
+                  return 0;
+                }
+                try {
+                  $result = $this->stmt->fetchColumn();
+                  $this->logger->debug('Count result: @result', ['@result' => $result]);
+                  return $result !== FALSE ? (int)$result : 0;
+                } catch (\Exception $e) {
+                  $this->logger->error('Error fetching count: @error', ['@error' => $e->getMessage()]);
+                  return 0;
+                }
+              }
             };
+          } catch (\Exception $e) {
+            $this->logger->error('Count query failed: @message. SQL: @sql', [
+              '@message' => $e->getMessage(),
+              '@sql' => $this->sql
+            ]);
+            throw new \Drupal\search_api\SearchApiException('Count query failed: ' . $e->getMessage(), 0, $e);
           }
-        };
-      }
-      
-      public function range($offset, $limit) {
-        $this->offset = $offset;
-        $this->limit = $limit;
-        return $this;
-      }
-      
-      public function orderBy($field, $direction = 'ASC') {
-        $this->orderBy[] = "{$field} {$direction}";
-        return $this;
-      }
-      
-      public function execute() {
-        $final_sql = $this->sql;
+        }
+      };
+    }
+    
+    /**
+     * Adds a range (LIMIT/OFFSET) to the query.
+     */
+    public function range($start = NULL, $length = NULL) {
+      $this->offset = $start ?? 0;
+      $this->limit = $length;
+      return $this;
+    }
+    
+    /**
+     * Adds ordering to the query.
+     */
+    public function orderBy($field, $direction = 'ASC') {
+      $this->orderBy[] = "{$field} {$direction}";
+      return $this;
+    }
+    
+    /**
+     * Executes the query and returns results.
+     */
+    public function execute() {
+      try {
+        $sql = $this->sql;
         
+        // Add ORDER BY
         if (!empty($this->orderBy)) {
-          $final_sql .= " ORDER BY " . implode(', ', $this->orderBy);
+          $sql .= " ORDER BY " . implode(', ', $this->orderBy);
+        } elseif ($this->hasFulltext) {
+          // Default to relevance ordering for fulltext searches
+          $sql .= " ORDER BY search_api_relevance DESC";
         }
         
+        // Add LIMIT/OFFSET
         if ($this->limit !== NULL) {
-          $final_sql .= " LIMIT {$this->limit}";
-          if ($this->offset > 0) {
-            $final_sql .= " OFFSET {$this->offset}";
-          }
+          $sql .= " LIMIT " . (int)$this->limit;
+        }
+        if ($this->offset > 0) {
+          $sql .= " OFFSET " . (int)$this->offset;
         }
         
-        $stmt = $this->connector->executeQuery($final_sql);
-        return $stmt->fetchAll(\PDO::FETCH_OBJ);
+        $this->logger->debug('Executing main query: @sql with params: @params', [
+          '@sql' => $sql,
+          '@params' => print_r($this->params, TRUE)
+        ]);
+        
+        // Execute the query and validate the result
+        $stmt = $this->connector->executeQuery($sql, $this->params);
+        
+        if (!$stmt) {
+          $this->logger->error('Query execution returned null statement: @sql', ['@sql' => $sql]);
+          throw new \Drupal\search_api\SearchApiException('Query execution failed: No statement returned');
+        }
+        
+        $this->logger->debug('Statement created successfully, fetching results...');
+        
+        // Fetch all results and return an iterable object
+        $results = [];
+        $row_count = 0;
+        
+        try {
+          // Make sure we're using $stmt, not $this->stmt
+          while ($row = $stmt->fetch(\PDO::FETCH_ASSOC)) {
+            $row_count++;
+            
+            // Validate row data
+            if (!$row || !isset($row['search_api_id'])) {
+              $this->logger->warning('Invalid row data at row @count: @row', [
+                '@count' => $row_count,
+                '@row' => print_r($row, TRUE)
+              ]);
+              continue;
+            }
+            
+            // Convert to object with expected properties
+            $result_obj = new \stdClass();
+            $result_obj->item_id = $row['search_api_id'];
+            $result_obj->score = ($row['search_api_relevance'] ?? 1.0) * 1000; // Multiply by 1000 like search_api_db
+            
+            // Add other fields
+            foreach ($row as $key => $value) {
+              if ($key !== 'search_api_id' && $key !== 'search_api_relevance') {
+                $result_obj->$key = $value;
+              }
+            }
+            
+            $results[] = $result_obj;
+          }
+        } catch (\Exception $e) {
+          $this->logger->error('Error during result fetch: @error', ['@error' => $e->getMessage()]);
+          throw $e;
+        }
+        
+        $this->logger->debug('Query completed successfully. Found @count results', ['@count' => count($results)]);
+        
+        // Return an ArrayObject which is iterable and compatible with foreach
+        return new \ArrayObject($results);
+        
+      } catch (\Exception $e) {
+        $this->logger->error('Query execution failed: @message. SQL: @sql', [
+          '@message' => $e->getMessage(),
+          '@sql' => $sql ?? 'Unknown SQL'
+        ]);
+        throw new \Drupal\search_api\SearchApiException('Query execution failed: ' . $e->getMessage(), 0, $e);
       }
-    };
+    }
+  };
+}
+
+  /**
+ * Prepares search keys for PostgreSQL (similar to search_api_db prepareKeys).
+ */
+protected function prepareKeysForPostgreSQL($keys) {
+  try {
+    error_log('STEP 1: Method called with keys: ' . print_r($keys, TRUE));
+    
+    // Test 1: Check if keys is scalar
+    if (is_scalar($keys)) {
+      error_log('STEP 2A: Keys is scalar: ' . var_export($keys, TRUE));
+      $trimmed = trim($keys);
+      error_log('STEP 2B: After trim: ' . var_export($trimmed, TRUE));
+      $result = $trimmed !== '' ? $keys : NULL;
+      error_log('STEP 2C: Scalar result: ' . var_export($result, TRUE));
+      return $result;
+    }
+    
+    error_log('STEP 3: Keys is not scalar, checking if empty...');
+    
+    // Test 2: Check if keys is empty
+    if (!$keys) {
+      error_log('STEP 4: Keys is empty, returning NULL');
+      return NULL;
+    }
+    
+    error_log('STEP 5: Keys is not empty, checking if array...');
+    
+    // Test 3: Check if keys is array
+    if (is_array($keys)) {
+      error_log('STEP 6: Keys is array, starting to count search terms...');
+      
+      $search_terms = 0;
+      error_log('STEP 7: Initial search_terms count: ' . $search_terms);
+      
+      foreach ($keys as $key => $value) {
+        error_log('STEP 8: Processing key=' . var_export($key, TRUE) . ', value=' . var_export($value, TRUE));
+        
+        $is_conjunction = ($key === '#conjunction');
+        $is_negation = ($key === '#negation');
+        $is_empty = empty($value);
+        
+        error_log('STEP 9: is_conjunction=' . var_export($is_conjunction, TRUE) . 
+                  ', is_negation=' . var_export($is_negation, TRUE) . 
+                  ', is_empty=' . var_export($is_empty, TRUE));
+        
+        if ($key !== '#conjunction' && $key !== '#negation' && !empty($value)) {
+          $search_terms++;
+          error_log('STEP 10: Found valid search term! Count now: ' . $search_terms);
+        } else {
+          error_log('STEP 11: Skipping this key/value pair');
+        }
+      }
+      
+      error_log('STEP 12: Final search_terms count: ' . $search_terms);
+      
+      if ($search_terms === 0) {
+        error_log('STEP 13: No search terms found, returning NULL');
+        return NULL;
+      }
+      
+      error_log('STEP 14: Found search terms, returning original keys');
+    } else {
+      error_log('STEP 15: Keys is not an array, type is: ' . gettype($keys));
+    }
+    
+    error_log('STEP 16: About to return original keys: ' . print_r($keys, TRUE));
+    return $keys;
+    
+  } catch (\Exception $e) {
+    error_log('EXCEPTION in prepareKeysForPostgreSQL: ' . $e->getMessage());
+    error_log('Exception trace: ' . $e->getTraceAsString());
+    return NULL;
+  } catch (\Error $e) {
+    error_log('ERROR in prepareKeysForPostgreSQL: ' . $e->getMessage());
+    error_log('Error trace: ' . $e->getTraceAsString());
+    return NULL;
+  }
+}
+
+  /**
+   * Enhanced processSearchKeys with empty string validation.
+   */
+  protected function processSearchKeys($keys) {
+    if (empty($keys) || empty(trim($keys))) {
+      return '';
+    }
+    
+    // Simple processing - escape special characters for tsquery
+    $processed = preg_replace('/[&|!():\'"<>]/', ' ', $keys);
+    $processed = preg_replace('/\s+/', ' & ', trim($processed));
+    
+    // Final validation - ensure we have actual content
+    return trim($processed);
   }
 
   /**
@@ -1329,22 +1753,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   }
 
   /**
-   * Processes search keys for PostgreSQL tsquery.
-   *
-   * @param string $keys
-   *   The search keys.
-   *
-   * @return string
-   *   Processed search string for tsquery.
-   */
-  protected function processSearchKeys($keys) {
-    // Simple processing - escape special characters for tsquery
-    $processed = preg_replace('/[&|!():\'"<>]/', ' ', $keys);
-    $processed = preg_replace('/\s+/', ' & ', trim($processed));
-    return $processed;
-  }
-
-  /**
    * Extracts text from complex search keys structure.
    *
    * @param mixed $keys
@@ -1393,31 +1801,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     // Fallback: use PDO quote method
     $pdo = $this->connector->connect();
     return $pdo->quote($value);
-  }
-
-  /**
-   * Sets the query sort (like search_api_db).
-   *
-   * @param \Drupal\search_api\Query\QueryInterface $query
-   *   The Search API query.
-   * @param object $db_query
-   *   The database query object.
-   * @param array $fields
-   *   Field information.
-   */
-  protected function setQuerySort(QueryInterface $query, $db_query, array $fields) {
-    $sorts = $query->getSorts();
-    
-    if (empty($sorts)) {
-      // Default sort by relevance if no sorts specified
-      $db_query->orderBy('search_api_relevance', 'DESC');
-      return;
-    }
-    
-    foreach ($sorts as $field => $order) {
-      $direction = strtoupper($order) === 'DESC' ? 'DESC' : 'ASC';
-      $db_query->orderBy($field, $direction);
-    }
   }
 
   /**
@@ -1592,4 +1975,64 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     // Fallback: try to find it from the configuration
     return $this->configuration['server_id'] ?? 'default';
   }
+
+  /**
+   * Checks if AI search enhancements are enabled in the server configuration.
+   */
+  protected function isAiSearchEnabled() {
+    // Check various configuration keys that indicate AI is enabled
+    $ai_config_keys = [
+      'ai_embeddings.enabled',
+      'ai_embeddings.azure_ai.enabled', 
+      'azure_embedding.enabled',
+      'vector_search.enabled'
+    ];
+    
+    foreach ($ai_config_keys as $config_key) {
+      if (!empty($this->configuration[$config_key])) {
+        $this->logger->debug('AI search enabled via config key: @key', ['@key' => $config_key]);
+        return TRUE;
+      }
+    }
+    
+    // Also check nested configuration structures
+    if (!empty($this->configuration['ai_embeddings']['enabled']) ||
+        !empty($this->configuration['vector_search']['enabled']) ||
+        !empty($this->configuration['azure_embedding']['enabled'])) {
+      $this->logger->debug('AI search enabled via nested configuration');
+      return TRUE;
+    }
+    
+    $this->logger->debug('AI search not enabled in configuration');
+    return FALSE;
+  }
+
+  /**
+   * Builds traditional PostgreSQL full-text search using text fields.
+   */
+  protected function buildPostgreSQLTextSearch($fields, $search_text, $fts_config = 'english') {
+    $search_conditions = [];
+    
+    // Option 1: Use PostgreSQL built-in text search on individual fields
+    foreach ($fields as $field_id => $field_info) {
+      if (in_array($field_info['type'], ['text', 'string', 'postgresql_fulltext']) && $field_id !== 'search_api_id') {
+        // Use PostgreSQL's to_tsvector and to_tsquery for built-in text search
+        $search_conditions[] = "to_tsvector('{$fts_config}', COALESCE({$field_id}, '')) @@ plainto_tsquery('{$fts_config}', " . $this->quote($search_text) . ")";
+      }
+    }
+    
+    // Option 2: Fallback to ILIKE if no text fields found
+    if (empty($search_conditions)) {
+      $search_term = '%' . str_replace(['%', '_'], ['\%', '\_'], $search_text) . '%';
+      $search_conditions[] = "title ILIKE " . $this->quote($search_term);
+      $search_conditions[] = "processed ILIKE " . $this->quote($search_term);
+      $this->logger->debug('Falling back to ILIKE search');
+    }
+    
+    $result = '(' . implode(' OR ', $search_conditions) . ')';
+    $this->logger->debug('PostgreSQL text search SQL: @sql', ['@sql' => $result]);
+    
+    return $result;
+  }
+
 }
