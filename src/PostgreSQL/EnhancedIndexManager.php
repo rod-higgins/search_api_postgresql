@@ -42,11 +42,21 @@ class EnhancedIndexManager extends IndexManager {
   protected $serverId;
 
   /**
+   * The embedding service.
+   *
+   * @var \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface
+   */
+  protected $embeddingService;
+
+  /**
    * {@inheritdoc}
    */
   public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config, $embedding_service = NULL, $server_id = NULL) {
-    parent::__construct($connector, $field_mapper, $config, $embedding_service);
+    // Call parent with only the 3 parameters it expects
+    parent::__construct($connector, $field_mapper, $config);
     
+    // Handle embedding service in the enhanced version
+    $this->embeddingService = $embedding_service;
     $this->serverId = $server_id;
     $this->initializeQueueServices();
     $this->useQueueProcessing = $this->shouldUseQueueProcessing();

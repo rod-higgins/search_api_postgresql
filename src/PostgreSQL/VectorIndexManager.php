@@ -23,8 +23,10 @@ class VectorIndexManager extends IndexManager {
    * FIXED: Accept $configuration parameter and pass all 4 parameters to parent
    */
   public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $configuration, $embedding_service = NULL) {
-    // CRITICAL FIX: Pass all 4 parameters to parent constructor
-    parent::__construct($connector, $field_mapper, $configuration, $embedding_service);
+    // Call parent with only the 3 parameters it expects
+    parent::__construct($connector, $field_mapper, $configuration);
+    
+    // Handle embedding service in this enhanced version
     $this->embeddingService = $embedding_service;
   }
 

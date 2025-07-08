@@ -33,13 +33,6 @@ class IndexManager {
   protected $config;
 
   /**
-   * The embedding service.
-   *
-   * @var \Drupal\search_api_postgresql\PostgreSQL\EmbeddingService
-   */
-  protected $embeddingService;
-
-  /**
    * Constructs an IndexManager object.
    *
    * @param \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector $connector
@@ -48,14 +41,12 @@ class IndexManager {
    *   The field mapper.
    * @param array $config
    *   The backend configuration.
-   * @param \Drupal\search_api_postgresql\PostgreSQL\EmbeddingService $embedding_service
-   *   The embedding service (optional).
    */
-  public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config, EmbeddingService $embedding_service = NULL) {
+  public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config) {
     $this->connector = $connector;
     $this->fieldMapper = $field_mapper;
     $this->config = $config;
-    $this->embeddingService = $embedding_service;
+    // No embedding service for basic IndexManager
   }
 
   /**

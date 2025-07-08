@@ -5,6 +5,7 @@ admin:
       css/embedding-admin.css: {}
   js:
     js/embedding-admin.js: {}
+    js/search_api_postgresql_admin.js: {}
   dependencies:
     - core/jquery
     - core/drupal
