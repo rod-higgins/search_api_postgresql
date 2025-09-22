@@ -1,0 +1,37 @@
+name: search-api-postgresql
+type: drupal11
+docroot: web
+php_version: "8.3"
+webserver_type: nginx-fpm
+router_http_port: "80"
+router_https_port: "443"
+xdebug_enabled: false
+additional_hostnames: []
+additional_fqdns: []
+database:
+  type: postgres
+  version: "16"
+use_dns_when_possible: true
+composer_version: "2"
+
+# Performance settings for development
+performance_mode: none
+
+# Additional services
+services:
+  - redis
+
+# PHP configuration for Drupal development
+php_ini:
+  memory_limit: 512M
+  max_execution_time: 300
+  upload_max_filesize: 100M
+  post_max_size: 100M
+
+# Node.js for frontend development (if needed)
+nodejs_version: "18"
+
+# Hooks for automated setup
+hooks:
+  post-start:
+    - exec: "echo 'DDEV environment started. Run ddev setup-database to initialize PostgreSQL extensions.'"

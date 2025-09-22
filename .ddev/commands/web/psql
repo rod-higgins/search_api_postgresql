@@ -1,0 +1,11 @@
+#!/bin/bash
+
+## Description: Connect to PostgreSQL database
+## Usage: psql [arguments]
+## Example: "ddev psql" or "ddev psql -c 'SELECT version();'"
+
+if [ $# -eq 0 ]; then
+    psql -h db -U db -d db
+else
+    psql -h db -U db -d db "$@"
+fi

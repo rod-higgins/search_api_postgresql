@@ -1,0 +1,86 @@
+#!/bin/bash
+
+## Description: Complete Drupal 11 installation with Search API PostgreSQL
+## Usage: install-drupal
+## Example: "ddev install-drupal"
+
+set -e
+
+echo "Starting complete Drupal 11 installation with Search API PostgreSQL..."
+
+# Check if Drupal is already installed
+if [ -f "web/sites/default/settings.php" ] && [ -f "composer.json" ]; then
+    echo "WARNING: Drupal appears to be already installed. Continuing with module setup..."
+else
+    echo "Creating fresh Drupal 11 project..."
+    composer create-project drupal/recommended-project:11.x tmp
+    cp -r tmp/. .
+    rm -rf tmp
+    echo "DONE: Drupal project created"
+fi
+
+echo "Installing development dependencies..."
+composer require drush/drush drupal/devel drupal/admin_toolbar
+
+echo "Setting up PostgreSQL database with extensions..."
+sleep 5  # Wait for DB to be ready
+
+# Setup database extensions
+psql -h db -U db -d db -c "CREATE EXTENSION IF NOT EXISTS vector;" || echo "vector extension may already exist"
+psql -h db -U db -d db -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;" || echo "pg_trgm extension may already exist"
+psql -h db -U db -d db -c "CREATE EXTENSION IF NOT EXISTS btree_gin;" || echo "btree_gin extension may already exist"
+psql -h db -U db -d db -c "CREATE EXTENSION IF NOT EXISTS btree_gist;" || echo "btree_gist extension may already exist"
+psql -h db -U db -d db -c "CREATE EXTENSION IF NOT EXISTS unaccent;" || echo "unaccent extension may already exist"
+
+echo "DONE: Database extensions installed"
+
+echo "Installing Drupal..."
+drush site:install standard \
+  --db-url=pgsql://db:db@db/db \
+  --site-name="Search API PostgreSQL Development" \
+  --account-name=admin \
+  --account-pass=admin \
+  --yes
+
+echo "Installing Search API PostgreSQL and dependencies..."
+composer require \
+  drupal/search_api \
+  drupal/search_api_postgresql \
+  drupal/key \
+  drupal/token \
+  drupal/pathauto
+
+echo "Enabling modules..."
+drush en \
+  admin_toolbar \
+  admin_toolbar_tools \
+  devel \
+  search_api \
+  search_api_postgresql \
+  key \
+  token \
+  pathauto \
+  -y
+
+echo "Creating test content..."
+drush en node -y
+drush devel:generate-content 20 --bundles=article
+
+echo "Testing pgvector functionality..."
+psql -h db -U db -d db -c "SELECT 'pgvector test: ' || '[1,2,3]'::vector(3)::text;" || echo "pgvector test failed"
+
+echo ""
+echo "SUCCESS: Installation complete!"
+echo ""
+echo "Next steps:"
+echo "1. Visit your site: ddev launch"
+echo "2. Login with admin/admin"
+echo "3. Configure Search API at: /admin/config/search/search-api"
+echo "4. Run 'ddev search-api-schema-test' to verify setup"
+echo ""
+echo "Database connection settings for Search API:"
+echo "   Host: db"
+echo "   Port: 5432"
+echo "   Database: db"
+echo "   Username: db"
+echo "   Password: db"

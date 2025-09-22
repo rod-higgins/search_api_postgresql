@@ -1,0 +1,27 @@
+#!/bin/bash
+
+## Description: Comprehensive pgvector functionality test
+## Usage: pgvector-test
+## Example: "ddev pgvector-test"
+
+echo "=== Comprehensive pgvector Test Suite ==="
+echo ""
+
+echo "1. Extension Status:"
+psql -h db -U db -d db -c "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN 'INSTALLED' ELSE 'NOT INSTALLED' END as vector_extension_status;" 2>&1
+echo ""
+
+echo "2. Vector Type Test:"
+psql -h db -U db -d db -c "SELECT '[1,2,3]'::vector as simple_vector;" 2>&1
+echo ""
+
+echo "3. Table Creation Test:"
+psql -h db -U db -d db -c "CREATE TEMP TABLE vector_test (id int, embedding vector(3)); INSERT INTO vector_test VALUES (1, '[1,2,3]'), (2, '[4,5,6]'); SELECT * FROM vector_test;" 2>&1
+echo ""
+
+echo "4. Distance Operations Test:"
+psql -h db -U db -d db -c "SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector as cosine_distance, '[1,2,3]'::vector <#> '[4,5,6]'::vector as negative_inner_product;" 2>&1
+echo ""
+
+echo "5. Large Vector Test (OpenAI embedding size):"
+psql -h db -U db -d db -c "CREATE TEMP TABLE large_vector_test (id int, embedding vector(1536)); INSERT INTO large_vector_test VALUES (1, array_fill(0.1, ARRAY[1536])::vector); SELECT 'Large vector test: ' || char_length(embedding::text) || ' characters' as result FROM large_vector_test;" 2>&1

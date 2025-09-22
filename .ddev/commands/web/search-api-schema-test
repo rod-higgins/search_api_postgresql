@@ -1,0 +1,33 @@
+#!/bin/bash
+
+## Description: Test exact Search API table structure with pgvector
+## Usage: search-api-schema-test
+## Example: "ddev search-api-schema-test"
+
+echo "=== Search API Schema Test ==="
+echo ""
+echo "Testing exact Search API table structure..."
+
+psql -h db -U db -d db -c "
+DROP TABLE IF EXISTS search_api_test_table;
+CREATE TABLE search_api_test_table (
+  search_api_id VARCHAR(255) PRIMARY KEY,
+  search_api_datasource VARCHAR(255) NOT NULL,
+  search_api_language VARCHAR(12) NOT NULL DEFAULT '',
+  embedding_vector VECTOR(1536),
+  search_vector TSVECTOR
+);
+
+INSERT INTO search_api_test_table (search_api_id, search_api_datasource, search_api_language, embedding_vector, search_vector)
+VALUES (
+  'node/1',
+  'entity:node',
+  'en',
+  array_fill(0.1, ARRAY[1536])::vector,
+  to_tsvector('english', 'test document content')
+);
+
+SELECT 'SUCCESS: Search API table created and populated' as result, search_api_id, search_api_datasource FROM search_api_test_table;
+
+DROP TABLE search_api_test_table;
+" 2>&1

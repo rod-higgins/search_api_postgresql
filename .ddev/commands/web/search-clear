@@ -1,0 +1,7 @@
+#!/bin/bash
+
+## Description: Clear Search API indexes
+## Usage: search-clear
+## Example: "ddev search-clear"
+
+drush search-api:clear

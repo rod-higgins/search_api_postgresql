@@ -1,0 +1,7 @@
+#!/bin/bash
+
+## Description: Show Search API indexing status
+## Usage: search-status
+## Example: "ddev search-status"
+
+drush search-api:status

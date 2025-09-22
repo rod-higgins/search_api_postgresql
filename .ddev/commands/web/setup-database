@@ -1,0 +1,27 @@
+#!/bin/bash
+
+## Description: Setup PostgreSQL database with pgvector extensions
+## Usage: setup-database
+## Example: "ddev setup-database"
+
+set -e
+
+echo "Setting up PostgreSQL database with pgvector extensions..."
+
+# Wait for PostgreSQL to be ready
+echo "Waiting for PostgreSQL to be ready..."
+sleep 5
+
+# Create extensions in order
+echo "Creating PostgreSQL extensions..."
+psql -h db -U db -d db -c "CREATE EXTENSION IF NOT EXISTS vector;" || echo "vector extension failed"
+psql -h db -U db -d db -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;" || echo "pg_trgm extension failed"
+psql -h db -U db -d db -c "CREATE EXTENSION IF NOT EXISTS btree_gin;" || echo "btree_gin extension failed"
+psql -h db -U db -d db -c "CREATE EXTENSION IF NOT EXISTS btree_gist;" || echo "btree_gist extension failed"
+psql -h db -U db -d db -c "CREATE EXTENSION IF NOT EXISTS unaccent;" || echo "unaccent extension failed"
+
+# Test vector functionality
+echo "Testing pgvector functionality..."
+psql -h db -U db -d db -c "SELECT 'pgvector test: ' || '[1,2,3]'::vector(3)::text;" || echo "pgvector test failed"
+
+echo "Database setup complete!"

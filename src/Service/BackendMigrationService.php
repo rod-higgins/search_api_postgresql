@@ -126,7 +126,7 @@ class BackendMigrationService {
     // Check for gained features.
     $gained_features = array_diff($to_info['features'], $from_info['features']);
     if (!empty($gained_features)) {
-      $warnings[] = $this->t('✅ New features available: @features', [
+      $warnings[] = $this->t('New features available: @features', [
         '@features' => implode(', ', $gained_features),
       ]);
     }

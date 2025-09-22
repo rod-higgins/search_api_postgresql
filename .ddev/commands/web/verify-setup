@@ -1,0 +1,93 @@
+#!/bin/bash
+
+## Description: Verify complete DDEV setup for Search API PostgreSQL
+## Usage: verify-setup
+## Example: "ddev verify-setup"
+
+set -e
+
+echo "Verifying DDEV setup for Search API PostgreSQL..."
+echo ""
+
+# Check Drupal installation
+echo "1. Checking Drupal installation..."
+if [ -f "web/sites/default/settings.php" ]; then
+    echo "   PASS: Drupal appears to be installed"
+    drush status --field=drupal-version 2>/dev/null || echo "   WARNING: Drush not available or Drupal not fully installed"
+else
+    echo "   FAIL: Drupal not found. Run 'ddev install-drupal'"
+    exit 1
+fi
+
+echo ""
+echo "2. Checking PostgreSQL connection..."
+if psql -h db -U db -d db -c "SELECT 1;" > /dev/null 2>&1; then
+    echo "   PASS: PostgreSQL connection successful"
+    psql -h db -U db -d db -c "SELECT version();" | head -1
+else
+    echo "   FAIL: PostgreSQL connection failed"
+    exit 1
+fi
+
+echo ""
+echo "3. Checking pgvector extension..."
+if psql -h db -U db -d db -c "SELECT extname FROM pg_extension WHERE extname = 'vector';" | grep -q vector; then
+    echo "   PASS: pgvector extension installed"
+    psql -h db -U db -d db -c "SELECT '[1,2,3]'::vector(3);" > /dev/null 2>&1 && echo "   PASS: pgvector functionality confirmed"
+else
+    echo "   FAIL: pgvector extension not found. Run 'ddev setup-database'"
+fi
+
+echo ""
+echo "4. Checking required extensions..."
+for ext in pg_trgm btree_gin btree_gist unaccent; do
+    if psql -h db -U db -d db -c "SELECT extname FROM pg_extension WHERE extname = '$ext';" | grep -q $ext; then
+        echo "   PASS: $ext extension installed"
+    else
+        echo "   WARNING: $ext extension not found"
+    fi
+done
+
+echo ""
+echo "5. Checking Drupal modules..."
+if command -v drush > /dev/null 2>&1; then
+    for module in search_api search_api_postgresql key; do
+        if drush pml --status=enabled --no-core | grep -q $module; then
+            echo "   PASS: $module module enabled"
+        else
+            echo "   WARNING: $module module not enabled"
+        fi
+    done
+else
+    echo "   WARNING: Drush not available, cannot check module status"
+fi
+
+echo ""
+echo "6. Checking Redis service..."
+if redis-cli -h redis ping > /dev/null 2>&1; then
+    echo "   PASS: Redis service available"
+else
+    echo "   WARNING: Redis service not responding"
+fi
+
+echo ""
+echo "7. Performance check..."
+psql -h db -U db -d db -c "
+SELECT
+    'Database Size: ' || pg_size_pretty(pg_database_size('db')) as info
+UNION ALL
+SELECT
+    'Active Connections: ' || count(*)::text
+FROM pg_stat_activity
+WHERE state = 'active';
+"
+
+echo ""
+echo "Setup Summary:"
+echo "   Site URL: $(ddev describe | grep -i 'primary url' | awk '{print $3}' 2>/dev/null || echo 'Run ddev launch')"
+echo "   Database: PostgreSQL 16 with pgvector"
+echo "   Cache: Redis"
+echo "   Admin URL: /admin (admin/admin)"
+echo "   Search API Config: /admin/config/search/search-api"
+echo ""
+echo "Ready for Search API PostgreSQL development!"

@@ -1,0 +1,9 @@
+#!/bin/bash
+
+## Description: Reset and reindex Search API content
+## Usage: search-reindex
+## Example: "ddev search-reindex"
+
+echo "Resetting Search API tracker and reindexing..."
+drush search-api:reset-tracker
+drush search-api:index

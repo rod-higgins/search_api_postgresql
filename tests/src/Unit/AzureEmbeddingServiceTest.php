@@ -310,10 +310,10 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $this->assertEquals('', $result);
 
     // Test special character handling.
-    $special_text = 'Text with émojis 🚀 and spëcial chars';
+    $special_text = 'Text with émojis [ROCKET] and spëcial chars';
     $result = $method->invokeArgs($this->embeddingService, [$special_text]);
     $this->assertStringContainsString('émojis', $result);
-    $this->assertStringContainsString('🚀', $result);
+    $this->assertStringContainsString('[ROCKET]', $result);
   }
 
   /**

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+## Description: Show PostgreSQL extensions (available and installed)
+## Usage: pg-extensions
+## Example: "ddev pg-extensions"
+
+echo "=== Available Extensions ==="
+psql -h db -U db -d db -c "SELECT name, default_version, comment FROM pg_available_extensions WHERE name LIKE '%vector%' OR name LIKE '%trgm%' OR name LIKE '%gin%' OR name LIKE '%gist%' ORDER BY name;"
+
+echo ""
+echo "=== Installed Extensions ==="
+psql -h db -U db -d db -c "SELECT extname, extversion, extrelocatable, extnamespace::regnamespace AS schema FROM pg_extension ORDER BY extname;"
