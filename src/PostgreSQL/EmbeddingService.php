@@ -55,24 +55,24 @@ class EmbeddingService {
    *   The full backend configuration including AI embeddings settings.
    */
   public function __construct(array $config) {
-    // Extract Azure AI configuration from the full config
+    // Extract Azure AI configuration from the full config.
     $this->config = $config['azure_ai'] ?? $config;
-    
-    // Extract API key from config
+
+    // Extract API key from config.
     $this->apiKey = $this->config['api_key'] ?? '';
-    
-    // Create a simple logger if not injected
+
+    // Create a simple logger if not injected.
     $this->logger = \Drupal::logger('search_api_postgresql');
-    
-    // Initialize HTTP client with Azure AI settings
+
+    // Initialize HTTP client with Azure AI settings.
     $headers = [
       'Content-Type' => 'application/json',
     ];
-    
+
     if (!empty($this->apiKey)) {
       $headers['api-key'] = $this->apiKey;
     }
-    
+
     $this->httpClient = new Client([
       'timeout' => $this->config['timeout'] ?? 30,
       'headers' => $headers,
@@ -107,7 +107,7 @@ class EmbeddingService {
    */
   public function setApiKey($api_key) {
     $this->apiKey = $api_key;
-    // Update HTTP client headers
+    // Update HTTP client headers.
     $this->httpClient = new Client([
       'timeout' => $this->config['timeout'] ?? 30,
       'headers' => [
@@ -130,7 +130,8 @@ class EmbeddingService {
    *   If embedding generation fails.
    */
   public function generateEmbeddings($texts) {
-    // Handle single text input
+
+    // Handle single text input.
     $single_input = FALSE;
     if (is_string($texts)) {
       $texts = [$texts];
@@ -141,7 +142,7 @@ class EmbeddingService {
       return [];
     }
 
-    // Check cache first if available
+    // Check cache first if available.
     $uncached_texts = [];
     $cached_embeddings = [];
     $text_indices = [];
@@ -163,12 +164,12 @@ class EmbeddingService {
       $text_indices = array_keys($texts);
     }
 
-    // Generate embeddings for uncached texts
+    // Generate embeddings for uncached texts.
     $new_embeddings = [];
     if (!empty($uncached_texts)) {
       $new_embeddings = $this->callAzureApi($uncached_texts);
-      
-      // Cache the new embeddings
+
+      // Cache the new embeddings.
       if ($this->cacheManager) {
         foreach ($new_embeddings as $i => $embedding) {
           $this->cacheManager->set($uncached_texts[$i], $embedding);
@@ -176,10 +177,10 @@ class EmbeddingService {
       }
     }
 
-    // Combine cached and new embeddings in correct order
+    // Combine cached and new embeddings in correct order.
     $all_embeddings = [];
     $new_embedding_index = 0;
-    
+
     foreach ($texts as $index => $text) {
       if (isset($cached_embeddings[$index])) {
         $all_embeddings[] = $cached_embeddings[$index];
@@ -189,7 +190,7 @@ class EmbeddingService {
       }
     }
 
-    // Return single embedding if input was single text
+    // Return single embedding if input was single text.
     return $single_input ? $all_embeddings[0] : $all_embeddings;
   }
 
@@ -230,7 +231,7 @@ class EmbeddingService {
       throw new SearchApiException('Azure AI API key not configured.');
     }
 
-    // Batch texts if needed
+    // Batch texts if needed.
     $batch_size = $this->config['batch_size'] ?? 16;
     $all_embeddings = [];
 
@@ -239,9 +240,9 @@ class EmbeddingService {
         $endpoint = rtrim($this->config['endpoint'], '/');
         $deployment = $this->config['deployment_name'] ?? 'text-embedding-ada-002';
         $api_version = $this->config['api_version'] ?? '2024-02-01';
-        
+
         $url = "{$endpoint}/openai/deployments/{$deployment}/embeddings?api-version={$api_version}";
-        
+
         $response = $this->httpClient->post($url, [
           'json' => [
             'input' => $batch,
@@ -254,19 +255,19 @@ class EmbeddingService {
         ]);
 
         $data = json_decode($response->getBody()->getContents(), TRUE);
-        
+
         if (!isset($data['data'])) {
           throw new SearchApiException('Invalid response from Azure AI API.');
         }
 
-        // Extract embeddings from response
+        // Extract embeddings from response.
         foreach ($data['data'] as $item) {
           $all_embeddings[] = $item['embedding'];
         }
       }
       catch (RequestException $e) {
         $error_message = 'Azure AI API request failed: ' . $e->getMessage();
-        
+
         if ($e->hasResponse()) {
           $error_body = $e->getResponse()->getBody()->getContents();
           $error_data = json_decode($error_body, TRUE);
@@ -274,7 +275,7 @@ class EmbeddingService {
             $error_message .= ' - ' . $error_data['error']['message'];
           }
         }
-        
+
         $this->logger->error($error_message);
         throw new SearchApiException($error_message, $e->getCode(), $e);
       }
@@ -285,10 +286,11 @@ class EmbeddingService {
         throw new SearchApiException('Failed to generate embeddings: ' . $e->getMessage(), $e->getCode(), $e);
       }
 
-      // Add delay between batches to respect rate limits
+      // Add delay between batches to respect rate limits.
       if (count($texts) > $batch_size) {
         $delay = $this->config['retry_delay'] ?? 1000;
-        usleep($delay * 1000); // Convert to microseconds
+        // Convert to microseconds.
+        usleep($delay * 1000);
       }
     }
 
@@ -317,7 +319,7 @@ class EmbeddingService {
       throw new SearchApiException('Azure AI deployment name is required.');
     }
 
-    // Test the connection
+    // Test the connection.
     try {
       $test_embedding = $this->generateEmbedding('test');
       if (!is_array($test_embedding) || empty($test_embedding)) {
@@ -338,14 +340,14 @@ class EmbeddingService {
    *   The number of dimensions.
    */
   public function getEmbeddingDimensions() {
-    // Use configured dimensions if available
+    // Use configured dimensions if available.
     if (!empty($this->config['dimensions'])) {
       return (int) $this->config['dimensions'];
     }
 
-    // Default dimensions based on model
+    // Default dimensions based on model.
     $model = $this->config['model'] ?? 'text-embedding-ada-002';
-    
+
     $model_dimensions = [
       'text-embedding-ada-002' => 1536,
       'text-embedding-3-small' => 1536,
@@ -354,4 +356,5 @@ class EmbeddingService {
 
     return $model_dimensions[$model] ?? 1536;
   }
+
 }

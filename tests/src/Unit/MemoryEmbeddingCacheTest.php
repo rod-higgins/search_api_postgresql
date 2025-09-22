@@ -42,7 +42,7 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
     parent::setUp();
 
     $this->logger = $this->createMock(LoggerInterface::class);
-    
+
     $this->config = [
       'default_ttl' => 3600,
       'max_entries' => 100,
@@ -59,7 +59,7 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
    */
   public function testCacheMiss() {
     $hash = str_repeat('a', 64);
-    
+
     $result = $this->cache->get($hash);
     $this->assertNull($result);
   }
@@ -74,11 +74,11 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
-    // Test set
+    // Test set.
     $result = $this->cache->set($hash, $embedding);
     $this->assertTrue($result);
 
-    // Test get
+    // Test get.
     $cached_embedding = $this->cache->get($hash);
     $this->assertEquals($embedding, $cached_embedding);
   }
@@ -93,14 +93,14 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
-    // Set with very short TTL
+    // Set with very short TTL.
     $result = $this->cache->set($hash, $embedding, 1);
     $this->assertTrue($result);
 
-    // Simulate time passing
+    // Simulate time passing.
     sleep(2);
 
-    // Should return null for expired entry
+    // Should return null for expired entry.
     $cached_embedding = $this->cache->get($hash);
     $this->assertNull($cached_embedding);
   }
@@ -119,7 +119,7 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
     $result = $this->cache->set($hash, $embedding, 0);
     $this->assertTrue($result);
 
-    // Should return the embedding
+    // Should return the embedding.
     $cached_embedding = $this->cache->get($hash);
     $this->assertEquals($embedding, $cached_embedding);
   }
@@ -134,14 +134,14 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
-    // Set entry
+    // Set entry.
     $this->cache->set($hash, $embedding);
 
-    // Invalidate
+    // Invalidate.
     $result = $this->cache->invalidate($hash);
     $this->assertTrue($result);
 
-    // Should be null after invalidation
+    // Should be null after invalidation.
     $cached_embedding = $this->cache->get($hash);
     $this->assertNull($cached_embedding);
   }
@@ -153,7 +153,7 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
    */
   public function testInvalidateNonExistent() {
     $hash = str_repeat('a', 64);
-    
+
     $result = $this->cache->invalidate($hash);
     $this->assertFalse($result);
   }
@@ -171,7 +171,7 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
       str_repeat('c', 64) => [7.0, 8.0, 9.0],
     ];
 
-    // Set entries
+    // Set entries.
     foreach ($entries as $hash => $embedding) {
       $this->cache->set($hash, $embedding);
     }
@@ -180,7 +180,8 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
     $hashes = [
       str_repeat('a', 64),
       str_repeat('b', 64),
-      str_repeat('d', 64), // This one doesn't exist
+    // This one doesn't exist.
+      str_repeat('d', 64),
     ];
 
     $result = $this->cache->getMultiple($hashes);
@@ -206,7 +207,7 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
     $result = $this->cache->setMultiple($items);
     $this->assertTrue($result);
 
-    // Verify entries were set
+    // Verify entries were set.
     foreach ($items as $hash => $embedding) {
       $cached_embedding = $this->cache->get($hash);
       $this->assertEquals($embedding, $cached_embedding);
@@ -224,15 +225,15 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
-    // Set entry
+    // Set entry.
     $this->cache->set($hash, $embedding);
     $this->assertEquals($embedding, $this->cache->get($hash));
 
-    // Clear cache
+    // Clear cache.
     $result = $this->cache->clear();
     $this->assertTrue($result);
 
-    // Entry should be gone
+    // Entry should be gone.
     $cached_embedding = $this->cache->get($hash);
     $this->assertNull($cached_embedding);
   }
@@ -250,14 +251,15 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
     $embedding1 = [1.0, 2.0, 3.0];
     $embedding2 = [4.0, 5.0, 6.0];
 
-    // Set some entries
+    // Set some entries.
     $this->cache->set($hash1, $embedding1);
     $this->cache->set($hash2, $embedding2);
 
-    // Access them to generate hits
+    // Access them to generate hits.
     $this->cache->get($hash1);
     $this->cache->get($hash2);
-    $this->cache->get(str_repeat('c', 64)); // This will be a miss
+    // This will be a miss.
+    $this->cache->get(str_repeat('c', 64));
 
     $stats = $this->cache->getStats();
 
@@ -267,7 +269,8 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
     $this->assertEquals(2, $stats['sets']);
     $this->assertEquals(2, $stats['total_entries']);
     $this->assertArrayHasKey('hit_rate', $stats);
-    $this->assertEquals(66.67, $stats['hit_rate']); // 2 hits out of 3 total
+    // 2 hits out of 3 total
+    $this->assertEquals(66.67, $stats['hit_rate']);
   }
 
   /**
@@ -277,18 +280,19 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
    * @covers ::performCleanup
    */
   public function testCacheCleanupOnMaxEntries() {
-    // Set config with very low max entries
+    // Set config with very low max entries.
     $cache = new MemoryEmbeddingCache($this->logger, [
       'default_ttl' => 3600,
       'max_entries' => 2,
-      'cleanup_threshold' => 0.5, // Cleanup when 50% full (1 entry)
+    // Cleanup when 50% full (1 entry)
+      'cleanup_threshold' => 0.5,
     ]);
 
-    // Add entries up to the cleanup threshold
+    // Add entries up to the cleanup threshold.
     $cache->set(str_repeat('a', 64), [1.0]);
     $cache->set(str_repeat('b', 64), [2.0]);
 
-    // This should trigger cleanup
+    // This should trigger cleanup.
     $cache->set(str_repeat('c', 64), [3.0]);
 
     $stats = $cache->getStats();
@@ -302,18 +306,18 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
    * @covers ::set
    */
   public function testCacheMaintenance() {
-    // Add some entries with short TTL
+    // Add some entries with short TTL.
     $this->cache->set(str_repeat('a', 64), [1.0], 1);
     $this->cache->set(str_repeat('b', 64), [2.0], 3600);
 
-    // Wait for expiration
+    // Wait for expiration.
     sleep(2);
 
-    // Run maintenance
+    // Run maintenance.
     $result = $this->cache->maintenance();
     $this->assertTrue($result);
 
-    // Check that expired entry is cleaned up
+    // Check that expired entry is cleaned up.
     $this->assertNull($this->cache->get(str_repeat('a', 64)));
     $this->assertNotNull($this->cache->get(str_repeat('b', 64)));
   }
@@ -324,13 +328,13 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
   public function testHashValidation() {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Invalid hash format');
-    
-    // Use reflection to test protected method
+
+    // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateHash');
     $method->setAccessible(TRUE);
-    
-    // Test with invalid hash
+
+    // Test with invalid hash.
     $method->invokeArgs($this->cache, ['invalid_hash']);
   }
 
@@ -340,13 +344,13 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
   public function testEmbeddingValidation() {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Embedding cannot be empty');
-    
-    // Use reflection to test protected method
+
+    // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateEmbedding');
     $method->setAccessible(TRUE);
-    
-    // Test with empty embedding
+
+    // Test with empty embedding.
     $method->invokeArgs($this->cache, [[]]);
   }
 
@@ -360,12 +364,12 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
    * @covers ::setMultiple
    */
   public function testEmptyInputHandling() {
-    // Test empty hash
+    // Test empty hash.
     $this->assertNull($this->cache->get(''));
     $this->assertFalse($this->cache->set('', [1.0]));
     $this->assertFalse($this->cache->invalidate(''));
 
-    // Test empty arrays
+    // Test empty arrays.
     $this->assertEquals([], $this->cache->getMultiple([]));
     $this->assertTrue($this->cache->setMultiple([]));
   }
@@ -382,12 +386,12 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
 
     $this->cache->set($hash, $embedding);
 
-    // Access multiple times
+    // Access multiple times.
     $this->cache->get($hash);
     $this->cache->get($hash);
     $this->cache->get($hash);
 
-    // Use reflection to check metadata
+    // Use reflection to check metadata.
     $reflection = new \ReflectionClass($this->cache);
     $metadata_property = $reflection->getProperty('metadata');
     $metadata_property->setAccessible(TRUE);

@@ -5,8 +5,6 @@ namespace Drupal\search_api_postgresql\PostgreSQL;
 use Drupal\search_api\IndexInterface;
 use Drupal\search_api\Item\ItemInterface;
 use Drupal\search_api\SearchApiException;
-use Drupal\search_api_postgresql\Queue\EmbeddingQueueManager;
-use Drupal\search_api_postgresql\Service\QueuedEmbeddingService;
 
 /**
  * Enhanced IndexManager with queue-based embedding processing.
@@ -52,10 +50,10 @@ class EnhancedIndexManager extends IndexManager {
    * {@inheritdoc}
    */
   public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config, $embedding_service = NULL, $server_id = NULL) {
-    // Call parent with only the 3 parameters it expects
+    // Call parent with only the 3 parameters it expects.
     parent::__construct($connector, $field_mapper, $config);
-    
-    // Handle embedding service in the enhanced version
+
+    // Handle embedding service in the enhanced version.
     $this->embeddingService = $embedding_service;
     $this->serverId = $server_id;
     $this->initializeQueueServices();
@@ -69,14 +67,14 @@ class EnhancedIndexManager extends IndexManager {
     try {
       $this->queueManager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
       $this->queuedEmbeddingService = \Drupal::service('search_api_postgresql.queued_embedding_service');
-      
-      // Set the actual embedding service for fallback
+
+      // Set the actual embedding service for fallback.
       if ($this->embeddingService) {
         $this->queuedEmbeddingService->setEmbeddingService($this->embeddingService);
       }
     }
     catch (\Exception $e) {
-      // Queue services not available, fall back to synchronous processing
+      // Queue services not available, fall back to synchronous processing.
       $this->queueManager = NULL;
       $this->queuedEmbeddingService = NULL;
     }
@@ -90,8 +88,159 @@ class EnhancedIndexManager extends IndexManager {
       return $this->indexItemsWithQueue($index, $items);
     }
 
-    // Fall back to synchronous processing
+    // Fall back to synchronous processing.
     return parent::indexItems($index, $items);
+  }
+
+  /**
+   * Override deleteItems to handle AI-enabled indexes properly.
+   * Uses direct SQL deletion instead of parent method to avoid field processing issues.
+   *
+   * {@inheritdoc}
+   */
+  public function deleteItems($table_name, array $item_ids) {
+    if (empty($item_ids)) {
+      return;
+    }
+
+    // Validate and sanitize item IDs.
+    $valid_item_ids = [];
+    foreach ($item_ids as $id) {
+      if (is_string($id) && !empty(trim($id))) {
+        $valid_item_ids[] = trim($id);
+      }
+    }
+
+    if (empty($valid_item_ids)) {
+      // No valid item IDs provided for deletion.
+      return;
+    }
+
+    try {
+      // Direct SQL deletion - bypass parent's field processing that causes the error.
+      $batch_size = 100;
+      $batches = array_chunk($valid_item_ids, $batch_size);
+
+      $total_deleted = 0;
+
+      foreach ($batches as $batch) {
+        $deleted_count = $this->deleteItemsBatch($table_name, $batch);
+        $total_deleted += $deleted_count;
+      }
+
+      // Deletion completed successfully.
+    }
+    catch (\Exception $e) {
+      // Enhanced deleteItems failed - re-throw exception.
+      throw $e;
+    }
+  }
+
+  /**
+   * Delete a batch of items using direct SQL.
+   */
+  protected function deleteItemsBatch($table_name, array $item_ids) {
+    if (empty($item_ids)) {
+      return 0;
+    }
+
+    // Create safe parameter names and map them to values.
+    $placeholders = [];
+    $params = [];
+
+    foreach ($item_ids as $index => $id) {
+      $param_name = ":item_id_{$index}";
+      $placeholders[] = $param_name;
+      $params[$param_name] = $id;
+    }
+
+    $id_field = $this->connector->quoteColumnName('search_api_id');
+    $sql = "DELETE FROM {$table_name} WHERE {$id_field} IN (" . implode(', ', $placeholders) . ")";
+
+    $statement = $this->connector->executeQuery($sql, $params);
+
+    return $statement->rowCount();
+  }
+
+  /**
+   * Clean up embedding-related data during deletion.
+   */
+  protected function cleanupEmbeddingData(array $item_ids) {
+    try {
+      // Remove any queued embedding tasks.
+      if ($this->queueManager) {
+        foreach ($item_ids as $item_id) {
+          $this->queueManager->removeEmbeddingTask($item_id);
+        }
+      }
+
+      // Clear any cached embeddings.
+      if ($this->queuedEmbeddingService) {
+        $this->queuedEmbeddingService->clearEmbeddingCache($item_ids);
+      }
+
+    }
+    catch (\Exception $e) {
+      $this->logger->warning('Failed to cleanup embedding data: @error', [
+        '@error' => $e->getMessage(),
+      ]);
+      // Don't fail the deletion for embedding cleanup issues.
+    }
+  }
+
+  /**
+   * Queue embedding generation for a document.
+   *
+   * @param \Drupal\search_api\IndexInterface $index
+   *   The search index.
+   * @param string $item_id
+   *   The item ID.
+   * @param string $searchable_text
+   *   The text content to generate embeddings for.
+   */
+  public function queueEmbeddingGeneration($index, $item_id, $searchable_text) {
+    try {
+      // Set the queue context for the embedding service.
+      if ($this->queuedEmbeddingService) {
+        $this->queuedEmbeddingService->setQueueContext([
+          'server_id' => $this->serverId,
+          'index_id' => $index->id(),
+          'item_id' => $item_id,
+        ]);
+
+        // Queue the embedding generation.
+        $this->queuedEmbeddingService->generateEmbedding($searchable_text);
+
+        \Drupal::logger('search_api_postgresql')->debug('Queued embedding generation for item @item_id', [
+          '@item_id' => $item_id,
+        ]);
+
+      }
+      elseif ($this->queueManager) {
+        // Fallback to direct queue manager.
+        $this->queueManager->queueEmbeddingGeneration(
+          $this->serverId,
+          $index->id(),
+          $item_id,
+          $searchable_text
+              );
+
+        $this->logger->debug('Queued embedding via queue manager for item @item_id', [
+          '@item_id' => $item_id,
+        ]);
+      }
+      else {
+        $this->logger->warning('No embedding service available for item @item_id', [
+          '@item_id' => $item_id,
+        ]);
+      }
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to queue embedding generation for item @item_id: @error', [
+        '@item_id' => $item_id,
+        '@error' => $e->getMessage(),
+      ]);
+    }
   }
 
   /**
@@ -112,15 +261,15 @@ class EnhancedIndexManager extends IndexManager {
     $this->connector->beginTransaction();
 
     try {
-      // Process items and collect embedding tasks
+      // Process items and collect embedding tasks.
       $embedding_tasks = [];
-      
+
       foreach ($items as $item_id => $item) {
-        // Index item without embedding first
+        // Index item without embedding first.
         $this->indexItemWithoutEmbedding($table_name, $index, $item);
         $indexed_items[] = $item_id;
-        
-        // Collect embedding text for queue processing
+
+        // Collect embedding text for queue processing.
         if ($this->isVectorSearchEnabled()) {
           $embedding_text = $this->generateEmbeddingText($item, $index);
           if (!empty($embedding_text)) {
@@ -131,7 +280,7 @@ class EnhancedIndexManager extends IndexManager {
 
       $this->connector->commit();
 
-      // Queue embedding generation tasks
+      // Queue embedding generation tasks.
       if (!empty($embedding_tasks)) {
         $this->queueEmbeddingTasks($index, $embedding_tasks);
       }
@@ -163,14 +312,14 @@ class EnhancedIndexManager extends IndexManager {
       'search_api_language' => $item->getLanguage() ?: 'und',
     ];
 
-    // Prepare searchable text for tsvector only
+    // Prepare searchable text for tsvector only.
     $searchable_text = '';
     $searchable_fields = $this->fieldMapper->getSearchableFields($index);
 
     foreach ($fields as $field_id => $field) {
-      // Validate field ID
+      // Validate field ID.
       $this->connector->validateIdentifier($field_id, 'field ID');
-      
+
       $field_values = $field->getValues();
       $field_type = $field->getType();
 
@@ -178,7 +327,7 @@ class EnhancedIndexManager extends IndexManager {
         $value = reset($field_values);
         $values[$field_id] = $this->fieldMapper->prepareFieldValue($value, $field_type);
 
-        // Collect text for full-text search
+        // Collect text for full-text search.
         if (in_array($field_id, $searchable_fields)) {
           $searchable_text .= ' ' . $this->fieldMapper->prepareFieldValue($value, 'text');
         }
@@ -188,7 +337,7 @@ class EnhancedIndexManager extends IndexManager {
       }
     }
 
-    // Prepare tsvector value
+    // Prepare tsvector value.
     $fts_config = $this->validateFtsConfiguration();
     $search_vector_field = $this->connector->validateFieldName('search_vector');
     $values['search_vector'] = "to_tsvector('{$fts_config}', :searchable_text)";
@@ -198,12 +347,12 @@ class EnhancedIndexManager extends IndexManager {
       $values['content_embedding'] = NULL;
     }
 
-    // Delete existing item
+    // Delete existing item.
     $id_field = $this->connector->validateFieldName('search_api_id');
     $delete_sql = "DELETE FROM {$table_name} WHERE {$id_field} = :item_id";
     $this->connector->executeQuery($delete_sql, [':item_id' => $item->getId()]);
 
-    // Insert new item
+    // Insert new item.
     $columns = [];
     $placeholders = [];
     $params = [];
@@ -211,9 +360,10 @@ class EnhancedIndexManager extends IndexManager {
     foreach ($values as $key => $value) {
       $safe_column = $this->connector->validateFieldName($key);
       $columns[] = $safe_column;
-      
+
       if ($key === 'search_vector') {
-        $placeholders[] = $value; // Raw SQL expression
+        // Raw SQL expression.
+        $placeholders[] = $value;
       }
       else {
         $placeholder = ":{$key}";
@@ -269,7 +419,7 @@ class EnhancedIndexManager extends IndexManager {
       return;
     }
 
-    // Set queue context
+    // Set queue context.
     $this->queuedEmbeddingService->setQueueContext([
       'server_id' => $this->serverId,
       'index_id' => $index->id(),
@@ -278,7 +428,7 @@ class EnhancedIndexManager extends IndexManager {
       'priority' => 'normal',
     ]);
 
-    // Determine if we should use batch processing
+    // Determine if we should use batch processing.
     $use_batch = count($embedding_tasks) >= ($this->config['queue_batch_threshold'] ?? 5);
 
     if ($use_batch) {
@@ -287,7 +437,8 @@ class EnhancedIndexManager extends IndexManager {
         $index->id(),
         $embedding_tasks
       );
-    } else {
+    }
+    else {
       $success = TRUE;
       foreach ($embedding_tasks as $item_id => $text_content) {
         if (!$this->queueManager->queueEmbeddingGeneration(
@@ -305,11 +456,12 @@ class EnhancedIndexManager extends IndexManager {
     if ($success) {
       \Drupal::logger('search_api_postgresql')->info('Queued @count embedding tasks for index @index', [
         '@count' => count($embedding_tasks),
-        '@index' => $index->id()
+        '@index' => $index->id(),
       ]);
-    } else {
+    }
+    else {
       \Drupal::logger('search_api_postgresql')->error('Failed to queue embedding tasks for index @index', [
-        '@index' => $index->id()
+        '@index' => $index->id(),
       ]);
     }
   }
@@ -341,11 +493,12 @@ class EnhancedIndexManager extends IndexManager {
       foreach ($items as $item_id => $text_content) {
         try {
           $embedding = $this->embeddingService->generateEmbedding($text_content);
-          
+
           if ($embedding) {
             $this->updateItemEmbedding($table_name, $item_id, $embedding);
             $results['processed']++;
-          } else {
+          }
+          else {
             $results['failed']++;
             $results['errors'][] = "Failed to generate embedding for item: {$item_id}";
           }
@@ -379,13 +532,13 @@ class EnhancedIndexManager extends IndexManager {
   protected function updateItemEmbedding($table_name, $item_id, array $embedding) {
     $vector_field = $this->connector->validateFieldName('content_embedding');
     $id_field = $this->connector->validateFieldName('search_api_id');
-    
+
     $sql = "UPDATE {$table_name} SET {$vector_field} = :embedding WHERE {$id_field} = :item_id";
     $params = [
       ':embedding' => '[' . implode(',', $embedding) . ']',
       ':item_id' => $item_id,
     ];
-    
+
     $this->connector->executeQuery($sql, $params);
   }
 
@@ -400,42 +553,44 @@ class EnhancedIndexManager extends IndexManager {
    */
   public function getEmbeddingProcessingStats(IndexInterface $index) {
     $table_name = $this->getIndexTableNameUnquoted($index);
-    
+
     $stats = [
       'queue_enabled' => $this->useQueueProcessing,
       'server_id' => $this->serverId,
     ];
 
     try {
-    
-      // Get total items
+
+      // Get total items.
       $total_sql = "SELECT COUNT(*) as total FROM {$table_name}";
       $total_stmt = $this->connector->executeQuery($total_sql);
       $stats['total_items'] = $total_stmt->fetchColumn();
 
       $columns = $this->connector->getTableColumns($table_name);
       if (in_array('content_embedding', $columns)) {
-        // Only query embedding column if it exists
+        // Only query embedding column if it exists.
         $embedded_sql = "SELECT COUNT(*) as embedded FROM {$table_name} WHERE content_embedding IS NOT NULL";
         $embedded_stmt = $this->connector->executeQuery($embedded_sql);
         $stats['items_with_embeddings'] = $embedded_stmt->fetchColumn();
-      } else {
-        // For non-AI backends, no items have embeddings
+      }
+      else {
+        // For non-AI backends, no items have embeddings.
         $stats['items_with_embeddings'] = 0;
       }
 
-      // Calculate coverage
-      $stats['embedding_coverage'] = $stats['total_items'] > 0 
-        ? ($stats['items_with_embeddings'] / $stats['total_items']) * 100 
+      // Calculate coverage.
+      $stats['embedding_coverage'] = $stats['total_items'] > 0
+        ? ($stats['items_with_embeddings'] / $stats['total_items']) * 100
         : 0;
 
-      // Get queue stats if available
+      // Get queue stats if available.
       if ($this->queueManager) {
         $queue_stats = $this->queueManager->getQueueStats();
         $stats['queue_items_pending'] = $queue_stats['items_pending'] ?? 0;
       }
 
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $stats['error'] = $e->getMessage();
     }
 
@@ -459,17 +614,17 @@ class EnhancedIndexManager extends IndexManager {
    *   TRUE if queue processing should be used.
    */
   protected function shouldUseQueueProcessing() {
-    // Check if queue services are available
+    // Check if queue services are available.
     if (!$this->queueManager || !$this->queuedEmbeddingService) {
       return FALSE;
     }
 
-    // Check global queue setting
+    // Check global queue setting.
     if (!($this->config['queue_processing']['enabled'] ?? FALSE)) {
       return FALSE;
     }
 
-    // Check server-specific setting
+    // Check server-specific setting.
     if ($this->serverId && !$this->queueManager->isQueueEnabledForServer($this->serverId)) {
       return FALSE;
     }
@@ -487,12 +642,12 @@ class EnhancedIndexManager extends IndexManager {
    *   TRUE if queue can be used.
    */
   protected function canUseQueueForIndex(IndexInterface $index) {
-    // Check if vector search is enabled
+    // Check if vector search is enabled.
     if (!$this->isVectorSearchEnabled()) {
       return FALSE;
     }
 
-    // Check if index has embedding-capable fields
+    // Check if index has embedding-capable fields.
     $embedding_fields = $this->fieldMapper->getEmbeddingSourceFields($index);
     if (empty($embedding_fields)) {
       return FALSE;

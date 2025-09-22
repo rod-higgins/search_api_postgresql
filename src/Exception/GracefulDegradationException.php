@@ -8,7 +8,7 @@ use Drupal\search_api\SearchApiException;
  * Base exception for recoverable errors that allow graceful degradation.
  */
 abstract class GracefulDegradationException extends SearchApiException {
-  
+
   /**
    * The fallback strategy to use.
    *
@@ -59,6 +59,7 @@ abstract class GracefulDegradationException extends SearchApiException {
   public function shouldLog() {
     return $this->shouldLog;
   }
+
 }
 
 /**
@@ -74,12 +75,13 @@ class EmbeddingServiceUnavailableException extends GracefulDegradationException 
    * @param \Exception $previous
    *   Previous exception.
    */
-  public function __construct($service_name = 'Embedding service', \Exception $previous = NULL) {
+  public function __construct($service_name = 'Embedding service', ?\Exception $previous = NULL) {
     $message = "Embedding service '{$service_name}' is currently unavailable";
     $this->userMessage = 'AI-powered search is temporarily unavailable. Using traditional search instead.';
     $this->fallbackStrategy = 'text_search_only';
     parent::__construct($message, 503, $previous);
   }
+
 }
 
 /**
@@ -104,7 +106,7 @@ class TemporaryApiException extends GracefulDegradationException {
    * @param \Exception $previous
    *   Previous exception.
    */
-  public function __construct($message, $retry_attempts = 0, \Exception $previous = NULL) {
+  public function __construct($message, $retry_attempts = 0, ?\Exception $previous = NULL) {
     $this->retryAttempts = $retry_attempts;
     $this->userMessage = 'Search service is experiencing high load. Some features may be limited.';
     $this->fallbackStrategy = 'retry_with_backoff';
@@ -120,6 +122,7 @@ class TemporaryApiException extends GracefulDegradationException {
   public function getRetryAttempts() {
     return $this->retryAttempts;
   }
+
 }
 
 /**
@@ -154,17 +157,19 @@ class PartialBatchFailureException extends GracefulDegradationException {
   public function __construct(array $successful_items, array $failed_items, $operation = 'batch operation') {
     $this->successfulItems = $successful_items;
     $this->failedItems = $failed_items;
-    
+
     $total = count($successful_items) + count($failed_items);
     $success_count = count($successful_items);
     $failure_count = count($failed_items);
-    
+
     $message = "Partial failure in {$operation}: {$success_count}/{$total} items succeeded";
     $this->userMessage = "Some content may not be fully searchable due to processing issues. Search functionality remains available.";
     $this->fallbackStrategy = 'continue_with_partial_results';
-    $this->shouldLog = $failure_count > ($total * 0.5); // Only log if >50% failed
-    
-    parent::__construct($message, 206); // 206 Partial Content
+    // Only log if >50% failed.
+    $this->shouldLog = $failure_count > ($total * 0.5);
+
+    // 206 Partial Content
+    parent::__construct($message, 206);
   }
 
   /**
@@ -197,6 +202,7 @@ class PartialBatchFailureException extends GracefulDegradationException {
     $total = count($this->successfulItems) + count($this->failedItems);
     return $total > 0 ? (count($this->successfulItems) / $total) * 100 : 0;
   }
+
 }
 
 /**
@@ -219,12 +225,13 @@ class VectorSearchDegradedException extends GracefulDegradationException {
    * @param \Exception $previous
    *   Previous exception.
    */
-  public function __construct($reason = 'Vector search unavailable', \Exception $previous = NULL) {
+  public function __construct($reason = 'Vector search unavailable', ?\Exception $previous = NULL) {
     $this->degradationReason = $reason;
     $this->userMessage = 'Using traditional text search. Some semantic matching may be limited.';
     $this->fallbackStrategy = 'text_search_fallback';
-    $this->shouldLog = FALSE; // This is expected behavior, not an error
-    
+    // This is expected behavior, not an error.
+    $this->shouldLog = FALSE;
+
     parent::__construct("Vector search degraded: {$reason}", 200, $previous);
   }
 
@@ -237,6 +244,7 @@ class VectorSearchDegradedException extends GracefulDegradationException {
   public function getDegradationReason() {
     return $this->degradationReason;
   }
+
 }
 
 /**
@@ -263,7 +271,7 @@ class ConfigurationDegradedException extends GracefulDegradationException {
     $this->availableFeatures = $available_features;
     $this->userMessage = 'Some advanced search features are unavailable due to configuration. Basic search remains functional.';
     $this->fallbackStrategy = 'basic_functionality_only';
-    
+
     parent::__construct("Configuration issue: {$config_issue}", 200);
   }
 
@@ -276,6 +284,7 @@ class ConfigurationDegradedException extends GracefulDegradationException {
   public function getAvailableFeatures() {
     return $this->availableFeatures;
   }
+
 }
 
 /**
@@ -298,11 +307,11 @@ class QueueDegradedException extends GracefulDegradationException {
    * @param \Exception $previous
    *   Previous exception.
    */
-  public function __construct($operation = 'background processing', \Exception $previous = NULL) {
+  public function __construct($operation = 'background processing', ?\Exception $previous = NULL) {
     $this->queueOperation = $operation;
     $this->userMessage = 'Background processing is delayed. Search results are still available but may not include the latest content updates.';
     $this->fallbackStrategy = 'synchronous_processing';
-    
+
     parent::__construct("Queue operation degraded: {$operation}", 200, $previous);
   }
 
@@ -315,6 +324,7 @@ class QueueDegradedException extends GracefulDegradationException {
   public function getQueueOperation() {
     return $this->queueOperation;
   }
+
 }
 
 /**
@@ -330,13 +340,15 @@ class CacheDegradedException extends GracefulDegradationException {
    * @param \Exception $previous
    *   Previous exception.
    */
-  public function __construct($cache_type = 'embedding cache', \Exception $previous = NULL) {
+  public function __construct($cache_type = 'embedding cache', ?\Exception $previous = NULL) {
     $this->userMessage = 'Search performance may be slower due to caching issues.';
     $this->fallbackStrategy = 'direct_processing';
-    $this->shouldLog = FALSE; // Performance issue, not critical
-    
+    // Performance issue, not critical.
+    $this->shouldLog = FALSE;
+
     parent::__construct("Cache degraded: {$cache_type}", 200, $previous);
   }
+
 }
 
 /**
@@ -363,7 +375,7 @@ class RateLimitException extends GracefulDegradationException {
     $this->retryAfter = $retry_after;
     $this->userMessage = 'Search service is busy. Results may be limited temporarily.';
     $this->fallbackStrategy = 'rate_limit_backoff';
-    
+
     parent::__construct("Rate limited by {$service}, retry after {$retry_after} seconds", 429);
   }
 
@@ -376,6 +388,7 @@ class RateLimitException extends GracefulDegradationException {
   public function getRetryAfter() {
     return $this->retryAfter;
   }
+
 }
 
 /**
@@ -400,7 +413,7 @@ class CircuitBreakerException extends GracefulDegradationException {
     $this->serviceName = $service_name;
     $this->userMessage = 'Some search features are temporarily unavailable. Basic search functionality continues to work.';
     $this->fallbackStrategy = 'circuit_breaker_fallback';
-    
+
     parent::__construct("Circuit breaker open for service: {$service_name}", 503);
   }
 
@@ -413,6 +426,7 @@ class CircuitBreakerException extends GracefulDegradationException {
   public function getServiceName() {
     return $this->serviceName;
   }
+
 }
 
 /**
@@ -434,39 +448,39 @@ class DegradationExceptionFactory {
   public static function createFromException(\Exception $original_exception, array $context = []) {
     $message = $original_exception->getMessage();
     $code = $original_exception->getCode();
-    
-    // Network/connectivity issues
+
+    // Network/connectivity issues.
     if (strpos($message, 'cURL error') !== FALSE || strpos($message, 'Connection refused') !== FALSE) {
       return new EmbeddingServiceUnavailableException($context['service_name'] ?? 'External service', $original_exception);
     }
-    
-    // Rate limiting
+
+    // Rate limiting.
     if ($code === 429 || strpos($message, 'rate limit') !== FALSE) {
       $retry_after = $context['retry_after'] ?? 60;
       return new RateLimitException($retry_after, $context['service_name'] ?? 'API service');
     }
-    
-    // Temporary API issues
+
+    // Temporary API issues.
     if (in_array($code, [500, 502, 503, 504])) {
       return new TemporaryApiException($message, $context['retry_attempts'] ?? 0, $original_exception);
     }
-    
-    // Vector/embedding specific issues
+
+    // Vector/embedding specific issues.
     if (strpos($message, 'vector') !== FALSE || strpos($message, 'embedding') !== FALSE) {
       return new VectorSearchDegradedException($message, $original_exception);
     }
-    
-    // Queue issues
+
+    // Queue issues.
     if (strpos($message, 'queue') !== FALSE) {
       return new QueueDegradedException($context['operation'] ?? 'background processing', $original_exception);
     }
-    
-    // Cache issues
+
+    // Cache issues.
     if (strpos($message, 'cache') !== FALSE) {
       return new CacheDegradedException($context['cache_type'] ?? 'embedding cache', $original_exception);
     }
-    
-    // Default to service unavailable
+
+    // Default to service unavailable.
     return new EmbeddingServiceUnavailableException($context['service_name'] ?? 'Service', $original_exception);
   }
 
@@ -486,4 +500,5 @@ class DegradationExceptionFactory {
   public static function createPartialBatchFailure(array $successful_items, array $failed_items, $operation = 'batch operation') {
     return new PartialBatchFailureException($successful_items, $failed_items, $operation);
   }
+
 }

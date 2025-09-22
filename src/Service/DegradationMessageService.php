@@ -60,13 +60,13 @@ class DegradationMessageService {
     MessengerInterface $messenger,
     AccountInterface $current_user,
     TranslationInterface $string_translation,
-    ConfigFactoryInterface $config_factory
+    ConfigFactoryInterface $config_factory,
   ) {
     $this->messenger = $messenger;
     $this->currentUser = $current_user;
     $this->stringTranslation = $string_translation;
     $this->configFactory = $config_factory;
-    
+
     $this->settings = $this->configFactory->get('search_api_postgresql.degradation_messages')->get() ?: [];
     $this->settings += $this->getDefaultSettings();
   }
@@ -85,7 +85,7 @@ class DegradationMessageService {
     }
 
     $message_info = $this->buildMessage($exception, $context);
-    
+
     if ($message_info) {
       $this->messenger->addMessage(
         $message_info['message'],
@@ -113,10 +113,10 @@ class DegradationMessageService {
 
     $strategy = $degradation_state['fallback_strategy'];
     $user_message = $degradation_state['user_message'];
-    
-    // Get appropriate message based on strategy
+
+    // Get appropriate message based on strategy.
     $status_message = $this->getStatusMessage($strategy, $user_message, $context);
-    
+
     if (!$status_message) {
       return NULL;
     }
@@ -162,7 +162,7 @@ class DegradationMessageService {
     ]);
 
     $actions = [];
-    
+
     if ($options['workaround_text']) {
       $actions['workaround'] = [
         '#type' => 'html_tag',
@@ -210,22 +210,22 @@ class DegradationMessageService {
   protected function buildMessage(GracefulDegradationException $exception, array $context) {
     $strategy = $exception->getFallbackStrategy();
     $user_message = $exception->getUserMessage();
-    
-    // Determine message type based on degradation severity
+
+    // Determine message type based on degradation severity.
     $message_type = $this->determineMessageType($exception, $context);
-    
-    // Get customized message if available
+
+    // Get customized message if available.
     $custom_message = $this->getCustomMessage($strategy, $context);
     $final_message = $custom_message ?: $user_message;
-    
-    // Add context-specific information
+
+    // Add context-specific information.
     if (!empty($context['search_terms'])) {
       $final_message .= ' ' . $this->t('Your search for "@terms" will still return results.', [
         '@terms' => $context['search_terms'],
       ]);
     }
 
-    // Add administrative information for users with appropriate permissions
+    // Add administrative information for users with appropriate permissions.
     if ($this->currentUser->hasPermission('administer search_api') && $this->settings['show_admin_details']) {
       $final_message .= ' ' . $this->t('(Technical: @technical)', [
         '@technical' => $exception->getMessage(),
@@ -235,7 +235,8 @@ class DegradationMessageService {
     return [
       'message' => $final_message,
       'type' => $message_type,
-      'repeat' => FALSE, // Don't repeat the same message multiple times
+    // Don't repeat the same message multiple times.
+      'repeat' => FALSE,
     ];
   }
 
@@ -255,14 +256,14 @@ class DegradationMessageService {
   protected function getStatusMessage($strategy, $user_message, array $context) {
     $messages = [
       'text_search_fallback' => [
-        'text' => $this->t('🔍 Search results using traditional text matching'),
+        'text' => $this->t('Search results using traditional text matching'),
         'type' => 'info',
         'icon' => 'info',
         'dismissible' => TRUE,
         'actions' => [],
       ],
       'circuit_breaker_fallback' => [
-        'text' => $this->t('⚠️ Some search features temporarily unavailable'),
+        'text' => $this->t('Some search features temporarily unavailable'),
         'type' => 'warning',
         'icon' => 'warning',
         'dismissible' => TRUE,
@@ -274,7 +275,7 @@ class DegradationMessageService {
         ],
       ],
       'rate_limit_backoff' => [
-        'text' => $this->t('🕐 Search processing slower than usual due to high demand'),
+        'text' => $this->t('Search processing slower than usual due to high demand'),
         'type' => 'info',
         'icon' => 'clock',
         'dismissible' => FALSE,
@@ -284,8 +285,8 @@ class DegradationMessageService {
 
     if (isset($messages[$strategy])) {
       $message = $messages[$strategy];
-      
-      // Add context-specific information
+
+      // Add context-specific information.
       if (!empty($context['result_count'])) {
         $message['text'] .= ' ' . $this->formatPlural(
           $context['result_count'],
@@ -293,11 +294,11 @@ class DegradationMessageService {
           '(@count results found)'
         );
       }
-      
+
       return $message;
     }
 
-    // Fallback to generic message
+    // Fallback to generic message.
     return [
       'text' => $user_message ?: $this->t('Search functionality is running in limited mode'),
       'type' => 'info',
@@ -320,24 +321,24 @@ class DegradationMessageService {
    */
   protected function determineMessageType(GracefulDegradationException $exception, array $context) {
     $strategy = $exception->getFallbackStrategy();
-    
-    // High impact degradations are warnings
+
+    // High impact degradations are warnings.
     $warning_strategies = [
       'circuit_breaker_fallback',
       'service_unavailable',
       'rate_limit_backoff',
     ];
-    
+
     if (in_array($strategy, $warning_strategies)) {
       return MessengerInterface::TYPE_WARNING;
     }
-    
-    // Check if this is a search context where degradation is less concerning
+
+    // Check if this is a search context where degradation is less concerning.
     if (!empty($context['is_search_result']) && in_array($strategy, ['text_search_fallback'])) {
       return MessengerInterface::TYPE_STATUS;
     }
-    
-    // Default to status for graceful degradations
+
+    // Default to status for graceful degradations.
     return MessengerInterface::TYPE_STATUS;
   }
 
@@ -354,18 +355,18 @@ class DegradationMessageService {
    */
   protected function getCustomMessage($strategy, array $context) {
     $custom_messages = $this->settings['custom_messages'] ?? [];
-    
+
     if (isset($custom_messages[$strategy])) {
       $message = $custom_messages[$strategy];
-      
-      // Simple token replacement
+
+      // Simple token replacement.
       if (!empty($context['search_terms'])) {
         $message = str_replace('[search_terms]', $context['search_terms'], $message);
       }
-      
+
       return $message;
     }
-    
+
     return NULL;
   }
 
@@ -381,29 +382,29 @@ class DegradationMessageService {
    *   TRUE if message should be displayed.
    */
   protected function shouldDisplayMessage(GracefulDegradationException $exception, array $context) {
-    // Check global setting
+    // Check global setting.
     if (!$this->settings['enabled']) {
       return FALSE;
     }
-    
-    // Check if user wants to see degradation messages
+
+    // Check if user wants to see degradation messages.
     if (!$this->settings['show_to_anonymous'] && $this->currentUser->isAnonymous()) {
       return FALSE;
     }
-    
-    // Check strategy-specific settings
+
+    // Check strategy-specific settings.
     $strategy = $exception->getFallbackStrategy();
     $strategy_settings = $this->settings['strategies'][$strategy] ?? [];
-    
+
     if (isset($strategy_settings['enabled']) && !$strategy_settings['enabled']) {
       return FALSE;
     }
-    
-    // Don't show messages for low-impact degradations in search contexts
+
+    // Don't show messages for low-impact degradations in search contexts.
     if (!empty($context['is_search_result']) && $strategy === 'text_search_fallback') {
       return $this->settings['show_search_fallback_messages'] ?? FALSE;
     }
-    
+
     return TRUE;
   }
 
@@ -422,10 +423,10 @@ class DegradationMessageService {
     }
 
     $total_services = count($degradation_stats);
-    $degraded_services = array_filter($degradation_stats, function($stats) {
+    $degraded_services = array_filter($degradation_stats, function ($stats) {
       return $stats['is_degraded'] ?? FALSE;
     });
-    
+
     if (empty($degraded_services)) {
       return [];
     }
@@ -477,7 +478,7 @@ class DegradationMessageService {
     $config = $this->configFactory->getEditable('search_api_postgresql.degradation_messages');
     $current_settings = $config->get() ?: [];
     $updated_settings = array_merge($current_settings, $new_settings);
-    
+
     $config->setData($updated_settings)->save();
     $this->settings = $updated_settings;
   }
@@ -551,7 +552,7 @@ class DegradationMessageService {
     }
 
     $info = $help_messages[$degradation_type];
-    
+
     return [
       '#theme' => 'search_api_postgresql_help_message',
       '#message' => $info['message'],
@@ -563,4 +564,5 @@ class DegradationMessageService {
       ],
     ];
   }
+
 }

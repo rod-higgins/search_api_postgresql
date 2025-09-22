@@ -4,7 +4,6 @@ namespace Drupal\search_api_postgresql\Form;
 
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\Core\Url;
 use Drupal\search_api_postgresql\Queue\EmbeddingQueueManager;
 use Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -33,7 +32,7 @@ class QueueManagementForm extends FormBase {
    */
   public function __construct(
     EmbeddingQueueManager $queue_manager,
-    EmbeddingAnalyticsService $analytics_service
+    EmbeddingAnalyticsService $analytics_service,
   ) {
     $this->queueManager = $queue_manager;
     $this->analyticsService = $analytics_service;
@@ -62,7 +61,7 @@ class QueueManagementForm extends FormBase {
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form['#attached']['library'][] = 'search_api_postgresql/admin';
 
-    // Page header
+    // Page header.
     $form['header'] = [
       '#type' => 'container',
       '#attributes' => ['class' => ['queue-management-header']],
@@ -80,9 +79,9 @@ class QueueManagementForm extends FormBase {
       '#value' => $this->t('Manage the embedding processing queue for background operations.'),
     ];
 
-    // Queue statistics
+    // Queue statistics.
     $queue_stats = $this->queueManager->getQueueStats();
-    
+
     $form['stats'] = [
       '#type' => 'details',
       '#title' => $this->t('Queue Statistics'),
@@ -105,7 +104,7 @@ class QueueManagementForm extends FormBase {
       ],
     ];
 
-    // Queue actions
+    // Queue actions.
     $form['actions_section'] = [
       '#type' => 'details',
       '#title' => $this->t('Queue Actions'),
@@ -154,7 +153,7 @@ class QueueManagementForm extends FormBase {
       ],
     ];
 
-    // Queue configuration
+    // Queue configuration.
     $form['config'] = [
       '#type' => 'details',
       '#title' => $this->t('Queue Configuration'),
@@ -206,7 +205,7 @@ class QueueManagementForm extends FormBase {
       '#max' => 3600,
     ];
 
-    // Recent queue activity
+    // Recent queue activity.
     $form['activity'] = [
       '#type' => 'details',
       '#title' => $this->t('Recent Activity'),
@@ -214,7 +213,7 @@ class QueueManagementForm extends FormBase {
     ];
 
     $recent_activity = $this->queueManager->getRecentActivity(20);
-    
+
     if (!empty($recent_activity)) {
       $activity_rows = [];
       foreach ($recent_activity as $activity) {
@@ -238,14 +237,15 @@ class QueueManagementForm extends FormBase {
         ],
         '#rows' => $activity_rows,
       ];
-    } else {
+    }
+    else {
       $form['activity']['empty'] = [
         '#type' => 'markup',
         '#markup' => '<p>' . $this->t('No recent activity found.') . '</p>',
       ];
     }
 
-    // Submit buttons
+    // Submit buttons.
     $form['actions'] = [
       '#type' => 'actions',
     ];
@@ -270,31 +270,31 @@ class QueueManagementForm extends FormBase {
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
     $action = $form_state->getValue('action');
-    
-    // Validate destructive actions
+
+    // Validate destructive actions.
     if (in_array($action, ['clear_failed', 'clear_all'])) {
       $confirm = $form_state->getValue('confirm_destructive');
       if (!$confirm) {
-        $form_state->setErrorByName('confirm_destructive', 
+        $form_state->setErrorByName('confirm_destructive',
           $this->t('You must confirm that you understand this action cannot be undone.')
         );
       }
     }
 
-    // Validate batch size
+    // Validate batch size.
     if ($action === 'process_now') {
       $batch_size = $form_state->getValue('batch_size');
       if ($batch_size < 1 || $batch_size > 100) {
-        $form_state->setErrorByName('batch_size', 
+        $form_state->setErrorByName('batch_size',
           $this->t('Batch size must be between 1 and 100.')
         );
       }
     }
 
-    // Validate configuration values
+    // Validate configuration values.
     $max_processing_time = $form_state->getValue('max_processing_time');
     if ($max_processing_time < 10 || $max_processing_time > 300) {
-      $form_state->setErrorByName('max_processing_time', 
+      $form_state->setErrorByName('max_processing_time',
         $this->t('Maximum processing time must be between 10 and 300 seconds.')
       );
     }
@@ -345,7 +345,7 @@ class QueueManagementForm extends FormBase {
         break;
     }
 
-    // Log the action
+    // Log the action.
     $this->getLogger('search_api_postgresql')->info('Queue management action "@action" executed.', [
       '@action' => $action,
     ]);

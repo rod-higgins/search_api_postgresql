@@ -5,8 +5,10 @@
  * Search API PostgreSQL module hooks and functionality.
  */
 
-use Drupal\Core\Url;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\facets\FacetInterface;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\search_api\Entity\Index;
 
 /**
  * Implements hook_help().
@@ -40,8 +42,17 @@ function search_api_postgresql_help($route_name, $route_match) {
  */
 function search_api_postgresql_cron() {
   $settings = \Drupal::config('search_api_postgresql.settings');
-  
-  // Only run maintenance tasks if analytics are enabled
+
+  // Only run cleanup once per day.
+  $last_cleanup = \Drupal::state()->get('search_api_postgresql.last_facet_cleanup', 0);
+
+  if (\Drupal::time()->getRequestTime() - $last_cleanup > 86400) {
+    // @todo Fix null database connection issue in cleanupAllOrphanedFacetIndexes
+    // search_api_postgresql_scheduled_facet_cleanup();
+    \Drupal::state()->set('search_api_postgresql.last_facet_cleanup', \Drupal::time()->getRequestTime());
+  }
+
+  // Only run maintenance tasks if analytics are enabled.
   if (!$settings->get('analytics.enabled')) {
     return;
   }
@@ -49,25 +60,25 @@ function search_api_postgresql_cron() {
   $logger = \Drupal::logger('search_api_postgresql');
 
   try {
-    // Process embedding queue with configurable limits
+    // Process embedding queue with configurable limits.
     if (\Drupal::hasService('search_api_postgresql.embedding_queue_manager')) {
       $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
       if ($queue_manager) {
         $max_items = $settings->get('performance.cron_max_items') ?: 50;
         $max_time = $settings->get('performance.cron_max_time') ?: 30;
-        
+
         $processed = $queue_manager->processQueue([
-          'max_items' => $max_items, 
-          'max_time' => $max_time
+          'max_items' => $max_items,
+          'max_time' => $max_time,
         ]);
-        
+
         if ($processed > 0) {
           $logger->info('Processed @count embedding queue items.', ['@count' => $processed]);
         }
       }
     }
 
-    // Clean up old cache entries
+    // Clean up old cache entries.
     if (\Drupal::hasService('search_api_postgresql.cache_manager')) {
       $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
       if ($cache_manager) {
@@ -79,7 +90,7 @@ function search_api_postgresql_cron() {
       }
     }
 
-    // Update analytics aggregates
+    // Update analytics aggregates.
     if (\Drupal::hasService('search_api_postgresql.analytics')) {
       $analytics = \Drupal::service('search_api_postgresql.analytics');
       if ($analytics) {
@@ -101,19 +112,138 @@ function search_api_postgresql_cron() {
 }
 
 /**
+ * Scheduled cleanup of orphaned facet indexes.
+ */
+function search_api_postgresql_scheduled_facet_cleanup() {
+  $indexes = Index::loadMultiple();
+  $total_cleaned = 0;
+
+  foreach ($indexes as $index) {
+    $server = $index->getServerInstance();
+    if ($server && $server->getBackendId() === 'postgresql') {
+      /** @var \Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend $backend */
+      $backend = $server->getBackend();
+
+      try {
+        $cleaned = $backend->cleanupAllOrphanedFacetIndexes($index);
+        $total_cleaned += $cleaned;
+      }
+      catch (\Exception $e) {
+        \Drupal::logger('search_api_postgresql')->warning(
+          'Scheduled cleanup failed for index @index: @error',
+          ['@index' => $index->id(), '@error' => $e->getMessage()]
+              );
+      }
+    }
+  }
+
+  if ($total_cleaned > 0) {
+    \Drupal::logger('search_api_postgresql')->info(
+      'Scheduled cleanup removed @count orphaned facet indexes',
+      ['@count' => $total_cleaned]
+    );
+  }
+}
+
+/**
  * Implements hook_entity_delete().
  *
  * Cleans up data when search entities are deleted.
  */
 function search_api_postgresql_entity_delete($entity) {
-  // Clean up when search API servers are deleted
+  // Clean up when search API servers are deleted.
   if ($entity->getEntityTypeId() === 'search_api_server') {
     search_api_postgresql_search_api_server_delete($entity);
   }
-  
-  // Clean up when search API indexes are deleted
+
+  // Clean up when search API indexes are deleted.
   if ($entity->getEntityTypeId() === 'search_api_index') {
     search_api_postgresql_search_api_index_delete($entity);
+  }
+  // Clean up facet indexes.
+  if ($entity instanceof FacetInterface) {
+    search_api_postgresql_cleanup_facet_index($entity);
+  }
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function search_api_postgresql_entity_update(EntityInterface $entity) {
+  if ($entity instanceof FacetInterface && isset($entity->original)) {
+    $original = $entity->original;
+
+    // If field identifier changed, cleanup old index.
+    if ($original->getFieldIdentifier() !== $entity->getFieldIdentifier()) {
+      search_api_postgresql_cleanup_facet_index($original);
+    }
+  }
+}
+
+/**
+ * Cleans up facet index when facet is deleted or field changes.
+ */
+function search_api_postgresql_cleanup_facet_index(FacetInterface $facet) {
+  try {
+    $facet_source = $facet->getFacetSource();
+    if (!$facet_source) {
+      return;
+    }
+
+    $index = $facet_source->getIndex();
+    if (!$index) {
+      return;
+    }
+
+    $server = $index->getServerInstance();
+    if (!$server || $server->getBackendId() !== 'postgresql') {
+      // Only handle PostgreSQL backends.
+      return;
+    }
+
+    /** @var \Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend $backend */
+    $backend = $server->getBackend();
+    $field_name = $facet->getFieldIdentifier();
+
+    // CRITICAL: Check if field is still used by other active facets.
+    $other_active_facets = \Drupal::entityTypeManager()
+      ->getStorage('facet')
+      ->loadByProperties([
+        'facet_source_id' => $facet->getFacetSourceId(),
+        'field_identifier' => $field_name,
+    // Only check active facets.
+        'status' => TRUE,
+      ]);
+
+    // Remove current facet from the list (for delete operations)
+    unset($other_active_facets[$facet->id()]);
+
+    // Only cleanup if no other active facets use this field.
+    if (empty($other_active_facets)) {
+      $table_name = $backend->getIndexTableNameForManager($index);
+      $backend->cleanupFacetIndex($table_name, $field_name, $index);
+
+      \Drupal::logger('search_api_postgresql')->info(
+        'Cleaned up facet index for field @field (facet: @facet)',
+        ['@field' => $field_name, '@facet' => $facet->id()]
+      );
+    }
+    else {
+      \Drupal::logger('search_api_postgresql')->debug(
+        'Kept facet index for field @field (still used by @count active facets)',
+        [
+          '@field' => $field_name,
+          '@count' => count($other_active_facets),
+        ]
+          );
+    }
+
+  }
+  catch (\Exception $e) {
+    \Drupal::logger('search_api_postgresql')->error(
+      'Failed to cleanup facet index for @facet: @error',
+      ['@facet' => $facet->id(), '@error' => $e->getMessage()]
+      );
   }
 }
 
@@ -123,14 +253,15 @@ function search_api_postgresql_entity_delete($entity) {
  * Cleans up server-specific data when a search server is deleted.
  */
 function search_api_postgresql_search_api_server_delete($server) {
-  // Only clean up if the server is using PostgreSQL backend
+  // Only clean up if the server is using PostgreSQL backend.
   try {
     $backend = $server->getBackend();
     if (!$backend || $backend->getPluginId() !== 'postgresql') {
       return;
     }
-  } catch (\Exception $e) {
-    // Backend not available, skip cleanup
+  }
+  catch (\Exception $e) {
+    // Backend not available, skip cleanup.
     return;
   }
 
@@ -139,41 +270,42 @@ function search_api_postgresql_search_api_server_delete($server) {
   try {
     $database = \Drupal::database();
     $schema = $database->schema();
-    
+
     $cleaned_count = 0;
-    
-    // Clean up server-specific metrics
+
+    // Clean up server-specific metrics.
     if ($schema->tableExists('search_api_postgresql_metrics')) {
       $count = $database->delete('search_api_postgresql_metrics')
         ->condition('server_id', $server->id())
         ->execute();
       $cleaned_count += $count;
     }
-    
-    // Clean up server-specific cache entries
+
+    // Clean up server-specific cache entries.
     if (\Drupal::hasService('search_api_postgresql.cache_manager')) {
       $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
       if ($cache_manager) {
-        $cache_manager->clear(); // FIXED: Now uses the wrapper method
+        // FIXED: Now uses the wrapper method.
+        $cache_manager->clear();
       }
     }
-    
+
     if ($cleaned_count > 0) {
       $logger->info('Cleaned up @count metrics records for deleted server: @server', [
         '@count' => $cleaned_count,
         '@server' => $server->id(),
       ]);
     }
-    
-    // Clear related caches
+
+    // Clear related caches.
     $cache_tags = [
       'search_api_postgresql:server:' . $server->id(),
       'search_api_postgresql:analytics',
       'search_api_postgresql:dashboard',
     ];
-    
+
     \Drupal::service('cache_tags.invalidator')->invalidateTags($cache_tags);
-    
+
   }
   catch (\Exception $e) {
     $logger->error('Error cleaning up server data: @message', [
@@ -188,19 +320,20 @@ function search_api_postgresql_search_api_server_delete($server) {
  * Cleans up index-specific data when a search index is deleted.
  */
 function search_api_postgresql_search_api_index_delete($index) {
-  // Only clean up if the index is using a PostgreSQL backend
+  // Only clean up if the index is using a PostgreSQL backend.
   $server = $index->getServerInstance();
   if (!$server || $server->isNew()) {
     return;
   }
-  
+
   try {
     $backend = $server->getBackend();
     if (!$backend || $backend->getPluginId() !== 'postgresql') {
       return;
     }
-  } catch (\Exception $e) {
-    // Backend not available, skip cleanup
+  }
+  catch (\Exception $e) {
+    // Backend not available, skip cleanup.
     return;
   }
 
@@ -209,41 +342,42 @@ function search_api_postgresql_search_api_index_delete($index) {
   try {
     $database = \Drupal::database();
     $schema = $database->schema();
-    
+
     $cleaned_count = 0;
-    
-    // Clean up index-specific metrics
+
+    // Clean up index-specific metrics.
     if ($schema->tableExists('search_api_postgresql_metrics')) {
       $count = $database->delete('search_api_postgresql_metrics')
         ->condition('index_id', $index->id())
         ->execute();
       $cleaned_count += $count;
     }
-    
-    // Clean up index-specific cache entries
+
+    // Clean up index-specific cache entries.
     if (\Drupal::hasService('search_api_postgresql.cache_manager')) {
       $cache_manager = \Drupal::service('search_api_postgresql.cache_manager');
       if ($cache_manager) {
-        $cache_manager->clearByIndex($index->id()); // FIXED: Now uses the specific wrapper method
+        // FIXED: Now uses the specific wrapper method.
+        $cache_manager->clearByIndex($index->id());
       }
     }
-    
+
     if ($cleaned_count > 0) {
       $logger->info('Cleaned up @count metrics records for deleted index: @index', [
         '@count' => $cleaned_count,
         '@index' => $index->id(),
       ]);
     }
-    
-    // Clear related caches
+
+    // Clear related caches.
     $cache_tags = [
       'search_api_postgresql:index:' . $index->id(),
       'search_api_postgresql:analytics',
       'search_api_postgresql:dashboard',
     ];
-    
+
     \Drupal::service('cache_tags.invalidator')->invalidateTags($cache_tags);
-    
+
   }
   catch (\Exception $e) {
     $logger->error('Error cleaning up index data: @message', [
@@ -301,12 +435,12 @@ function search_api_postgresql_theme() {
  * Modifies library definitions as needed.
  */
 function search_api_postgresql_library_info_alter(&$libraries, $extension) {
-  // Add version information to admin library
+  // Add version information to admin library.
   if ($extension === 'search_api_postgresql' && isset($libraries['admin'])) {
     $module_info = \Drupal::service('extension.list.module')->getExtensionInfo('search_api_postgresql');
     $libraries['admin']['version'] = $module_info['version'] ?? '1.x-dev';
-    
-    // Add dependencies based on module configuration
+
+    // Add dependencies based on module configuration.
     $settings = \Drupal::config('search_api_postgresql.settings');
     if ($settings->get('performance.lazy_load_charts')) {
       $libraries['admin']['dependencies'][] = 'core/drupal.ajax';
@@ -331,7 +465,7 @@ function search_api_postgresql_mail($key, &$message, $params) {
       ]);
       $message['body'][] = t('Please review your AI usage and consider adjusting your configuration.');
       break;
-      
+
     case 'error_threshold_exceeded':
       $message['subject'] = t('Search API PostgreSQL: Error threshold exceeded');
       $message['body'][] = t('The error threshold of @threshold errors has been exceeded.', [
@@ -347,18 +481,51 @@ function search_api_postgresql_mail($key, &$message, $params) {
 
 /**
  * Implements hook_cron_queue_info().
- *
- * Defines cron queues for the module.
  */
 function search_api_postgresql_cron_queue_info() {
-  $queues = [];
-  
-  $queues['search_api_postgresql_embedding'] = [
-    'worker callback' => 'search_api_postgresql_process_embedding_queue_item',
+  $queues['search_api_postgresql_facet_indexes'] = [
+    'worker callback' => 'search_api_postgresql_process_facet_index_queue',
     'time' => 60,
+    'cron' => [
+  // Process for max 30 seconds during cron.
+      'time' => 30,
+    ],
   ];
-  
+
   return $queues;
+}
+
+/**
+ * Queue worker for creating facet indexes in background.
+ */
+function search_api_postgresql_process_facet_index_queue($data) {
+  $logger = \Drupal::logger('search_api_postgresql');
+
+  try {
+    $index = Index::load($data['index_id']);
+    if (!$index) {
+      throw new \Exception("Index {$data['index_id']} not found");
+    }
+
+    $server = $index->getServerInstance();
+    if (!$server || $server->getBackend()->getPluginId() !== 'postgresql') {
+      throw new \Exception("Invalid backend for index {$data['index_id']}");
+    }
+
+    /** @var \Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend $backend */
+    $backend = $server->getBackend();
+
+    // Create the facet index.
+    $backend->createOptimalFacetIndex($data['table_name'], $data['field_name'], $index);
+
+    $logger->info('Background facet index created for @field', ['@field' => $data['field_name']]);
+
+  }
+  catch (\Exception $e) {
+    $logger->error('Failed to process facet index queue item: @error', ['@error' => $e->getMessage()]);
+    // Re-throw to mark queue item as failed.
+    throw $e;
+  }
 }
 
 /**
@@ -371,7 +538,7 @@ function search_api_postgresql_process_embedding_queue_item($data) {
       return $queue_manager->processItem($data);
     }
   }
-  
+
   throw new \Exception('Embedding queue manager service not available.');
 }
 
@@ -381,10 +548,10 @@ function search_api_postgresql_process_embedding_queue_item($data) {
  * Alters forms to add PostgreSQL-specific functionality.
  */
 function search_api_postgresql_form_alter(&$form, FormStateInterface $form_state, $form_id) {
-  // Add PostgreSQL-specific help text to server forms
+  // Add PostgreSQL-specific help text to server forms.
   if ($form_id === 'search_api_server_edit_form' || $form_id === 'search_api_server_add_form') {
     $server = $form_state->getFormObject()->getEntity();
-    
+
     if ($server && $server->getBackend() && $server->getBackend()->getPluginId() === 'postgresql') {
       $form['backend_config']['#prefix'] = '<div class="messages messages--info">' .
         t('PostgreSQL backend provides advanced search capabilities including vector search and AI embeddings. Configure connection settings below.') .

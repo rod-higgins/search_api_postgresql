@@ -34,7 +34,7 @@ class BackendMigrationService {
 
   /**
    * Backend compatibility matrix.
-   * 
+   *
    * Defines what features are lost/gained when switching backends.
    */
   protected $compatibilityMatrix = [
@@ -61,7 +61,7 @@ class BackendMigrationService {
   public function __construct(
     EntityTypeManagerInterface $entity_type_manager,
     MessengerInterface $messenger,
-    LoggerInterface $logger
+    LoggerInterface $logger,
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->messenger = $messenger;
@@ -95,39 +95,39 @@ class BackendMigrationService {
     $actions_required = [];
     $compatible = TRUE;
 
-    // Check for vector support loss
+    // Check for vector support loss.
     if ($from_info['supports_vector'] && !$to_info['supports_vector']) {
       $compatible = FALSE;
-      $warnings[] = $this->t('⚠️ CRITICAL: Switching to this backend will PERMANENTLY DELETE all vector search data and embeddings.');
+      $warnings[] = $this->t('CRITICAL: Switching to this backend will PERMANENTLY DELETE all vector search data and embeddings.');
       $warnings[] = $this->t('Vector fields will be removed from all indexes.');
       $warnings[] = $this->t('AI-generated embeddings will be lost and cannot be recovered.');
       $actions_required[] = 'backup_vector_data';
       $actions_required[] = 'remove_vector_fields';
     }
 
-    // Check for feature losses
+    // Check for feature losses.
     $lost_features = array_diff($from_info['features'], $to_info['features']);
     if (!empty($lost_features)) {
       $warnings[] = $this->t('Features that will be lost: @features', [
-        '@features' => implode(', ', $lost_features)
+        '@features' => implode(', ', $lost_features),
       ]);
     }
 
-    // Check for data type incompatibilities
+    // Check for data type incompatibilities.
     $lost_types = array_diff($from_info['data_types'], $to_info['data_types']);
     if (!empty($lost_types)) {
       $compatible = FALSE;
-      $warnings[] = $this->t('⚠️ Data types that will be lost: @types', [
-        '@types' => implode(', ', $lost_types)
+      $warnings[] = $this->t('WARNING: Data types that will be lost: @types', [
+        '@types' => implode(', ', $lost_types),
       ]);
       $actions_required[] = 'convert_incompatible_fields';
     }
 
-    // Check for gained features
+    // Check for gained features.
     $gained_features = array_diff($to_info['features'], $from_info['features']);
     if (!empty($gained_features)) {
       $warnings[] = $this->t('✅ New features available: @features', [
-        '@features' => implode(', ', $gained_features)
+        '@features' => implode(', ', $gained_features),
       ]);
     }
 
@@ -160,7 +160,7 @@ class BackendMigrationService {
 
     $compatibility = $this->checkBackendCompatibility($from_backend, $to_backend);
 
-    // Store migration info for later execution
+    // Store migration info for later execution.
     $migration_data = [
       'server_id' => $server->id(),
       'from_backend' => $from_backend,
@@ -169,10 +169,10 @@ class BackendMigrationService {
       'timestamp' => time(),
     ];
 
-    // Save migration plan
+    // Save migration plan.
     \Drupal::state()->set('search_api_postgresql_migration_' . $server->id(), $migration_data);
 
-    // Backup critical data if needed
+    // Backup critical data if needed.
     if (in_array('backup_vector_data', $compatibility['actions_required'])) {
       $this->backupVectorData($server);
     }
@@ -189,7 +189,8 @@ class BackendMigrationService {
     $migration_data = \Drupal::state()->get($migration_key);
 
     if (empty($migration_data)) {
-      return; // No migration needed
+      // No migration needed.
+      return;
     }
 
     $this->logger->info('Executing backend migration for server @server', [
@@ -199,7 +200,7 @@ class BackendMigrationService {
     try {
       $compatibility = $migration_data['compatibility'];
 
-      // Execute required actions
+      // Execute required actions.
       foreach ($compatibility['actions_required'] as $action) {
         switch ($action) {
           case 'remove_vector_fields':
@@ -211,21 +212,22 @@ class BackendMigrationService {
             break;
 
           case 'backup_vector_data':
-            // Already done in prepareBackendMigration
+            // Already done in prepareBackendMigration.
             break;
         }
       }
 
-      // Update indexes to remove incompatible field types
+      // Update indexes to remove incompatible field types.
       $this->updateIndexesForBackendChange($server, $migration_data);
 
-      // Show user warnings about what was changed
+      // Show user warnings about what was changed.
       $this->displayMigrationResults($migration_data);
 
-      // Clean up migration data
+      // Clean up migration data.
       \Drupal::state()->delete($migration_key);
 
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $this->logger->error('Backend migration failed for server @server: @error', [
         '@server' => $server->id(),
         '@error' => $e->getMessage(),
@@ -245,7 +247,7 @@ class BackendMigrationService {
 
     foreach ($indexes as $index) {
       $fields_to_remove = [];
-      
+
       foreach ($index->getFields() as $field_id => $field) {
         if ($field->getType() === 'vector') {
           $fields_to_remove[] = $field_id;
@@ -258,14 +260,14 @@ class BackendMigrationService {
           '@index' => $index->id(),
         ]);
 
-        // Remove fields from index
+        // Remove fields from index.
         foreach ($fields_to_remove as $field_id) {
           $index->removeField($field_id);
         }
 
         $index->save();
 
-        // Drop vector columns from database
+        // Drop vector columns from database.
         $this->dropVectorColumns($server, $index, $fields_to_remove);
       }
     }
@@ -278,16 +280,17 @@ class BackendMigrationService {
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
-      
+
       // Get database connection through reflection (since connection is private)
       $reflection = new \ReflectionClass($backend);
-      
+
       if ($reflection->hasMethod('getConnection')) {
         $get_connection = $reflection->getMethod('getConnection');
         $get_connection->setAccessible(TRUE);
         $connection = $get_connection->invoke($backend);
-      } else {
-        // Fallback: create new connection
+      }
+      else {
+        // Fallback: create new connection.
         $connection = Database::getConnection('default', 'default');
       }
 
@@ -296,14 +299,15 @@ class BackendMigrationService {
       foreach ($field_ids as $field_id) {
         $sql = "ALTER TABLE {$table_name} DROP COLUMN IF EXISTS {$field_id}";
         $connection->query($sql);
-        
-        // Also drop embedding columns
+
+        // Also drop embedding columns.
         $embedding_column = $field_id . '_embedding';
         $sql = "ALTER TABLE {$table_name} DROP COLUMN IF EXISTS {$embedding_column}";
         $connection->query($sql);
       }
 
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $this->logger->error('Failed to drop vector columns: @error', [
         '@error' => $e->getMessage(),
       ]);
@@ -318,7 +322,7 @@ class BackendMigrationService {
       '@server' => $server->id(),
     ]);
 
-    // Create a backup table or export data
+    // Create a backup table or export data.
     $backup_timestamp = date('Y_m_d_H_i_s');
     $backup_key = 'vector_backup_' . $server->id() . '_' . $backup_timestamp;
 
@@ -346,13 +350,14 @@ class BackendMigrationService {
 
       if (!empty($backup_data)) {
         \Drupal::state()->set($backup_key, $backup_data);
-        
+
         $this->messenger->addWarning($this->t('Vector data has been backed up with key: @key. Contact your administrator to restore if needed.', [
           '@key' => $backup_key,
         ]));
       }
 
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $this->logger->error('Failed to backup vector data: @error', [
         '@error' => $e->getMessage(),
       ]);
@@ -370,9 +375,9 @@ class BackendMigrationService {
 
       foreach ($index->getFields() as $field_id => $field) {
         if (in_array($field->getType(), $lost_types)) {
-          // Convert to compatible type
+          // Convert to compatible type.
           $new_type = $this->getCompatibleFieldType($field->getType());
-          
+
           if ($new_type !== $field->getType()) {
             $field->setType($new_type);
             $fields_converted[] = $field_id . ' (' . $field->getType() . ' → ' . $new_type . ')';
@@ -382,7 +387,7 @@ class BackendMigrationService {
 
       if (!empty($fields_converted)) {
         $index->save();
-        
+
         $this->logger->info('Converted field types in index @index: @fields', [
           '@index' => $index->id(),
           '@fields' => implode(', ', $fields_converted),
@@ -396,8 +401,10 @@ class BackendMigrationService {
    */
   protected function getCompatibleFieldType($original_type) {
     $type_mappings = [
-      'vector' => 'text', // Convert vector fields to text
-      'postgresql_fulltext' => 'text', // Convert fulltext to text
+    // Convert vector fields to text.
+      'vector' => 'text',
+    // Convert fulltext to text.
+      'postgresql_fulltext' => 'text',
     ];
 
     return $type_mappings[$original_type] ?? $original_type;
@@ -414,7 +421,7 @@ class BackendMigrationService {
     foreach ($indexes as $index) {
       $index_updated = FALSE;
 
-      // Ensure all fields are compatible with new backend
+      // Ensure all fields are compatible with new backend.
       foreach ($index->getFields() as $field_id => $field) {
         if (!in_array($field->getType(), $backend_info['data_types'])) {
           $new_type = $this->getCompatibleFieldType($field->getType());
@@ -425,8 +432,8 @@ class BackendMigrationService {
 
       if ($index_updated) {
         $index->save();
-        
-        // Trigger re-indexing
+
+        // Trigger re-indexing.
         $index->reindex();
       }
     }
@@ -466,7 +473,7 @@ class BackendMigrationService {
    */
   public function getIndexesWithVectorFields(ServerInterface $server) {
     $vector_indexes = [];
-    
+
     foreach ($server->getIndexes() as $index) {
       foreach ($index->getFields() as $field) {
         if ($field->getType() === 'vector') {
@@ -496,7 +503,9 @@ class BackendMigrationService {
       $vector_indexes = $this->getIndexesWithVectorFields($server);
       if (!empty($vector_indexes)) {
         $issues[] = $this->t('The following indexes use vector fields that will be lost: @indexes', [
-          '@indexes' => implode(', ', array_map(function($index) { return $index->label(); }, $vector_indexes)),
+          '@indexes' => implode(', ', array_map(function ($index) {
+            return $index->label();
+          }, $vector_indexes)),
         ]);
       }
     }

@@ -2,6 +2,7 @@
 
 namespace Drupal\search_api_postgresql\PostgreSQL;
 
+use Drupal\search_api\SearchApiException;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -53,18 +54,19 @@ class PostgreSQLConnectorFactory {
    */
   public function createFromServer($server) {
     $backend = $server->getBackend();
-    
+
     if (!in_array($backend->getPluginId(), ['postgresql'])) {
-      throw new \Drupal\search_api\SearchApiException('Server does not use a PostgreSQL backend.');
+      throw new SearchApiException('Server does not use a PostgreSQL backend.');
     }
 
     $config = $backend->getConfiguration()['connection'] ?? [];
-    
-    // Handle secure password retrieval
+
+    // Handle secure password retrieval.
     if (!empty($config['password_key']) && method_exists($backend, 'getDatabasePassword')) {
       $config['password'] = $backend->getDatabasePassword();
     }
 
     return $this->create($config);
   }
+
 }

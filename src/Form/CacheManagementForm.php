@@ -2,10 +2,10 @@
 
 namespace Drupal\search_api_postgresql\Form;
 
+use Symfony\Component\HttpFoundation\Response;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
-use Drupal\Core\Url;
 use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
 use Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -42,7 +42,7 @@ class CacheManagementForm extends FormBase {
   public function __construct(
     ConfigFactoryInterface $config_factory,
     EmbeddingCacheManager $cache_manager,
-    EmbeddingAnalyticsService $analytics_service
+    EmbeddingAnalyticsService $analytics_service,
   ) {
     $this->configFactory = $config_factory;
     $this->cacheManager = $cache_manager;
@@ -73,7 +73,7 @@ class CacheManagementForm extends FormBase {
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form['#attached']['library'][] = 'search_api_postgresql/admin';
 
-    // Page header
+    // Page header.
     $form['header'] = [
       '#type' => 'container',
       '#attributes' => ['class' => ['cache-management-header']],
@@ -91,9 +91,9 @@ class CacheManagementForm extends FormBase {
       '#value' => $this->t('Manage the embedding cache to improve performance and reduce API costs.'),
     ];
 
-    // Cache statistics
+    // Cache statistics.
     $cache_stats = $this->cacheManager->getCacheStatistics();
-    
+
     $form['stats'] = [
       '#type' => 'details',
       '#title' => $this->t('Cache Statistics'),
@@ -116,7 +116,7 @@ class CacheManagementForm extends FormBase {
       ],
     ];
 
-    // Cache actions
+    // Cache actions.
     $form['actions_section'] = [
       '#type' => 'details',
       '#title' => $this->t('Cache Actions'),
@@ -161,7 +161,7 @@ class CacheManagementForm extends FormBase {
       ],
     ];
 
-    // Cache configuration
+    // Cache configuration.
     $form['config'] = [
       '#type' => 'details',
       '#title' => $this->t('Cache Configuration'),
@@ -181,9 +181,12 @@ class CacheManagementForm extends FormBase {
       '#type' => 'number',
       '#title' => $this->t('Default TTL (seconds)'),
       '#description' => $this->t('Default time-to-live for cached embeddings.'),
-      '#default_value' => $config->get('default_ttl') ?? 604800, // 7 days
-      '#min' => 3600, // 1 hour
-      '#max' => 2592000, // 30 days
+    // 7 days
+      '#default_value' => $config->get('default_ttl') ?? 604800,
+    // 1 hour
+      '#min' => 3600,
+    // 30 days
+      '#max' => 2592000,
     ];
 
     $form['config']['max_size'] = [
@@ -208,7 +211,7 @@ class CacheManagementForm extends FormBase {
       '#default_value' => $config->get('cleanup_frequency') ?? 'weekly',
     ];
 
-    // Submit buttons
+    // Submit buttons.
     $form['actions'] = [
       '#type' => 'actions',
     ];
@@ -233,11 +236,11 @@ class CacheManagementForm extends FormBase {
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
     $action = $form_state->getValue('action');
-    
+
     if ($action === 'clear_all') {
       $confirm = $form_state->getValue('confirm');
       if (!$confirm) {
-        $form_state->setErrorByName('confirm', 
+        $form_state->setErrorByName('confirm',
           $this->t('You must confirm that you understand this action cannot be undone.')
         );
       }
@@ -246,7 +249,7 @@ class CacheManagementForm extends FormBase {
     if ($action === 'clear_by_age') {
       $age_threshold = $form_state->getValue('age_threshold');
       if ($age_threshold < 1 || $age_threshold > 365) {
-        $form_state->setErrorByName('age_threshold', 
+        $form_state->setErrorByName('age_threshold',
           $this->t('Age threshold must be between 1 and 365 days.')
         );
       }
@@ -262,18 +265,19 @@ class CacheManagementForm extends FormBase {
 
     switch ($action) {
       case 'clear_all':
-        $result = $this->cacheManager->clear(); // Changed from clearAll()
+        // Changed from clearAll()
+        $result = $this->cacheManager->clear();
         $this->messenger()->addStatus($this->t('All cache entries have been cleared.'));
         break;
 
       case 'clear_expired':
-        // For now, use performMaintenance which cleans up expired entries
+        // For now, use performMaintenance which cleans up expired entries.
         $result = $this->cacheManager->performMaintenance();
         $this->messenger()->addStatus($this->t('Cache maintenance completed (expired entries cleaned).'));
         break;
 
       case 'clear_by_age':
-        // For now, just clear all cache with a warning
+        // For now, just clear all cache with a warning.
         $result = $this->cacheManager->clear();
         $this->messenger()->addWarning($this->t('Age-based clearing not yet implemented. All cache has been cleared instead.'));
         break;
@@ -288,7 +292,7 @@ class CacheManagementForm extends FormBase {
         return;
     }
 
-    // Log the action
+    // Log the action.
     $this->getLogger('search_api_postgresql')->info('Cache management action "@action" executed.', [
       '@action' => $action,
     ]);
@@ -299,12 +303,12 @@ class CacheManagementForm extends FormBase {
    */
   public function submitConfiguration(array &$form, FormStateInterface $form_state) {
     $config = $this->configFactory->getEditable('search_api_postgresql.cache');
-    
+
     $config->set('enabled', $form_state->getValue('enabled'));
     $config->set('default_ttl', $form_state->getValue('default_ttl'));
     $config->set('max_size', $form_state->getValue('max_size'));
     $config->set('cleanup_frequency', $form_state->getValue('cleanup_frequency'));
-    
+
     $config->save();
 
     $this->messenger()->addStatus($this->t('Cache configuration has been saved.'));
@@ -316,7 +320,7 @@ class CacheManagementForm extends FormBase {
   protected function exportStatistics() {
     $stats = $this->cacheManager->getCacheStatistics();
     $analytics = $this->analyticsService->getCacheAnalytics();
-    
+
     $export_data = [
       'timestamp' => date('Y-m-d H:i:s'),
       'cache_statistics' => $stats,
@@ -324,11 +328,11 @@ class CacheManagementForm extends FormBase {
     ];
 
     $json_data = json_encode($export_data, JSON_PRETTY_PRINT);
-    
-    $response = new \Symfony\Component\HttpFoundation\Response($json_data);
+
+    $response = new Response($json_data);
     $response->headers->set('Content-Type', 'application/json');
     $response->headers->set('Content-Disposition', 'attachment; filename="cache_statistics_' . date('Y-m-d_H-i-s') . '.json"');
-    
+
     $response->send();
   }
 
@@ -337,11 +341,11 @@ class CacheManagementForm extends FormBase {
    */
   protected function formatBytes($bytes, $precision = 2) {
     $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    
+
     for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
       $bytes /= 1024;
     }
-    
+
     return round($bytes, $precision) . ' ' . $units[$i];
   }
 

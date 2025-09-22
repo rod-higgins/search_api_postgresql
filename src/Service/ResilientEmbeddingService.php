@@ -2,12 +2,9 @@
 
 namespace Drupal\search_api_postgresql\Service;
 
-use Drupal\search_api\SearchApiException;
 use Drupal\search_api_postgresql\Exception\GracefulDegradationException;
 use Drupal\search_api_postgresql\Exception\PartialBatchFailureException;
 use Drupal\search_api_postgresql\Exception\EmbeddingServiceUnavailableException;
-use Drupal\search_api_postgresql\Exception\TemporaryApiException;
-use Drupal\search_api_postgresql\Exception\RateLimitException;
 use Drupal\search_api_postgresql\Exception\DegradationExceptionFactory;
 use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
 use Psr\Log\LoggerInterface;
@@ -71,7 +68,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
     CircuitBreakerService $circuit_breaker,
     EmbeddingCacheManager $cache_manager,
     LoggerInterface $logger,
-    array $config = []
+    array $config = [],
   ) {
     $this->embeddingService = $embedding_service;
     $this->circuitBreaker = $circuit_breaker;
@@ -88,19 +85,19 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
       return NULL;
     }
 
-    // Try cache first
+    // Try cache first.
     $cached_embedding = $this->getCachedEmbedding($text);
     if ($cached_embedding !== NULL) {
       return $cached_embedding;
     }
 
-    // Use circuit breaker for external API call
+    // Use circuit breaker for external API call.
     return $this->circuitBreaker->execute(
       'embedding_generation',
-      function() use ($text) {
+      function () use ($text) {
         return $this->generateEmbeddingWithRetry($text);
       },
-      function($exception) use ($text) {
+      function ($exception) use ($text) {
         return $this->handleEmbeddingFailure($text, $exception);
       },
       ['operation' => 'single_embedding', 'text_length' => strlen($text)]
@@ -115,7 +112,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
       return [];
     }
 
-    // Filter out empty texts and prepare for processing
+    // Filter out empty texts and prepare for processing.
     $valid_texts = [];
     $text_indices = [];
     foreach ($texts as $index => $text) {
@@ -129,7 +126,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
       return [];
     }
 
-    // Check cache for all texts
+    // Check cache for all texts.
     $cached_results = [];
     $uncached_texts = [];
     $uncached_indices = [];
@@ -138,13 +135,14 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
       $cached = $this->getCachedEmbedding($text);
       if ($cached !== NULL) {
         $cached_results[$text_indices[$i]] = $cached;
-      } else {
+      }
+      else {
         $uncached_texts[] = $text;
         $uncached_indices[] = $text_indices[$i];
       }
     }
 
-    // Process uncached texts in batches with graceful degradation
+    // Process uncached texts in batches with graceful degradation.
     $final_results = $cached_results;
     if (!empty($uncached_texts)) {
       $batch_results = $this->processBatchWithDegradation($uncached_texts, $uncached_indices);
@@ -165,7 +163,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
    * {@inheritdoc}
    */
   public function isAvailable() {
-    // Check if circuit breaker allows the service
+    // Check if circuit breaker allows the service.
     if (!$this->circuitBreaker->isServiceAvailable('embedding_generation')) {
       return FALSE;
     }
@@ -188,31 +186,32 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
   protected function generateEmbeddingWithRetry($text) {
     $max_retries = $this->config['max_retries'];
     $base_delay = $this->config['base_retry_delay'];
-    
+
     for ($attempt = 0; $attempt <= $max_retries; $attempt++) {
       try {
         $embedding = $this->embeddingService->generateEmbedding($text);
-        
+
         if ($embedding) {
-          // Cache successful result
+          // Cache successful result.
           $this->cacheEmbedding($text, $embedding);
           return $embedding;
         }
-        
+
         throw new \Exception('Embedding service returned empty result');
-        
-      } catch (\Exception $e) {
+
+      }
+      catch (\Exception $e) {
         $is_last_attempt = ($attempt === $max_retries);
-        
-        // Determine if this is a retryable error
+
+        // Determine if this is a retryable error.
         if (!$this->isRetryableError($e) || $is_last_attempt) {
           throw $this->wrapException($e, $attempt);
         }
-        
-        // Exponential backoff with jitter
+
+        // Exponential backoff with jitter.
         $delay = $base_delay * pow(2, $attempt) + random_int(0, 1000);
         usleep($delay * 1000);
-        
+
         $this->logger->info('Retrying embedding generation (attempt @attempt/@max): @error', [
           '@attempt' => $attempt + 1,
           '@max' => $max_retries + 1,
@@ -220,8 +219,8 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
         ]);
       }
     }
-    
-    throw new EmbeddingServiceUnavailableException('Embedding service', 
+
+    throw new EmbeddingServiceUnavailableException('Embedding service',
       new \Exception('Max retries exceeded'));
   }
 
@@ -240,43 +239,44 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
     $batch_size = $this->config['batch_size'];
     $results = [];
     $all_failures = [];
-    
-    // Split into smaller batches
+
+    // Split into smaller batches.
     $batches = array_chunk($texts, $batch_size, TRUE);
     $index_batches = array_chunk($indices, $batch_size, TRUE);
-    
+
     foreach ($batches as $batch_index => $batch_texts) {
       $batch_indices = $index_batches[$batch_index];
-      
+
       try {
         $batch_results = $this->circuitBreaker->execute(
           'embedding_batch_generation',
-          function() use ($batch_texts) {
+          function () use ($batch_texts) {
             return $this->embeddingService->generateBatchEmbeddings($batch_texts);
           },
-          function($exception) use ($batch_texts, $batch_indices) {
+          function ($exception) use ($batch_texts, $batch_indices) {
             return $this->handleBatchFailure($batch_texts, $batch_indices, $exception);
           },
           ['operation' => 'batch_embedding', 'batch_size' => count($batch_texts)]
         );
-        
-        // Map results back to original indices
+
+        // Map results back to original indices.
         foreach ($batch_results as $batch_pos => $embedding) {
           if (isset($batch_indices[$batch_pos]) && $embedding) {
             $original_index = $batch_indices[$batch_pos];
             $results[$original_index] = $embedding;
-            
-            // Cache successful embeddings
+
+            // Cache successful embeddings.
             $this->cacheEmbedding($batch_texts[$batch_pos], $embedding);
           }
         }
-        
-      } catch (PartialBatchFailureException $e) {
-        // Handle partial batch failure
+
+      }
+      catch (PartialBatchFailureException $e) {
+        // Handle partial batch failure.
         $successful = $e->getSuccessfulItems();
         $failed = $e->getFailedItems();
-        
-        // Add successful items to results
+
+        // Add successful items to results.
         foreach ($successful as $batch_pos => $embedding) {
           if (isset($batch_indices[$batch_pos])) {
             $original_index = $batch_indices[$batch_pos];
@@ -284,53 +284,55 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
             $this->cacheEmbedding($batch_texts[$batch_pos], $embedding);
           }
         }
-        
-        // Track failures
+
+        // Track failures.
         foreach ($failed as $batch_pos => $error) {
           if (isset($batch_indices[$batch_pos])) {
             $original_index = $batch_indices[$batch_pos];
             $all_failures[$original_index] = $error;
           }
         }
-        
+
         $this->logger->warning('Partial batch failure: @success/@total successful', [
           '@success' => count($successful),
           '@total' => count($batch_texts),
         ]);
-        
-      } catch (GracefulDegradationException $e) {
-        // Entire batch failed, but we can continue
+
+      }
+      catch (GracefulDegradationException $e) {
+        // Entire batch failed, but we can continue.
         foreach ($batch_indices as $batch_pos => $original_index) {
           $all_failures[$original_index] = $e->getMessage();
         }
-        
+
         $this->logger->warning('Batch embedding failed gracefully: @message', [
           '@message' => $e->getMessage(),
         ]);
       }
     }
-    
-    // If we have partial failures, throw PartialBatchFailureException
+
+    // If we have partial failures, throw PartialBatchFailureException.
     if (!empty($all_failures) && !empty($results)) {
       $successful_items = [];
       $failed_items = [];
-      
+
       foreach ($indices as $index) {
         if (isset($results[$index])) {
           $successful_items[$index] = $results[$index];
-        } elseif (isset($all_failures[$index])) {
+        }
+        elseif (isset($all_failures[$index])) {
           $failed_items[$index] = $all_failures[$index];
         }
       }
-      
+
       throw new PartialBatchFailureException($successful_items, $failed_items, 'batch embedding generation');
     }
-    
-    // If all failed, throw appropriate exception
+
+    // If all failed, throw appropriate exception.
     if (empty($results) && !empty($all_failures)) {
       throw new EmbeddingServiceUnavailableException('Batch embedding service');
     }
-    
+
     return $results;
   }
 
@@ -346,21 +348,21 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
    *   Fallback embedding or NULL.
    */
   protected function handleEmbeddingFailure($text, \Exception $exception) {
-    // Check if we have a fallback strategy
+    // Check if we have a fallback strategy.
     if ($this->config['enable_fallback']) {
-      // Try to get a cached similar embedding
+      // Try to get a cached similar embedding.
       $fallback_embedding = $this->getFallbackEmbedding($text);
       if ($fallback_embedding) {
         $this->logger->info('Using fallback embedding for failed generation');
         return $fallback_embedding;
       }
     }
-    
-    // If no fallback available, return NULL to trigger text-only search
+
+    // If no fallback available, return NULL to trigger text-only search.
     $this->logger->warning('Embedding generation failed, no fallback available: @message', [
       '@message' => $exception->getMessage(),
     ]);
-    
+
     return NULL;
   }
 
@@ -382,41 +384,43 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
    */
   protected function handleBatchFailure(array $texts, array $indices, \Exception $exception) {
     // If circuit breaker is open or this is a complete service failure,
-    // don't try individual processing
+    // don't try individual processing.
     if (!$this->circuitBreaker->isServiceAvailable('embedding_generation')) {
       throw new EmbeddingServiceUnavailableException('Batch embedding service', $exception);
     }
-    
-    // Try processing items individually if configured to do so
+
+    // Try processing items individually if configured to do so.
     if (!$this->config['individual_fallback']) {
       throw new EmbeddingServiceUnavailableException('Batch embedding service', $exception);
     }
-    
+
     $successful = [];
     $failed = [];
-    
+
     foreach ($texts as $pos => $text) {
       try {
         $embedding = $this->generateEmbeddingWithRetry($text);
         if ($embedding) {
           $successful[$pos] = $embedding;
-        } else {
+        }
+        else {
           $failed[$pos] = 'No embedding returned';
         }
-      } catch (\Exception $e) {
+      }
+      catch (\Exception $e) {
         $failed[$pos] = $e->getMessage();
       }
-      
-      // Add small delay between individual requests
+
+      // Add small delay between individual requests.
       if ($pos < count($texts) - 1) {
         usleep($this->config['individual_delay'] * 1000);
       }
     }
-    
+
     if (!empty($successful)) {
       throw new PartialBatchFailureException($successful, $failed, 'individual embedding fallback');
     }
-    
+
     throw new EmbeddingServiceUnavailableException('Individual embedding fallback', $exception);
   }
 
@@ -433,10 +437,11 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
     if (!$this->cacheManager) {
       return NULL;
     }
-    
+
     try {
       return $this->cacheManager->getCachedEmbedding($text, $this->getCacheMetadata());
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $this->logger->warning('Cache retrieval failed: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -456,10 +461,11 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
     if (!$this->cacheManager) {
       return;
     }
-    
+
     try {
       $this->cacheManager->cacheEmbedding($text, $embedding, $this->getCacheMetadata());
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $this->logger->warning('Cache storage failed: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -480,13 +486,12 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
     // In a more sophisticated implementation, this could use:
     // - Simplified embeddings (fewer dimensions)
     // - Pre-computed embeddings for common terms
-    // - Statistical text features as pseudo-embeddings
-    
+    // - Statistical text features as pseudo-embeddings.
     if (!$this->cacheManager) {
       return NULL;
     }
-    
-    // For now, return NULL - this is where you'd implement fallback strategies
+
+    // For now, return NULL - this is where you'd implement fallback strategies.
     return NULL;
   }
 
@@ -502,14 +507,14 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
   protected function isRetryableError(\Exception $exception) {
     $message = $exception->getMessage();
     $code = $exception->getCode();
-    
-    // Retryable errors: network issues, rate limits, temporary server errors
+
+    // Retryable errors: network issues, rate limits, temporary server errors.
     $retryable_codes = [429, 500, 502, 503, 504];
     if (in_array($code, $retryable_codes)) {
       return TRUE;
     }
-    
-    // Check message for retryable conditions
+
+    // Check message for retryable conditions.
     $retryable_messages = [
       'connection timeout',
       'connection refused',
@@ -518,13 +523,13 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
       'server overloaded',
       'curl error',
     ];
-    
+
     foreach ($retryable_messages as $retryable) {
       if (stripos($message, $retryable) !== FALSE) {
         return TRUE;
       }
     }
-    
+
     return FALSE;
   }
 
@@ -568,11 +573,13 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
   protected function getDefaultConfig() {
     return [
       'max_retries' => 3,
-      'base_retry_delay' => 1000, // milliseconds
+    // Milliseconds.
+      'base_retry_delay' => 1000,
       'batch_size' => 10,
       'enable_fallback' => TRUE,
       'individual_fallback' => TRUE,
-      'individual_delay' => 100, // milliseconds between individual requests
+    // Milliseconds between individual requests.
+      'individual_delay' => 100,
     ];
   }
 
@@ -598,4 +605,5 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
     $this->circuitBreaker->resetCircuit('embedding_generation');
     $this->circuitBreaker->resetCircuit('embedding_batch_generation');
   }
+
 }

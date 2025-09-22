@@ -2,11 +2,15 @@ admin:
   version: 1.x
   css:
     theme:
+      '//fonts.googleapis.com/icon?family=Material+Icons': { external: true }
+      '//fonts.googleapis.com/css?family=Lato:300,400,700': { external: true }
+      '//fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap': { external: true }
       css/embedding-admin.css: {}
   js:
     js/embedding-admin.js: {}
     js/search_api_postgresql_admin.js: {}
   dependencies:
+    - core/once
     - core/jquery
     - core/drupal
     - core/drupalSettings

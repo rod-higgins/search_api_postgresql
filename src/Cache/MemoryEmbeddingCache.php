@@ -60,9 +60,11 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
   public function __construct(LoggerInterface $logger, array $config = []) {
     $this->logger = $logger;
     $this->config = $config + [
-      'default_ttl' => 3600, // 1 hour for memory cache
+    // 1 hour for memory cache
+      'default_ttl' => 3600,
       'max_entries' => 1000,
-      'cleanup_threshold' => 0.9, // Cleanup when 90% full
+    // Cleanup when 90% full.
+      'cleanup_threshold' => 0.9,
     ];
   }
 
@@ -85,7 +87,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
     $metadata = $this->metadata[$text_hash] ?? [];
     $expires = $metadata['expires'] ?? 0;
 
-    // Check if expired
+    // Check if expired.
     if ($expires > 0 && time() > $expires) {
       unset($this->cache[$text_hash]);
       unset($this->metadata[$text_hash]);
@@ -94,7 +96,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       return NULL;
     }
 
-    // Update access time and hit count
+    // Update access time and hit count.
     $this->metadata[$text_hash]['last_accessed'] = time();
     $this->metadata[$text_hash]['hit_count'] = ($metadata['hit_count'] ?? 0) + 1;
 
@@ -118,7 +120,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
     $ttl = $ttl ?? $this->config['default_ttl'];
     $expires = $ttl > 0 ? time() + $ttl : 0;
 
-    // Check if we need to cleanup
+    // Check if we need to cleanup.
     if (count($this->cache) >= $this->config['max_entries'] * $this->config['cleanup_threshold']) {
       $this->performCleanup();
     }
@@ -191,7 +193,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       $metadata = $this->metadata[$hash] ?? [];
       $expires = $metadata['expires'] ?? 0;
 
-      // Check if expired
+      // Check if expired.
       if ($expires > 0 && $current_time > $expires) {
         unset($this->cache[$hash]);
         unset($this->metadata[$hash]);
@@ -199,7 +201,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
         continue;
       }
 
-      // Update access time and hit count
+      // Update access time and hit count.
       $this->metadata[$hash]['last_accessed'] = $current_time;
       $this->metadata[$hash]['hit_count'] = ($metadata['hit_count'] ?? 0) + 1;
 
@@ -227,7 +229,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
     $expires = $ttl > 0 ? time() + $ttl : 0;
     $current_time = time();
 
-    // Check if we need to cleanup
+    // Check if we need to cleanup.
     $new_count = count($this->cache) + count($items);
     if ($new_count >= $this->config['max_entries'] * $this->config['cleanup_threshold']) {
       $this->performCleanup();
@@ -263,12 +265,12 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
    */
   public function clear() {
     $count = count($this->cache);
-    
+
     $this->cache = [];
     $this->metadata = [];
-    
+
     $this->stats['invalidations'] += $count;
-    
+
     $this->logger->info('Cleared memory embedding cache: @count entries', ['@count' => $count]);
 
     return TRUE;
@@ -290,10 +292,10 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       if (isset($metadata['expires']) && $metadata['expires'] > 0 && $current_time > $metadata['expires']) {
         $expired_count++;
       }
-      
+
       $total_hits += $metadata['hit_count'] ?? 0;
       $total_dimensions += $metadata['dimensions'] ?? 0;
-      
+
       $created = $metadata['created'] ?? 0;
       if ($created > 0) {
         if ($oldest_created === NULL || $created < $oldest_created) {
@@ -316,8 +318,8 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       'average_dimensions' => $total_entries > 0 ? round($total_dimensions / $total_entries, 2) : 0,
       'oldest_entry' => $oldest_created ? date('Y-m-d H:i:s', $oldest_created) : NULL,
       'newest_entry' => $newest_created ? date('Y-m-d H:i:s', $newest_created) : NULL,
-      'hit_rate' => $this->stats['hits'] + $this->stats['misses'] > 0 
-        ? round($this->stats['hits'] / ($this->stats['hits'] + $this->stats['misses']) * 100, 2) 
+      'hit_rate' => $this->stats['hits'] + $this->stats['misses'] > 0
+        ? round($this->stats['hits'] / ($this->stats['hits'] + $this->stats['misses']) * 100, 2)
         : 0,
       'memory_usage_mb' => round(memory_get_usage(TRUE) / 1024 / 1024, 2),
       'max_entries' => $this->config['max_entries'],
@@ -339,7 +341,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
     $current_time = time();
     $cleaned_expired = 0;
 
-    // Remove expired entries
+    // Remove expired entries.
     foreach ($this->metadata as $hash => $metadata) {
       $expires = $metadata['expires'] ?? 0;
       if ($expires > 0 && $current_time > $expires) {
@@ -353,7 +355,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       $this->logger->debug('Cleaned up @count expired memory cache entries', ['@count' => $cleaned_expired]);
     }
 
-    // Remove excess entries if over limit
+    // Remove excess entries if over limit.
     $total_count = count($this->cache);
     if ($total_count > $this->config['max_entries']) {
       $excess = $total_count - $this->config['max_entries'];
@@ -368,7 +370,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       }
 
       // Sort by last accessed time (ascending) and then by hit count (ascending)
-      uasort($lru_candidates, function($a, $b) {
+      uasort($lru_candidates, function ($a, $b) {
         if ($a['last_accessed'] === $b['last_accessed']) {
           return $a['hit_count'] <=> $b['hit_count'];
         }
@@ -376,7 +378,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       });
 
       $hashes_to_remove = array_slice(array_keys($lru_candidates), 0, $excess);
-      
+
       foreach ($hashes_to_remove as $hash) {
         unset($this->cache[$hash]);
         unset($this->metadata[$hash]);
@@ -426,7 +428,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       if (!is_numeric($value)) {
         throw new \InvalidArgumentException("Embedding component at index {$index} is not numeric.");
       }
-      
+
       $float_val = (float) $value;
       if (!is_finite($float_val)) {
         throw new \InvalidArgumentException("Embedding component at index {$index} is infinite or NaN.");

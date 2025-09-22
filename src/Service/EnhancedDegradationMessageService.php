@@ -124,23 +124,23 @@ class EnhancedDegradationMessageService {
   public function generateMessage(GracefulDegradationException $exception, array $context = []) {
     $fallback_strategy = $exception->getFallbackStrategy();
     $template_key = $this->mapFallbackToTemplate($fallback_strategy);
-    
+
     $base_template = $this->messageTemplates[$template_key] ?? $this->getDefaultTemplate();
-    
-    // Enhance message with context
+
+    // Enhance message with context.
     $enhanced_message = $this->enhanceWithContext($base_template, $context, $exception);
-    
-    // Add technical details for admin users
+
+    // Add technical details for admin users.
     if (!empty($context['show_technical_details'])) {
       $enhanced_message['technical_details'] = $this->generateTechnicalDetails($exception, $context);
     }
-    
-    // Add estimated resolution time
+
+    // Add estimated resolution time.
     $enhanced_message['estimated_resolution'] = $this->estimateResolutionTime($exception, $context);
-    
-    // Add alternative actions
+
+    // Add alternative actions.
     $enhanced_message['alternatives'] = $this->generateAlternativeActions($exception, $context);
-    
+
     return $enhanced_message;
   }
 
@@ -164,7 +164,7 @@ class EnhancedDegradationMessageService {
       'synchronous_processing' => 'queue_degraded',
       'circuit_breaker_fallback' => 'circuit_breaker_open',
     ];
-    
+
     return $mapping[$fallback_strategy] ?? 'embedding_service_unavailable';
   }
 
@@ -183,25 +183,25 @@ class EnhancedDegradationMessageService {
    */
   protected function enhanceWithContext(array $template, array $context, GracefulDegradationException $exception) {
     $enhanced = $template;
-    
-    // Add time-sensitive context
+
+    // Add time-sensitive context.
     $time_context = $this->getTimeContext();
     $enhanced['additional_info'] = $this->contextVariations['time_of_day'][$time_context];
-    
-    // Add impact assessment
+
+    // Add impact assessment.
     $impact_level = $this->assessImpactLevel($exception, $context);
     $enhanced['impact_message'] = $this->contextVariations['user_impact'][$impact_level];
-    
-    // Add personalization if user context available
+
+    // Add personalization if user context available.
     if (!empty($context['user_role'])) {
       $enhanced = $this->personalizeForUserRole($enhanced, $context['user_role']);
     }
-    
-    // Add search tips if appropriate
+
+    // Add search tips if appropriate.
     if ($this->shouldShowSearchTips($exception)) {
       $enhanced['search_tips'] = $this->generateSearchTips($exception);
     }
-    
+
     return $enhanced;
   }
 
@@ -241,7 +241,7 @@ class EnhancedDegradationMessageService {
    */
   protected function estimateResolutionTime(GracefulDegradationException $exception, array $context) {
     $fallback_strategy = $exception->getFallbackStrategy();
-    
+
     $time_estimates = [
       'text_search_only' => 'medium',
       'rate_limit_backoff' => 'short',
@@ -249,7 +249,7 @@ class EnhancedDegradationMessageService {
       'circuit_breaker_fallback' => 'medium',
       'basic_functionality_only' => 'long',
     ];
-    
+
     $estimate_key = $time_estimates[$fallback_strategy] ?? 'unknown';
     return $this->contextVariations['duration_estimate'][$estimate_key];
   }
@@ -267,7 +267,7 @@ class EnhancedDegradationMessageService {
    */
   protected function generateAlternativeActions(GracefulDegradationException $exception, array $context) {
     $fallback_strategy = $exception->getFallbackStrategy();
-    
+
     $actions = [
       'text_search_only' => [
         'Try using more specific keywords',
@@ -285,7 +285,7 @@ class EnhancedDegradationMessageService {
         'Check back in a few minutes',
       ],
     ];
-    
+
     return $actions[$fallback_strategy] ?? [
       'Try refreshing the page',
       'Use simpler search terms',
@@ -301,16 +301,19 @@ class EnhancedDegradationMessageService {
    */
   protected function getTimeContext() {
     $hour = (int) date('H');
-    $day = date('N'); // 1-7, Monday to Sunday
-    
-    if ($day >= 6) { // Weekend
+    // 1-7, Monday to Sunday
+    $day = date('N');
+
+    // Weekend.
+    if ($day >= 6) {
       return 'weekend';
     }
-    
-    if ($hour >= 9 && $hour <= 17) { // Business hours
+
+    // Business hours.
+    if ($hour >= 9 && $hour <= 17) {
       return 'business_hours';
     }
-    
+
     return 'after_hours';
   }
 
@@ -327,7 +330,7 @@ class EnhancedDegradationMessageService {
    */
   protected function assessImpactLevel(GracefulDegradationException $exception, array $context) {
     $fallback_strategy = $exception->getFallbackStrategy();
-    
+
     $impact_levels = [
       'direct_processing' => 'minimal',
       'text_search_fallback' => 'minimal',
@@ -336,7 +339,7 @@ class EnhancedDegradationMessageService {
       'basic_functionality_only' => 'high',
       'circuit_breaker_fallback' => 'high',
     ];
-    
+
     return $impact_levels[$fallback_strategy] ?? 'moderate';
   }
 
@@ -354,10 +357,11 @@ class EnhancedDegradationMessageService {
   protected function personalizeForUserRole(array $message, $user_role) {
     if ($user_role === 'administrator') {
       $message['admin_note'] = 'Check the system logs for more detailed information about this degradation.';
-    } elseif ($user_role === 'editor') {
+    }
+    elseif ($user_role === 'editor') {
       $message['editor_note'] = 'Content editing and publishing are not affected by this search issue.';
     }
-    
+
     return $message;
   }
 
@@ -376,7 +380,7 @@ class EnhancedDegradationMessageService {
       'text_search_fallback',
       'basic_functionality_only',
     ];
-    
+
     return in_array($exception->getFallbackStrategy(), $show_tips_for);
   }
 
@@ -434,18 +438,18 @@ class EnhancedDegradationMessageService {
         'icon' => 'success',
       ];
     }
-    
+
     $severity_levels = [];
     $affected_features = [];
-    
+
     foreach ($exceptions as $exception) {
       $severity_levels[] = $this->assessImpactLevel($exception, $context);
       $affected_features[] = $this->getFeatureName($exception);
     }
-    
+
     $overall_severity = $this->determineOverallSeverity($severity_levels);
     $unique_features = array_unique($affected_features);
-    
+
     return [
       'status' => $overall_severity,
       'title' => $this->getStatusTitle($overall_severity, count($exceptions)),
@@ -493,7 +497,7 @@ class EnhancedDegradationMessageService {
       'direct_processing' => 'Search Cache',
       'basic_functionality_only' => 'Advanced Features',
     ];
-    
+
     return $feature_map[$exception->getFallbackStrategy()] ?? 'Search Service';
   }
 
@@ -514,7 +518,7 @@ class EnhancedDegradationMessageService {
       'partial' => 'Some Search Features Limited',
       'minor' => 'Minor Search Service Issues',
     ];
-    
+
     return $titles[$severity] ?? 'Search Service Status';
   }
 
@@ -531,13 +535,13 @@ class EnhancedDegradationMessageService {
    */
   protected function getStatusMessage($severity, array $features) {
     $feature_list = implode(', ', $features);
-    
+
     $messages = [
       'degraded' => "Multiple search features are currently limited: {$feature_list}. Core search functionality remains available.",
       'partial' => "Some search features are temporarily limited: {$feature_list}. Most functionality continues to work normally.",
       'minor' => "Minor issues detected with: {$feature_list}. Impact on search experience should be minimal.",
     ];
-    
+
     return $messages[$severity] ?? 'Search services are experiencing issues.';
   }
 
@@ -556,7 +560,7 @@ class EnhancedDegradationMessageService {
       'partial' => 'warning',
       'minor' => 'info',
     ];
-    
+
     return $icons[$severity] ?? 'warning';
   }
 
@@ -573,19 +577,20 @@ class EnhancedDegradationMessageService {
    */
   protected function getWorstCaseResolution(array $exceptions, array $context) {
     $resolution_times = [];
-    
+
     foreach ($exceptions as $exception) {
       $resolution_times[] = $this->estimateResolutionTime($exception, $context);
     }
-    
-    // Return the longest estimated time
+
+    // Return the longest estimated time.
     if (in_array($this->contextVariations['duration_estimate']['long'], $resolution_times)) {
       return $this->contextVariations['duration_estimate']['long'];
     }
     if (in_array($this->contextVariations['duration_estimate']['medium'], $resolution_times)) {
       return $this->contextVariations['duration_estimate']['medium'];
     }
-    
+
     return $this->contextVariations['duration_estimate']['short'];
   }
+
 }

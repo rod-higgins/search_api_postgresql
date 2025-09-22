@@ -9,7 +9,6 @@ use Drupal\search_api_postgresql\Exception\ApiKeyExpiredException;
 use Drupal\search_api_postgresql\Exception\EmbeddingServiceUnavailableException;
 use Drupal\search_api_postgresql\Exception\RateLimitException;
 use Drupal\search_api_postgresql\Exception\CacheDegradedException;
-use Drupal\search_api_postgresql\Exception\CircuitBreakerException;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Queue\QueueFactory;
@@ -96,7 +95,7 @@ class ErrorRecoveryService {
     CacheBackendInterface $cache,
     QueueFactory $queue_factory,
     ConfigFactoryInterface $config_factory,
-    LoggerInterface $logger
+    LoggerInterface $logger,
   ) {
     $this->database = $database;
     $this->cache = $cache;
@@ -120,7 +119,7 @@ class ErrorRecoveryService {
     $strategy = $this->getRecoveryStrategy($exception);
     $recovery_id = $this->generateRecoveryId($exception, $context);
 
-    // Check if we've exceeded maximum recovery attempts
+    // Check if we've exceeded maximum recovery attempts.
     if ($this->hasExceededMaxAttempts($recovery_id)) {
       $this->logger->warning('Recovery attempts exceeded for {recovery_id}', [
         'recovery_id' => $recovery_id,
@@ -189,7 +188,7 @@ class ErrorRecoveryService {
    */
   public function performHealthCheck() {
     $cache_key = 'search_api_postgresql:health_check:' . date('Y-m-d-H-i');
-    
+
     if ($cached = $this->cache->get($cache_key)) {
       return $cached->data;
     }
@@ -205,14 +204,14 @@ class ErrorRecoveryService {
       'api_quotas' => $this->checkApiQuotas(),
     ];
 
-    // Overall health assessment
+    // Overall health assessment.
     $overall_status = $this->assessOverallHealth($checks);
     $checks['overall'] = $overall_status;
 
-    // Proactive recommendations
+    // Proactive recommendations.
     $checks['recommendations'] = $this->generateProactiveRecommendations($checks);
 
-    // Cache results for 5 minutes
+    // Cache results for 5 minutes.
     $this->cache->set($cache_key, $checks, time() + 300);
 
     return $checks;
@@ -253,24 +252,25 @@ class ErrorRecoveryService {
    */
   protected function attemptDatabaseReconnection(array $context) {
     $max_attempts = 3;
-    $base_delay = 1; // seconds
+    // Seconds.
+    $base_delay = 1;
 
     for ($attempt = 1; $attempt <= $max_attempts; $attempt++) {
       try {
-        // Test database connection
+        // Test database connection.
         $this->database->query('SELECT 1')->fetchField();
-        
+
         $this->logger->info('Database reconnection successful on attempt {attempt}', [
           'attempt' => $attempt,
         ]);
-        
+
         return TRUE;
       }
       catch (\Exception $e) {
         if ($attempt < $max_attempts) {
           $delay = $base_delay * pow(2, $attempt - 1);
           sleep($delay);
-          
+
           $this->logger->warning('Database reconnection attempt {attempt} failed, retrying in {delay}s', [
             'attempt' => $attempt,
             'delay' => $delay,
@@ -283,7 +283,7 @@ class ErrorRecoveryService {
     $this->logger->error('Database reconnection failed after {attempts} attempts', [
       'attempts' => $max_attempts,
     ]);
-    
+
     return FALSE;
   }
 
@@ -299,27 +299,27 @@ class ErrorRecoveryService {
   protected function queueVectorIndexRebuild(array $context) {
     try {
       $queue = $this->queueFactory->get('search_api_postgresql_vector_rebuild');
-      
+
       $item = [
         'index_id' => $context['index_id'] ?? NULL,
         'priority' => 'high',
         'scheduled' => time(),
         'recovery_context' => $context,
       ];
-      
+
       $queue->createItem($item);
-      
+
       $this->logger->info('Vector index rebuild queued for {index_id}', [
         'index_id' => $context['index_id'] ?? 'unknown',
       ]);
-      
+
       return TRUE;
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to queue vector index rebuild: {message}', [
         'message' => $e->getMessage(),
       ]);
-      
+
       return FALSE;
     }
   }
@@ -335,33 +335,33 @@ class ErrorRecoveryService {
    */
   protected function clearCacheAndRetry(array $context) {
     try {
-      // Clear specific cache bins
+      // Clear specific cache bins.
       $cache_bins = [
         'search_api_postgresql_embeddings',
         'search_api_postgresql_vectors',
         'search_api_postgresql_queries',
       ];
-      
+
       foreach ($cache_bins as $bin) {
         if ($cache_backend = \Drupal::cache($bin)) {
           $cache_backend->deleteAll();
         }
       }
-      
-      // Clear general caches if specified
+
+      // Clear general caches if specified.
       if (!empty($context['clear_all_caches'])) {
         drupal_flush_all_caches();
       }
-      
+
       $this->logger->info('Cache cleared for recovery operation');
-      
+
       return TRUE;
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to clear cache: {message}', [
         'message' => $e->getMessage(),
       ]);
-      
+
       return FALSE;
     }
   }
@@ -379,25 +379,25 @@ class ErrorRecoveryService {
     try {
       $current_batch_size = $context['batch_size'] ?? 1000;
       $new_batch_size = max(10, intval($current_batch_size * 0.5));
-      
-      // Store new batch size in configuration
+
+      // Store new batch size in configuration.
       $config = $this->configFactory->getEditable('search_api_postgresql.settings');
       $config->set('recovery.reduced_batch_size', $new_batch_size);
       $config->set('recovery.batch_reduction_timestamp', time());
       $config->save();
-      
+
       $this->logger->info('Batch size reduced from {old} to {new} for recovery', [
         'old' => $current_batch_size,
         'new' => $new_batch_size,
       ]);
-      
+
       return TRUE;
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to reduce batch size: {message}', [
         'message' => $e->getMessage(),
       ]);
-      
+
       return FALSE;
     }
   }
@@ -413,14 +413,14 @@ class ErrorRecoveryService {
    */
   protected function restartExternalService(array $context) {
     $service_name = $context['service_name'] ?? 'unknown';
-    
+
     try {
-      // Reset connection pools and caches for the service
+      // Reset connection pools and caches for the service.
       $this->resetServiceConnections($service_name);
-      
-      // Test service availability
+
+      // Test service availability.
       $is_available = $this->testServiceAvailability($service_name, $context);
-      
+
       if ($is_available) {
         $this->logger->info('External service {service} restarted successfully', [
           'service' => $service_name,
@@ -439,7 +439,7 @@ class ErrorRecoveryService {
         'service' => $service_name,
         'message' => $e->getMessage(),
       ]);
-      
+
       return FALSE;
     }
   }
@@ -455,19 +455,18 @@ class ErrorRecoveryService {
    */
   protected function rotateApiKeys(array $context) {
     $service_name = $context['service_name'] ?? 'unknown';
-    
+
     try {
-      // This would integrate with key management system
+      // This would integrate with key management system.
       $this->logger->info('API key rotation requested for {service}', [
         'service' => $service_name,
       ]);
-      
+
       // In a real implementation, this would:
       // 1. Request new API keys from the key management system
       // 2. Update configuration with new keys
       // 3. Test service connectivity with new keys
-      // 4. Invalidate old keys
-      
+      // 4. Invalidate old keys.
       return TRUE;
     }
     catch (\Exception $e) {
@@ -475,7 +474,7 @@ class ErrorRecoveryService {
         'service' => $service_name,
         'message' => $e->getMessage(),
       ]);
-      
+
       return FALSE;
     }
   }
@@ -491,19 +490,20 @@ class ErrorRecoveryService {
    */
   protected function enableCircuitBreaker(array $context) {
     $service_name = $context['service_name'] ?? 'unknown';
-    
+
     try {
       $this->circuitBreakerStates[$service_name] = [
         'state' => 'open',
         'failure_count' => $context['failure_count'] ?? 0,
         'last_failure' => time(),
-        'next_retry' => time() + 300, // 5 minutes
+      // 5 minutes
+        'next_retry' => time() + 300,
       ];
-      
+
       $this->logger->info('Circuit breaker enabled for {service}', [
         'service' => $service_name,
       ]);
-      
+
       return TRUE;
     }
     catch (\Exception $e) {
@@ -511,7 +511,7 @@ class ErrorRecoveryService {
         'service' => $service_name,
         'message' => $e->getMessage(),
       ]);
-      
+
       return FALSE;
     }
   }
@@ -527,22 +527,21 @@ class ErrorRecoveryService {
    */
   protected function scaleResources(array $context) {
     try {
-      // This would integrate with infrastructure scaling systems
+      // This would integrate with infrastructure scaling systems.
       $this->logger->info('Resource scaling requested due to recovery needs');
-      
+
       // In a real implementation, this might:
       // 1. Increase memory limits
       // 2. Scale database connections
       // 3. Add more worker processes
-      // 4. Request additional compute resources
-      
+      // 4. Request additional compute resources.
       return TRUE;
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to scale resources: {message}', [
         'message' => $e->getMessage(),
       ]);
-      
+
       return FALSE;
     }
   }
@@ -562,16 +561,16 @@ class ErrorRecoveryService {
       $config->set('recovery.fallback_mode', TRUE);
       $config->set('recovery.fallback_activated', time());
       $config->save();
-      
+
       $this->logger->info('Fallback mode activated for enhanced resilience');
-      
+
       return TRUE;
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to activate fallback mode: {message}', [
         'message' => $e->getMessage(),
       ]);
-      
+
       return FALSE;
     }
   }
@@ -587,18 +586,18 @@ class ErrorRecoveryService {
    */
   protected function triggerEmergencyMaintenance(array $context) {
     try {
-      // Set site to maintenance mode
+      // Set site to maintenance mode.
       \Drupal::state()->set('system.maintenance_mode', TRUE);
-      
+
       $this->logger->critical('Emergency maintenance mode activated due to critical errors');
-      
+
       return TRUE;
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to activate emergency maintenance: {message}', [
         'message' => $e->getMessage(),
       ]);
-      
+
       return FALSE;
     }
   }
@@ -613,8 +612,9 @@ class ErrorRecoveryService {
     try {
       $start_time = microtime(TRUE);
       $result = $this->database->query('SELECT 1')->fetchField();
-      $response_time = (microtime(TRUE) - $start_time) * 1000; // ms
-      
+      // Ms.
+      $response_time = (microtime(TRUE) - $start_time) * 1000;
+
       $status = 'healthy';
       if ($response_time > 1000) {
         $status = 'warning';
@@ -622,7 +622,7 @@ class ErrorRecoveryService {
       if ($response_time > 5000) {
         $status = 'critical';
       }
-      
+
       return [
         'status' => $status,
         'response_time' => $response_time,
@@ -650,7 +650,7 @@ class ErrorRecoveryService {
     $memory_usage = memory_get_usage(TRUE);
     $memory_limit = $this->parseMemoryLimit(ini_get('memory_limit'));
     $usage_percentage = $memory_limit > 0 ? ($memory_usage / $memory_limit) * 100 : 0;
-    
+
     $status = 'healthy';
     if ($usage_percentage > 75) {
       $status = 'warning';
@@ -658,14 +658,14 @@ class ErrorRecoveryService {
     if ($usage_percentage > 90) {
       $status = 'critical';
     }
-    
+
     return [
       'status' => $status,
       'usage_bytes' => $memory_usage,
       'limit_bytes' => $memory_limit,
       'usage_percentage' => $usage_percentage,
-      'message' => sprintf('Memory usage: %.1f%% (%s / %s)', 
-        $usage_percentage, 
+      'message' => sprintf('Memory usage: %.1f%% (%s / %s)',
+        $usage_percentage,
         $this->formatBytes($memory_usage),
         $this->formatBytes($memory_limit)
       ),
@@ -683,7 +683,7 @@ class ErrorRecoveryService {
       $disk_free = disk_free_space('/');
       $disk_total = disk_total_space('/');
       $usage_percentage = $disk_total > 0 ? (($disk_total - $disk_free) / $disk_total) * 100 : 0;
-      
+
       $status = 'healthy';
       if ($usage_percentage > 85) {
         $status = 'warning';
@@ -691,13 +691,13 @@ class ErrorRecoveryService {
       if ($usage_percentage > 95) {
         $status = 'critical';
       }
-      
+
       return [
         'status' => $status,
         'free_bytes' => $disk_free,
         'total_bytes' => $disk_total,
         'usage_percentage' => $usage_percentage,
-        'message' => sprintf('Disk usage: %.1f%% (%s free)', 
+        'message' => sprintf('Disk usage: %.1f%% (%s free)',
           $usage_percentage,
           $this->formatBytes($disk_free)
         ),
@@ -718,7 +718,7 @@ class ErrorRecoveryService {
    *   Vector index health status.
    */
   protected function checkVectorIndexHealth() {
-    // This would be implemented based on specific vector index requirements
+    // This would be implemented based on specific vector index requirements.
     return [
       'status' => 'healthy',
       'indexes_checked' => 0,
@@ -738,7 +738,7 @@ class ErrorRecoveryService {
       'azure_openai' => $this->checkAzureOpenAIHealth(),
       'embedding_cache' => $this->checkEmbeddingCacheHealth(),
     ];
-    
+
     $overall_status = 'healthy';
     foreach ($services as $service_status) {
       if ($service_status['status'] === 'critical') {
@@ -749,7 +749,7 @@ class ErrorRecoveryService {
         $overall_status = 'warning';
       }
     }
-    
+
     return [
       'status' => $overall_status,
       'services' => $services,
@@ -768,17 +768,18 @@ class ErrorRecoveryService {
       $start_time = microtime(TRUE);
       $test_key = 'health_check_' . uniqid();
       $test_data = ['timestamp' => time()];
-      
-      // Test cache write
+
+      // Test cache write.
       $this->cache->set($test_key, $test_data);
-      
-      // Test cache read
+
+      // Test cache read.
       $cached = $this->cache->get($test_key);
-      $response_time = (microtime(TRUE) - $start_time) * 1000; // ms
-      
-      // Clean up
+      // Ms.
+      $response_time = (microtime(TRUE) - $start_time) * 1000;
+
+      // Clean up.
       $this->cache->delete($test_key);
-      
+
       $status = 'healthy';
       if ($response_time > 100) {
         $status = 'warning';
@@ -786,7 +787,7 @@ class ErrorRecoveryService {
       if ($response_time > 500 || !$cached) {
         $status = 'critical';
       }
-      
+
       return [
         'status' => $status,
         'response_time' => $response_time,
@@ -814,17 +815,17 @@ class ErrorRecoveryService {
         'search_api_postgresql_embeddings',
         'search_api_postgresql_vector_rebuild',
       ];
-      
+
       $queue_stats = [];
       $total_items = 0;
-      
+
       foreach ($queues as $queue_name) {
         $queue = $this->queueFactory->get($queue_name);
         $items = $queue->numberOfItems();
         $queue_stats[$queue_name] = $items;
         $total_items += $items;
       }
-      
+
       $status = 'healthy';
       if ($total_items > 1000) {
         $status = 'warning';
@@ -832,7 +833,7 @@ class ErrorRecoveryService {
       if ($total_items > 10000) {
         $status = 'critical';
       }
-      
+
       return [
         'status' => $status,
         'total_items' => $total_items,
@@ -855,7 +856,7 @@ class ErrorRecoveryService {
    *   API quota status.
    */
   protected function checkApiQuotas() {
-    // This would be implemented based on specific API requirements
+    // This would be implemented based on specific API requirements.
     return [
       'status' => 'healthy',
       'quotas_checked' => 0,
@@ -867,42 +868,51 @@ class ErrorRecoveryService {
   /**
    * Helper method implementations for the service checks.
    */
-  
   protected function checkAzureOpenAIHealth() {
     return ['status' => 'healthy', 'message' => 'Service available'];
   }
-  
+
+  /**
+   *
+   */
   protected function checkEmbeddingCacheHealth() {
     return ['status' => 'healthy', 'message' => 'Cache operational'];
   }
-  
+
+  /**
+   *
+   */
   protected function assessOverallHealth(array $checks) {
     $critical_count = 0;
     $warning_count = 0;
-    
+
     foreach ($checks as $check) {
       if (isset($check['status'])) {
         if ($check['status'] === 'critical') {
           $critical_count++;
-        } elseif ($check['status'] === 'warning') {
+        }
+        elseif ($check['status'] === 'warning') {
           $warning_count++;
         }
       }
     }
-    
+
     if ($critical_count > 0) {
       return ['status' => 'critical', 'message' => "$critical_count critical issues detected"];
     }
     if ($warning_count > 0) {
       return ['status' => 'warning', 'message' => "$warning_count warnings detected"];
     }
-    
+
     return ['status' => 'healthy', 'message' => 'All systems operational'];
   }
-  
+
+  /**
+   *
+   */
   protected function generateProactiveRecommendations(array $checks) {
     $recommendations = [];
-    
+
     foreach ($checks as $check_name => $check) {
       if (isset($check['status']) && $check['status'] !== 'healthy') {
         switch ($check_name) {
@@ -911,11 +921,13 @@ class ErrorRecoveryService {
               $recommendations[] = 'Consider increasing memory allocation or optimizing memory usage';
             }
             break;
+
           case 'disk_space':
             if ($check['usage_percentage'] > 85) {
               $recommendations[] = 'Clean up temporary files and logs to free disk space';
             }
             break;
+
           case 'queue_health':
             if ($check['total_items'] > 1000) {
               $recommendations[] = 'Queue processing may be falling behind, consider adding workers';
@@ -924,69 +936,95 @@ class ErrorRecoveryService {
         }
       }
     }
-    
+
     return $recommendations;
   }
 
   /**
    * Utility methods.
    */
-  
   protected function generateRecoveryId(\Exception $exception, array $context) {
     return md5(get_class($exception) . serialize($context));
   }
-  
+
+  /**
+   *
+   */
   protected function hasExceededMaxAttempts($recovery_id) {
     $max_attempts = 5;
-    $time_window = 3600; // 1 hour
-    
+    // 1 hour
+    $time_window = 3600;
+
     if (!isset($this->recoveryAttempts[$recovery_id])) {
       return FALSE;
     }
-    
+
     $attempts = $this->recoveryAttempts[$recovery_id];
-    $recent_attempts = array_filter($attempts, function($timestamp) use ($time_window) {
+    $recent_attempts = array_filter($attempts, function ($timestamp) use ($time_window) {
       return $timestamp > (time() - $time_window);
     });
-    
+
     return count($recent_attempts) >= $max_attempts;
   }
-  
+
+  /**
+   *
+   */
   protected function trackRecoveryAttempt($recovery_id) {
     if (!isset($this->recoveryAttempts[$recovery_id])) {
       $this->recoveryAttempts[$recovery_id] = [];
     }
     $this->recoveryAttempts[$recovery_id][] = time();
   }
-  
+
+  /**
+   *
+   */
   protected function resetServiceConnections($service_name) {
     // Implementation would reset HTTP clients, connection pools, etc.
     $this->logger->info('Service connections reset for {service}', ['service' => $service_name]);
   }
-  
+
+  /**
+   *
+   */
   protected function testServiceAvailability($service_name, array $context) {
-    // Implementation would test actual service connectivity
+    // Implementation would test actual service connectivity.
     return TRUE;
   }
-  
+
+  /**
+   *
+   */
   protected function parseMemoryLimit($limit_string) {
     $unit = strtolower(substr($limit_string, -1));
     $value = intval($limit_string);
-    
+
     switch ($unit) {
-      case 'g': return $value * 1024 * 1024 * 1024;
-      case 'm': return $value * 1024 * 1024;
-      case 'k': return $value * 1024;
-      default: return $value;
+      case 'g':
+        return $value * 1024 * 1024 * 1024;
+
+      case 'm':
+        return $value * 1024 * 1024;
+
+      case 'k':
+        return $value * 1024;
+
+      default:
+        return $value;
     }
   }
-  
+
+  /**
+   *
+   */
   protected function formatBytes($bytes) {
     $units = ['B', 'KB', 'MB', 'GB'];
     $bytes = max($bytes, 0);
     $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
     $pow = min($pow, count($units) - 1);
-    
+
     return round($bytes / (1024 ** $pow), 2) . ' ' . $units[$pow];
   }
+
 }

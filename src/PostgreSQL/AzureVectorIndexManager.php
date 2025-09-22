@@ -30,8 +30,8 @@ class AzureVectorIndexManager extends IndexManager {
    */
   protected function buildCreateTableSql($table_name, IndexInterface $index) {
     $sql = parent::buildCreateTableSql($table_name, $index);
-    
-    // Add vector column for embeddings
+
+    // Add vector column for embeddings.
     $vector_dimension = $this->config['azure_embedding']['dimension'] ?? 1536;
     $sql = str_replace(
       "search_vector TSVECTOR\n);",
@@ -46,15 +46,16 @@ class AzureVectorIndexManager extends IndexManager {
    */
   protected function createFullTextIndexes($table_name, IndexInterface $index) {
     parent::createFullTextIndexes($table_name, $index);
-    
-    // Create vector similarity index optimized for Azure Database for PostgreSQL
+
+    // Create vector similarity index optimized for Azure Database for PostgreSQL.
     $index_method = $this->config['vector_index']['method'] ?? 'ivfflat';
     $index_options = '';
-    
+
     if ($index_method === 'ivfflat') {
       $lists = $this->config['vector_index']['ivfflat_lists'] ?? 100;
       $index_options = "WITH (lists = {$lists})";
-    } elseif ($index_method === 'hnsw') {
+    }
+    elseif ($index_method === 'hnsw') {
       $m = $this->config['vector_index']['hnsw_m'] ?? 16;
       $ef_construction = $this->config['vector_index']['hnsw_ef_construction'] ?? 64;
       $index_options = "WITH (m = {$m}, ef_construction = {$ef_construction})";
@@ -76,7 +77,7 @@ class AzureVectorIndexManager extends IndexManager {
       'search_api_language' => $item->getLanguage() ?: 'und',
     ];
 
-    // Prepare searchable text for both tsvector and embeddings
+    // Prepare searchable text for both tsvector and embeddings.
     $searchable_text = '';
     $searchable_fields = $this->fieldMapper->getSearchableFields($index);
 
@@ -97,7 +98,7 @@ class AzureVectorIndexManager extends IndexManager {
       }
     }
 
-    // Generate embedding using Azure AI
+    // Generate embedding using Azure AI.
     $embedding = NULL;
     if ($this->embeddingService && !empty(trim($searchable_text))) {
       try {
@@ -105,27 +106,27 @@ class AzureVectorIndexManager extends IndexManager {
       }
       catch (\Exception $e) {
         \Drupal::logger('search_api_postgresql')->error('Failed to generate Azure embedding: @message', [
-          '@message' => $e->getMessage()
+          '@message' => $e->getMessage(),
         ]);
       }
     }
 
-    // Prepare tsvector value
+    // Prepare tsvector value.
     $fts_config = $this->config['fts_configuration'];
     $values['search_vector'] = "to_tsvector('{$fts_config}', :searchable_text)";
-    
-    // Prepare vector value
+
+    // Prepare vector value.
     if ($embedding) {
       $values['content_embedding'] = ':content_embedding';
     }
 
-    // Delete existing item
+    // Delete existing item.
     $delete_sql = "DELETE FROM {$table_name} WHERE search_api_id = :item_id";
     $this->connector->executeQuery($delete_sql, [':item_id' => $item->getId()]);
 
-    // Insert new item
+    // Insert new item.
     $columns = array_keys($values);
-    $placeholders = array_map(function($col) use ($values) {
+    $placeholders = array_map(function ($col) use ($values) {
       if ($col === 'search_vector') {
         return $values[$col];
       }
@@ -141,13 +142,14 @@ class AzureVectorIndexManager extends IndexManager {
       }
     }
     $params[':searchable_text'] = trim($searchable_text);
-    
+
     if ($embedding) {
       $params[':content_embedding'] = '[' . implode(',', $embedding) . ']';
     }
 
     $this->connector->executeQuery($insert_sql, $params);
   }
+
 }
 
 /**
@@ -173,6 +175,7 @@ interface EmbeddingServiceInterface {
    *   The embedding dimension.
    */
   public function getDimension();
+
 }
 
 /**
@@ -241,9 +244,9 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
    * {@inheritdoc}
    */
   public function generateEmbedding($text) {
-    // Clean and prepare text
+    // Clean and prepare text.
     $text = $this->preprocessText($text);
-    
+
     if (empty($text)) {
       return NULL;
     }
@@ -254,7 +257,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
       $this->deploymentName,
       $this->apiVersion
     );
-    
+
     $data = [
       'input' => $text,
     ];
@@ -289,7 +292,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
     }
 
     $result = json_decode($response, TRUE);
-    
+
     if (isset($result['error'])) {
       throw new \Exception('Azure OpenAI API error: ' . $result['error']['message']);
     }
@@ -314,14 +317,15 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
    *   The preprocessed text.
    */
   protected function preprocessText($text) {
-    // Remove excessive whitespace
+    // Remove excessive whitespace.
     $text = preg_replace('/\s+/', ' ', trim($text));
-    
+
     // Limit text length (Azure OpenAI has token limits)
-    $max_chars = 8000; // Conservative limit for token count
+    // Conservative limit for token count.
+    $max_chars = 8000;
     if (strlen($text) > $max_chars) {
       $text = substr($text, 0, $max_chars);
-      // Try to break at word boundary
+      // Try to break at word boundary.
       $last_space = strrpos($text, ' ');
       if ($last_space !== FALSE && $last_space > $max_chars * 0.8) {
         $text = substr($text, 0, $last_space);
@@ -330,6 +334,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
     return $text;
   }
+
 }
 
 /**
@@ -383,9 +388,10 @@ class AzureCognitiveServicesEmbeddingService implements EmbeddingServiceInterfac
       $this->endpoint,
       $this->apiVersion
     );
-    
+
     $data = [
-      'kind' => 'SentimentAnalysis', // This would need to be updated when embedding API is available
+    // This would need to be updated when embedding API is available.
+      'kind' => 'SentimentAnalysis',
       'analysisInput' => [
         'documents' => [
           [
@@ -428,7 +434,7 @@ class AzureCognitiveServicesEmbeddingService implements EmbeddingServiceInterfac
 
     // Note: This is a placeholder implementation
     // Azure Cognitive Services doesn't currently offer direct text embeddings
-    // You would need to use Azure OpenAI Service for embeddings
+    // You would need to use Azure OpenAI Service for embeddings.
     throw new \Exception('Azure Cognitive Services text embeddings not yet available. Please use Azure OpenAI Service instead.');
   }
 
@@ -436,8 +442,10 @@ class AzureCognitiveServicesEmbeddingService implements EmbeddingServiceInterfac
    * {@inheritdoc}
    */
   public function getDimension() {
-    return 0; // Not applicable for this service
+    // Not applicable for this service.
+    return 0;
   }
+
 }
 
 /**
@@ -465,14 +473,14 @@ class AzureVectorQueryBuilder extends QueryBuilder {
    */
   public function buildSearchQuery(QueryInterface $query) {
     $search_mode = $query->getOption('search_mode', 'hybrid');
-    
+
     switch ($search_mode) {
       case 'vector_only':
         return $this->buildVectorSearchQuery($query);
-      
+
       case 'text_only':
         return parent::buildSearchQuery($query);
-        
+
       case 'hybrid':
       default:
         return $this->buildHybridSearchQuery($query);
@@ -485,25 +493,25 @@ class AzureVectorQueryBuilder extends QueryBuilder {
   protected function buildVectorSearchQuery(QueryInterface $query) {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
-    
+
     $keys = $query->getKeys();
     if (!$keys || !$this->embeddingService) {
       return parent::buildSearchQuery($query);
     }
 
-    // Generate embedding for search query using Azure AI
+    // Generate embedding for search query using Azure AI.
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
-    
+
     try {
       $query_embedding = $this->embeddingService->generateEmbedding($search_text);
     }
     catch (\Exception $e) {
       \Drupal::logger('search_api_postgresql')->error('Failed to generate query embedding: @message', [
-        '@message' => $e->getMessage()
+        '@message' => $e->getMessage(),
       ]);
       return parent::buildSearchQuery($query);
     }
-    
+
     if (!$query_embedding) {
       return parent::buildSearchQuery($query);
     }
@@ -529,20 +537,20 @@ class AzureVectorQueryBuilder extends QueryBuilder {
   protected function buildHybridSearchQuery(QueryInterface $query) {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
-    
+
     $keys = $query->getKeys();
     if (!$keys) {
       return parent::buildSearchQuery($query);
     }
 
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
-    
+
     try {
       $query_embedding = $this->embeddingService ? $this->embeddingService->generateEmbedding($search_text) : NULL;
     }
     catch (\Exception $e) {
       \Drupal::logger('search_api_postgresql')->error('Azure embedding failed, falling back to text search: @message', [
-        '@message' => $e->getMessage()
+        '@message' => $e->getMessage(),
       ]);
       return parent::buildSearchQuery($query);
     }
@@ -551,7 +559,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
       return parent::buildSearchQuery($query);
     }
 
-    // Weights for combining scores
+    // Weights for combining scores.
     $text_weight = $this->config['hybrid_search']['text_weight'] ?? 0.7;
     $vector_weight = $this->config['hybrid_search']['vector_weight'] ?? 0.3;
 
@@ -575,12 +583,12 @@ class AzureVectorQueryBuilder extends QueryBuilder {
    */
   protected function buildVectorSelectClause(QueryInterface $query) {
     $fields = ['search_api_id', 'search_api_datasource', 'search_api_language'];
-    
+
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
       $fields[] = $field_id;
     }
 
-    // Azure vector similarity score using cosine distance
+    // Azure vector similarity score using cosine distance.
     $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS search_api_relevance";
 
     return implode(', ', $fields);
@@ -592,11 +600,11 @@ class AzureVectorQueryBuilder extends QueryBuilder {
   protected function buildVectorWhereClause(QueryInterface $query) {
     $conditions = ['content_embedding IS NOT NULL'];
 
-    // Add minimum similarity threshold
+    // Add minimum similarity threshold.
     $similarity_threshold = $this->config['hybrid_search']['similarity_threshold'] ?? 0.1;
     $conditions[] = "(1 - (content_embedding <=> :query_embedding)) >= {$similarity_threshold}";
 
-    // Handle filters
+    // Handle filters.
     if ($condition_group = $query->getConditionGroup()) {
       $condition_sql = $this->buildConditionGroup($condition_group);
       if (!empty($condition_sql)) {
@@ -604,7 +612,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
       }
     }
 
-    // Handle language filtering
+    // Handle language filtering.
     if ($languages = $query->getLanguages()) {
       if ($languages !== [NULL]) {
         $language_placeholders = [];
@@ -623,14 +631,14 @@ class AzureVectorQueryBuilder extends QueryBuilder {
    */
   protected function buildHybridSelectClause(QueryInterface $query, $text_weight, $vector_weight) {
     $fields = ['search_api_id', 'search_api_datasource', 'search_api_language'];
-    
+
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
       $fields[] = $field_id;
     }
 
     $fts_config = $this->config['fts_configuration'];
-    
-    // Combine PostgreSQL FTS scores with Azure vector similarity
+
+    // Combine PostgreSQL FTS scores with Azure vector similarity.
     $fields[] = "
       CASE 
         WHEN content_embedding IS NOT NULL AND search_vector @@ to_tsquery('{$fts_config}', :ts_query) THEN
@@ -642,7 +650,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
           {$text_weight} * ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query))
         ELSE 0
       END AS hybrid_score";
-    
+
     $fields[] = "ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query)) AS text_score";
     $fields[] = "COALESCE((1 - (content_embedding <=> :query_embedding)), 0) AS vector_score";
     $fields[] = "hybrid_score AS search_api_relevance";
@@ -657,7 +665,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
     $conditions = ['1=1'];
     $fts_config = $this->config['fts_configuration'];
 
-    // Include items that match either text search OR have vector similarity
+    // Include items that match either text search OR have vector similarity.
     if ($keys = $query->getKeys()) {
       $similarity_threshold = $this->config['hybrid_search']['similarity_threshold'] ?? 0.1;
       $conditions[] = "(
@@ -666,7 +674,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
       )";
     }
 
-    // Handle filters
+    // Handle filters.
     if ($condition_group = $query->getConditionGroup()) {
       $condition_sql = $this->buildConditionGroup($condition_group);
       if (!empty($condition_sql)) {
@@ -674,7 +682,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
       }
     }
 
-    // Handle language filtering
+    // Handle language filtering.
     if ($languages = $query->getLanguages()) {
       if ($languages !== [NULL]) {
         $language_placeholders = [];
@@ -701,7 +709,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
       if ($key === '#conjunction') {
         continue;
       }
-      
+
       if (is_array($value)) {
         $text_parts[] = $this->extractTextFromKeys($value);
       }
@@ -712,4 +720,5 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
     return implode(' ', $text_parts);
   }
+
 }

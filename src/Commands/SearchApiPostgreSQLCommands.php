@@ -59,7 +59,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
     ?EmbeddingQueueManager $queue_manager = NULL,
     ?EmbeddingCacheManager $cache_manager = NULL,
     ?ConfigurationValidationService $validation_service = NULL,
-    ?LoggerInterface $logger = NULL
+    ?LoggerInterface $logger = NULL,
   ) {
     parent::__construct();
     $this->entityTypeManager = $entity_type_manager;
@@ -87,7 +87,9 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
    * Tests AI service connectivity for a server.
    *
    * @command search-api-postgresql:test-ai
-   * @param string $server_id The server ID.
+   * @param string $server_id
+   *   The server ID.
+   *
    * @aliases sap-test-ai
    * @usage search-api-postgresql:test-ai my_server
    *   Tests AI service for the specified server.
@@ -98,7 +100,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
     }
 
     $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
-    
+
     if (!$server) {
       throw new \Exception(dt('Server @server not found.', ['@server' => $server_id]));
     }
@@ -106,13 +108,14 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
     $this->io()->title(dt('Testing AI Service for @server', ['@server' => $server->label()]));
 
     $result = $this->validationService->testAiService($server);
-    
+
     if ($result['success']) {
       $this->io()->success($result['message']);
       if (!empty($result['details'])) {
         $this->io()->text($result['details']);
       }
-    } else {
+    }
+    else {
       $this->io()->error($result['message']);
       if (!empty($result['details'])) {
         $this->io()->text($result['details']);
@@ -124,7 +127,9 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
    * Regenerates embeddings for an index.
    *
    * @command search-api-postgresql:regenerate-embeddings
-   * @param string $index_id The index ID.
+   * @param string $index_id
+   *   The index ID.
+   *
    * @option batch-size Number of items per batch
    * @option force Force regeneration of existing embeddings
    * @aliases sap-regen
@@ -133,7 +138,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
    */
   public function regenerateEmbeddings($index_id, $options = ['batch-size' => 10, 'force' => FALSE]) {
     $index = $this->entityTypeManager->getStorage('search_api_index')->load($index_id);
-    
+
     if (!$index) {
       throw new \Exception(dt('Index @index not found.', ['@index' => $index_id]));
     }
@@ -145,7 +150,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
     $this->io()->title(dt('Regenerating embeddings for @index', ['@index' => $index->label()]));
 
-    // Queue items for regeneration
+    // Queue items for regeneration.
     $items_queued = $this->queueManager->queueIndexRegeneration($index_id, [
       'batch_size' => $options['batch-size'],
       'force' => $options['force'],
@@ -158,26 +163,30 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
    * Shows embedding statistics for an index.
    *
    * @command search-api-postgresql:embedding-stats
-   * @param string $index_id The index ID.
+   * @param string $index_id
+   *   The index ID.
+   *
    * @aliases sap-stats
    * @usage search-api-postgresql:embedding-stats my_index
    *   Shows embedding statistics for the specified index.
    */
   public function embeddingStats($index_id) {
     $index = $this->entityTypeManager->getStorage('search_api_index')->load($index_id);
-    
+
     if (!$index) {
       throw new \Exception(dt('Index @index not found.', ['@index' => $index_id]));
     }
 
     $this->io()->title(dt('Embedding Statistics for @index', ['@index' => $index->label()]));
 
-    // This would need to be implemented based on your analytics service
+    // This would need to be implemented based on your analytics service.
     $stats = [
       'total_items' => $index->getTrackerInstance()->getTotalItemsCount(),
       'indexed_items' => $index->getTrackerInstance()->getIndexedItemsCount(),
-      'embeddings_generated' => 0, // Would come from analytics
-      'cache_hit_rate' => 0, // Would come from analytics
+    // Would come from analytics.
+      'embeddings_generated' => 0,
+    // Would come from analytics.
+      'cache_hit_rate' => 0,
     ];
 
     $rows = [];
@@ -200,7 +209,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
     $this->io()->title('Embedding Queue Status');
 
     $stats = $this->queueManager->getQueueStats();
-    
+
     if (!empty($stats['error'])) {
       $this->io()->error($stats['error']);
       return;
@@ -260,21 +269,23 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
    * Shows cache statistics.
    *
    * @command search-api-postgresql:cache-stats
-   * @param string $server_id The server ID.
+   * @param string $server_id
+   *   The server ID.
+   *
    * @aliases sap-cache
    * @usage search-api-postgresql:cache-stats my_server
    *   Shows cache statistics for the server.
    */
   public function cacheStats($server_id) {
     $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
-    
+
     if (!$server) {
       throw new \Exception(dt('Server @server not found.', ['@server' => $server_id]));
     }
 
     $this->io()->title(dt('Cache Statistics for @server', ['@server' => $server->label()]));
 
-    $stats = $this->cacheManager->getStatistics($server_id);
+    $stats = $this->cacheManager->getCacheStatistics();
 
     $rows = [
       ['Total Entries', $stats['total_entries']],
@@ -291,7 +302,9 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
    * Clears the embedding cache.
    *
    * @command search-api-postgresql:cache-clear
-   * @param string $server_id The server ID.
+   * @param string $server_id
+   *   The server ID.
+   *
    * @option confirm Skip confirmation
    * @aliases sap-cache-clear
    * @usage search-api-postgresql:cache-clear my_server
@@ -299,7 +312,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
    */
   public function cacheClear($server_id, $options = ['confirm' => FALSE]) {
     $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
-    
+
     if (!$server) {
       throw new \Exception(dt('Server @server not found.', ['@server' => $server_id]));
     }
@@ -308,7 +321,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
       $confirm = $this->io()->confirm(dt('Are you sure you want to clear the cache for @server?', [
         '@server' => $server->label(),
       ]));
-      
+
       if (!$confirm) {
         $this->io()->text('Operation cancelled.');
         return;
@@ -323,38 +336,59 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
    * Validates server configuration.
    *
    * @command search-api-postgresql:validate
-   * @param string $server_id The server ID.
+   * @param string $server_id
+   *   The server ID.
+   *
    * @aliases sap-validate
    * @usage search-api-postgresql:validate my_server
    *   Validates the server configuration.
    */
   public function validate($server_id) {
     $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
-    
+
     if (!$server) {
       throw new \Exception(dt('Server @server not found.', ['@server' => $server_id]));
     }
 
     $this->io()->title(dt('Validating @server', ['@server' => $server->label()]));
 
-    $health_check = $this->validationService->performHealthCheck($server);
+    $health_check = $this->validationService->runComprehensiveTests($server);
 
-    foreach ($health_check['tests'] as $test_name => $result) {
-      if ($result['success']) {
-        $this->io()->success($test_name . ': ' . $result['message']);
-      } else {
-        $this->io()->error($test_name . ': ' . $result['message']);
+    // Display configuration results.
+    if (!empty($health_check['configuration'])) {
+      if ($health_check['configuration']['success']) {
+        $this->io()->success('Configuration: Valid');
       }
-      
-      if (!empty($result['details'])) {
-        $this->io()->text('  ' . $result['details']);
+      else {
+        $this->io()->error('Configuration: Has issues');
+        foreach ($health_check['configuration']['errors'] as $error) {
+          $this->io()->text('  Error: ' . $error);
+        }
       }
     }
 
-    if ($health_check['overall_health']) {
+    // Display health results.
+    if (!empty($health_check['health'])) {
+      foreach ($health_check['health'] as $test_name => $result) {
+        if ($test_name === 'overall') {
+          continue;
+        }
+        if ($result['success'] ?? FALSE) {
+          $this->io()->success($test_name . ': ' . ($result['message'] ?? 'OK'));
+        }
+        else {
+          $this->io()->error($test_name . ': ' . ($result['message'] ?? 'Failed'));
+        }
+      }
+    }
+
+    // Display overall result.
+    if ($health_check['overall']['success'] ?? FALSE) {
       $this->io()->success('Overall: Server configuration is valid.');
-    } else {
+    }
+    else {
       $this->io()->error('Overall: Server configuration has issues.');
     }
   }
+
 }

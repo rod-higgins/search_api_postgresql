@@ -65,9 +65,11 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
     $this->logger = $logger;
     $this->tableName = $config['table_name'] ?? 'search_api_postgresql_embedding_cache';
     $this->config = $config + [
-      'default_ttl' => 86400 * 30, // 30 days default
+    // 30 days default
+      'default_ttl' => 86400 * 30,
       'max_entries' => 100000,
-      'cleanup_probability' => 0.01, // 1% chance of cleanup on write
+    // 1% chance of cleanup on write
+      'cleanup_probability' => 0.01,
       'enable_compression' => TRUE,
     ];
 
@@ -83,7 +85,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
     }
 
     $this->validateHash($text_hash);
-    
+
     $request_time = \Drupal::time()->getRequestTime();
 
     try {
@@ -97,17 +99,17 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
 
       if ($result) {
         $this->stats['hits']++;
-        
-        // Update last accessed time
+
+        // Update last accessed time.
         $this->connection->update($this->tableName)
           ->fields(['last_accessed' => $request_time])
           ->condition('text_hash', $text_hash)
           ->execute();
 
         $embedding = $this->unserializeEmbedding($result['embedding_data']);
-        
+
         $this->logger->debug('Embedding cache hit for hash: @hash', ['@hash' => $text_hash]);
-        
+
         return $embedding;
       }
       else {
@@ -133,7 +135,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
 
     $this->validateHash($text_hash);
     $this->validateEmbedding($embedding);
-    
+
     $request_time = \Drupal::time()->getRequestTime();
 
     $ttl = $ttl ?? $this->config['default_ttl'];
@@ -141,8 +143,8 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
 
     try {
       $embedding_data = $this->serializeEmbedding($embedding);
-      
-      // Use MERGE/UPSERT pattern for PostgreSQL
+
+      // Use MERGE/UPSERT pattern for PostgreSQL.
       $this->connection->merge($this->tableName)
         ->key(['text_hash' => $text_hash])
         ->fields([
@@ -157,14 +159,14 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
         ->execute();
 
       $this->stats['sets']++;
-      
+
       $this->logger->debug('Cached embedding for hash: @hash (dimensions: @dim, expires: @expires)', [
         '@hash' => $text_hash,
         '@dim' => count($embedding),
         '@expires' => date('Y-m-d H:i:s', $expires),
       ]);
 
-      // Probabilistic cleanup
+      // Probabilistic cleanup.
       if (mt_rand() / mt_getrandmax() < $this->config['cleanup_probability']) {
         $this->performCleanup();
       }
@@ -217,10 +219,10 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
     if (empty($text_hashes)) {
       return [];
     }
-    
+
     $request_time = \Drupal::time()->getRequestTime();
 
-    // Validate all hashes
+    // Validate all hashes.
     foreach ($text_hashes as $hash) {
       $this->validateHash($hash);
     }
@@ -242,7 +244,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
         }
       }
 
-      // Update last accessed time for found items
+      // Update last accessed time for found items.
       if (!empty($embeddings)) {
         $this->connection->update($this->tableName)
           ->fields(['last_accessed' => $request_time])
@@ -250,7 +252,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
           ->execute();
       }
 
-      // Count misses
+      // Count misses.
       $missed = array_diff($text_hashes, array_keys($embeddings));
       $this->stats['misses'] += count($missed);
 
@@ -275,7 +277,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
     if (empty($items)) {
       return TRUE;
     }
-    
+
     $request_time = \Drupal::time()->getRequestTime();
 
     $ttl = $ttl ?? $this->config['default_ttl'];
@@ -329,10 +331,10 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
   public function clear() {
     try {
       $deleted = $this->connection->delete($this->tableName)->execute();
-      
+
       $this->logger->info('Cleared embedding cache: @count entries deleted', ['@count' => $deleted]);
-      
-      // Reset stats
+
+      // Reset stats.
       $this->stats = [
         'hits' => 0,
         'misses' => 0,
@@ -353,19 +355,19 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
    */
   public function getStats() {
     $request_time = \Drupal::time()->getRequestTime();
-    
+
     try {
-      // Get database stats
+      // Get database stats.
       $query = $this->connection->select($this->tableName, 'c');
       $query->addExpression('COUNT(*)', 'total_entries');
       $query->addExpression('SUM(hit_count)', 'total_hits');
       $query->addExpression('AVG(dimensions)', 'avg_dimensions');
       $query->addExpression('MIN(created)', 'oldest_entry');
       $query->addExpression('MAX(created)', 'newest_entry');
-      
+
       $db_stats = $query->execute()->fetchAssoc();
 
-      // Get expired count
+      // Get expired count.
       $expired_count = $this->connection->select($this->tableName, 'c')
         ->condition('expires', $request_time, '<=')
         ->countQuery()
@@ -383,8 +385,8 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
         'average_dimensions' => round((float) $db_stats['avg_dimensions'], 2),
         'oldest_entry' => $db_stats['oldest_entry'] ? date('Y-m-d H:i:s', $db_stats['oldest_entry']) : NULL,
         'newest_entry' => $db_stats['newest_entry'] ? date('Y-m-d H:i:s', $db_stats['newest_entry']) : NULL,
-        'hit_rate' => $this->stats['hits'] + $this->stats['misses'] > 0 
-          ? round($this->stats['hits'] / ($this->stats['hits'] + $this->stats['misses']) * 100, 2) 
+        'hit_rate' => $this->stats['hits'] + $this->stats['misses'] > 0
+          ? round($this->stats['hits'] / ($this->stats['hits'] + $this->stats['misses']) * 100, 2)
           : 0,
       ];
     }
@@ -414,8 +416,8 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
    */
   protected function performCleanup() {
     $request_time = \Drupal::time()->getRequestTime();
-    
-    // Remove expired entries
+
+    // Remove expired entries.
     $expired_deleted = $this->connection->delete($this->tableName)
       ->condition('expires', $request_time, '<=')
       ->execute();
@@ -424,7 +426,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
       $this->logger->debug('Cleaned up @count expired cache entries', ['@count' => $expired_deleted]);
     }
 
-    // Remove excess entries if over limit
+    // Remove excess entries if over limit.
     $total_count = $this->connection->select($this->tableName, 'c')
       ->countQuery()
       ->execute()
@@ -432,8 +434,8 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
 
     if ($total_count > $this->config['max_entries']) {
       $excess = $total_count - $this->config['max_entries'];
-      
-      // Delete least recently used entries
+
+      // Delete least recently used entries.
       $subquery = $this->connection->select($this->tableName, 'c')
         ->fields('c', ['text_hash'])
         ->orderBy('last_accessed', 'ASC')
@@ -459,7 +461,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
    * Optimizes the cache table.
    */
   protected function optimizeTable() {
-    // For PostgreSQL, run VACUUM and ANALYZE
+    // For PostgreSQL, run VACUUM and ANALYZE.
     if ($this->connection->driver() === 'pgsql') {
       try {
         $this->connection->query("VACUUM ANALYZE {" . $this->tableName . "}");
@@ -476,7 +478,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
    */
   protected function ensureTableExists() {
     $schema = $this->connection->schema();
-    
+
     if (!$schema->tableExists($this->tableName)) {
       $table_definition = $this->getTableDefinition();
       $schema->createTable($this->tableName, $table_definition);
@@ -589,14 +591,14 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
    */
   protected function serializeEmbedding(array $embedding) {
     $data = json_encode($embedding);
-    
+
     if ($this->config['enable_compression'] && function_exists('gzcompress')) {
       $compressed = gzcompress($data, 9);
       if ($compressed !== FALSE && strlen($compressed) < strlen($data)) {
         return $compressed;
       }
     }
-    
+
     return $data;
   }
 
@@ -614,7 +616,7 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
       return NULL;
     }
 
-    // Try to decompress if it looks like compressed data
+    // Try to decompress if it looks like compressed data.
     if ($this->config['enable_compression'] && function_exists('gzuncompress')) {
       $uncompressed = @gzuncompress($data);
       if ($uncompressed !== FALSE) {
@@ -623,7 +625,8 @@ class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
     }
 
     $embedding = json_decode($data, TRUE);
-    
+
     return is_array($embedding) ? $embedding : NULL;
   }
+
 }

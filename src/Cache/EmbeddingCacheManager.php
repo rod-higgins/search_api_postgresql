@@ -63,10 +63,10 @@ class EmbeddingCacheManager {
       throw new \InvalidArgumentException('Text cannot be empty for cache key generation.');
     }
 
-    // Normalize text for consistent caching
+    // Normalize text for consistent caching.
     $normalized_text = $this->normalizeText($text);
-    
-    // Include metadata in hash for cache invalidation when models change
+
+    // Include metadata in hash for cache invalidation when models change.
     $cache_data = [
       'text' => $normalized_text,
       'metadata' => $metadata,
@@ -202,7 +202,8 @@ class EmbeddingCacheManager {
       }
 
       if (empty($cache_items)) {
-        return TRUE; // Nothing to cache, but not an error
+        // Nothing to cache, but not an error.
+        return TRUE;
       }
 
       return $this->cache->setMultiple($cache_items, $ttl);
@@ -226,13 +227,14 @@ class EmbeddingCacheManager {
     // This is a simplified implementation. For a full implementation,
     // you'd need to store metadata separately or iterate through cache entries.
     $this->logger->info('Invalidating cache entries for metadata: @metadata', [
-      '@metadata' => json_encode($metadata)
+      '@metadata' => json_encode($metadata),
     ]);
 
-    // For now, just clear all cache if model metadata changes
+    // For now, just clear all cache if model metadata changes.
     if (isset($metadata['model']) || isset($metadata['version'])) {
       $this->cache->clear();
-      return 1; // Return 1 to indicate cache was cleared
+      // Return 1 to indicate cache was cleared.
+      return 1;
     }
 
     return 0;
@@ -246,12 +248,12 @@ class EmbeddingCacheManager {
    */
   public function getCacheStatistics() {
     $stats = $this->cache->getStats();
-    
-    // Add additional calculated metrics
+
+    // Add additional calculated metrics.
     if (isset($stats['hits']) && isset($stats['misses'])) {
       $total_requests = $stats['hits'] + $stats['misses'];
       $stats['total_requests'] = $total_requests;
-      
+
       if ($total_requests > 0) {
         $stats['hit_rate_percentage'] = round(($stats['hits'] / $total_requests) * 100, 2);
         $stats['miss_rate_percentage'] = round(($stats['misses'] / $total_requests) * 100, 2);
@@ -260,13 +262,15 @@ class EmbeddingCacheManager {
 
     // Add estimated cost savings (assuming $0.0001 per 1K tokens)
     if (isset($stats['hits'])) {
-      $avg_text_length = 500; // Estimated average text length in characters
-      $tokens_per_char = 0.25; // Rough estimate
+      // Estimated average text length in characters.
+      $avg_text_length = 500;
+      // Rough estimate.
+      $tokens_per_char = 0.25;
       $cost_per_1k_tokens = 0.0001;
-      
+
       $estimated_tokens_saved = $stats['hits'] * $avg_text_length * $tokens_per_char;
       $estimated_cost_saved = ($estimated_tokens_saved / 1000) * $cost_per_1k_tokens;
-      
+
       $stats['estimated_tokens_saved'] = round($estimated_tokens_saved);
       $stats['estimated_cost_saved_usd'] = round($estimated_cost_saved, 4);
     }
@@ -303,22 +307,24 @@ class EmbeddingCacheManager {
           continue;
         }
 
-        // Check if already cached
+        // Check if already cached.
         $cache_key = $this->generateCacheKey($item, $metadata);
         if ($this->cache->get($cache_key) !== NULL) {
           $results['skipped']++;
           continue;
         }
 
-        // Generate and cache embedding
+        // Generate and cache embedding.
         $embedding = $embedding_generator($item);
         if (!empty($embedding) && is_array($embedding)) {
           if ($this->cache->set($cache_key, $embedding)) {
             $results['cached']++;
-          } else {
+          }
+          else {
             $results['failed']++;
           }
-        } else {
+        }
+        else {
           $results['failed']++;
         }
       }
@@ -355,7 +361,8 @@ class EmbeddingCacheManager {
 
     if ($maintenance_success) {
       $this->logger->info('Cache maintenance completed successfully: @results', ['@results' => json_encode($results)]);
-    } else {
+    }
+    else {
       $this->logger->error('Cache maintenance failed');
     }
 
@@ -396,12 +403,12 @@ class EmbeddingCacheManager {
    */
   public function clearByIndex($index_id) {
     try {
-      // TODO: Implement index-specific cache tracking in future versions
-      // For now, clear all cache but log the specific index for tracking
+      // @todo Implement index-specific cache tracking in future versions
+      // For now, clear all cache but log the specific index for tracking.
       $result = $this->cache->clear();
       if ($result) {
         $this->logger->info('Embedding cache cleared (all entries) due to index operation: @index', [
-          '@index' => $index_id
+          '@index' => $index_id,
         ]);
       }
       return $result;
@@ -409,7 +416,7 @@ class EmbeddingCacheManager {
     catch (\Exception $e) {
       $this->logger->error('Failed to clear cache for index @index: @message', [
         '@index' => $index_id,
-        '@message' => $e->getMessage()
+        '@message' => $e->getMessage(),
       ]);
       return FALSE;
     }
@@ -462,7 +469,8 @@ class EmbeddingCacheManager {
    *   Comprehensive cache statistics.
    */
   public function getStats() {
-    return $this->getCacheStatistics(); // Alias for backward compatibility
+    // Alias for backward compatibility.
+    return $this->getCacheStatistics();
   }
 
   /**
@@ -486,15 +494,14 @@ class EmbeddingCacheManager {
    *   Normalized text.
    */
   protected function normalizeText($text) {
-    // Remove excessive whitespace
+    // Remove excessive whitespace.
     $text = preg_replace('/\s+/', ' ', trim($text));
-    
+
     // Convert to lowercase for case-insensitive caching (optional)
     // $text = strtolower($text);
-    
-    // Remove null bytes and control characters
+    // Remove null bytes and control characters.
     $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
-    
+
     return $text;
   }
 

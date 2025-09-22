@@ -180,6 +180,10 @@ services:
   search_api_postgresql.embedding_service:
     alias: search_api_postgresql.embedding_service.azure_openai
 
+  search_api_postgresql.config:
+    class: Drupal\search_api_postgresql\Config\SearchApiPostgresqlConfig
+    arguments: ['@config.factory']
+
 parameters:
   search_api_postgresql.default_batch_size: 50
   search_api_postgresql.max_retries: 3

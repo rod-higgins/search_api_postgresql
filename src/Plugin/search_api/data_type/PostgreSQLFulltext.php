@@ -101,8 +101,9 @@ class PostgreSQLFulltext extends DataTypePluginBase {
   protected function ensureConfiguration() {
     if (empty($this->configuration)) {
       $this->configuration = $this->defaultConfiguration();
-    } else {
-      // Merge with defaults to fill any missing keys
+    }
+    else {
+      // Merge with defaults to fill any missing keys.
       $this->configuration = $this->configuration + $this->defaultConfiguration();
     }
   }
@@ -137,27 +138,27 @@ class PostgreSQLFulltext extends DataTypePluginBase {
       return '';
     }
 
-    // Strip HTML tags but preserve spacing
+    // Strip HTML tags but preserve spacing.
     $text = preg_replace('/<[^>]*>/', ' ', $text);
-    
-    // Normalize whitespace
+
+    // Normalize whitespace.
     $text = preg_replace('/\s+/', ' ', $text);
-    
-    // Trim
+
+    // Trim.
     $text = trim($text);
-    
-    // Get configuration values safely
+
+    // Get configuration values safely.
     $min_word_length = $this->getConfigValue('min_word_length', 3);
     $max_word_length = $this->getConfigValue('max_word_length', 40);
-    
-    // Apply word length filters
+
+    // Apply word length filters.
     if ($min_word_length > 1 || $max_word_length < 100) {
       $text = $this->filterWordsByLength($text);
     }
-    
-    // Remove control characters that could interfere with tsvector
+
+    // Remove control characters that could interfere with tsvector.
     $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
-    
+
     return $text;
   }
 
@@ -171,20 +172,20 @@ class PostgreSQLFulltext extends DataTypePluginBase {
    *   The filtered text.
    */
   protected function filterWordsByLength($text) {
-    // Get configuration values safely
+    // Get configuration values safely.
     $min_length = $this->getConfigValue('min_word_length', 3);
     $max_length = $this->getConfigValue('max_word_length', 40);
-    
+
     $words = preg_split('/\s+/', $text);
     $filtered_words = [];
-    
+
     foreach ($words as $word) {
       $word_length = mb_strlen($word);
       if ($word_length >= $min_length && $word_length <= $max_length) {
         $filtered_words[] = $word;
       }
     }
-    
+
     return implode(' ', $filtered_words);
   }
 
@@ -388,7 +389,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
    * {@inheritdoc}
    */
   public function setConfiguration(array $configuration) {
-    // Merge with defaults to ensure all required keys exist
+    // Merge with defaults to ensure all required keys exist.
     $this->configuration = $configuration + $this->defaultConfiguration();
   }
 
@@ -396,19 +397,19 @@ class PostgreSQLFulltext extends DataTypePluginBase {
    * {@inheritdoc}
    */
   public function getValue($value) {
-    // Handle array input by joining values
+    // Handle array input by joining values.
     if (is_array($value)) {
       $value = implode(' ', array_filter($value, 'is_scalar'));
     }
-    
-    // Ensure we have a string
+
+    // Ensure we have a string.
     if (!is_scalar($value)) {
       return '';
     }
-    
+
     $value = (string) $value;
-    
-    // Apply text processing
+
+    // Apply text processing.
     return $this->processText($value);
   }
 
@@ -417,14 +418,14 @@ class PostgreSQLFulltext extends DataTypePluginBase {
    */
   public function prepareValue($value) {
     $processed_value = $this->getValue($value);
-    
+
     if (empty($processed_value)) {
       return NULL;
     }
-    
-    // Validate processed text
+
+    // Validate processed text.
     $this->validateText($processed_value);
-    
+
     return $processed_value;
   }
 
@@ -439,12 +440,13 @@ class PostgreSQLFulltext extends DataTypePluginBase {
    */
   protected function validateText($text) {
     // Check for maximum text length (PostgreSQL has limits)
-    $max_length = 1000000; // 1MB limit
+    // 1MB limit.
+    $max_length = 1000000;
     if (strlen($text) > $max_length) {
       throw new SearchApiException("Text is too long for PostgreSQL fulltext indexing (max: {$max_length} bytes)");
     }
-    
-    // Check for valid UTF-8
+
+    // Check for valid UTF-8.
     if (!mb_check_encoding($text, 'UTF-8')) {
       throw new SearchApiException("Text contains invalid UTF-8 encoding");
     }
@@ -464,15 +466,15 @@ class PostgreSQLFulltext extends DataTypePluginBase {
   public function getTsVectorSql($column_name, array $options = []) {
     $config = $options['config'] ?? $this->configuration['text_search_config'];
     $weight = $options['weight'] ?? 'A';
-    
-    // Validate configuration exists
+
+    // Validate configuration exists.
     if (!isset(static::$textSearchConfigurations[$config])) {
       $config = 'english';
     }
-    
-    // Build tsvector expression with weighting
+
+    // Build tsvector expression with weighting.
     $sql = "setweight(to_tsvector('{$config}', COALESCE({$column_name}, '')), '{$weight}')";
-    
+
     return $sql;
   }
 
@@ -491,20 +493,20 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     $config = $options['config'] ?? $this->configuration['text_search_config'];
     $enable_phrase = $options['phrase'] ?? $this->configuration['enable_phrase_search'];
     $enable_fuzzy = $options['fuzzy'] ?? $this->configuration['enable_fuzzy_search'];
-    
-    // Process search terms
+
+    // Process search terms.
     $processed_terms = $this->processSearchTerms($search_terms, [
       'phrase' => $enable_phrase,
       'fuzzy' => $enable_fuzzy,
     ]);
-    
+
     if (empty($processed_terms)) {
       return ['sql' => 'TRUE', 'params' => []];
     }
-    
+
     $sql = "to_tsquery('{$config}', :search_query)";
     $params = [':search_query' => $processed_terms];
-    
+
     return ['sql' => $sql, 'params' => $params];
   }
 
@@ -523,25 +525,25 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     if (empty($terms)) {
       return '';
     }
-    
+
     $terms = trim($terms);
-    
+
     // Handle phrase search (quoted strings)
     if ($options['phrase'] && preg_match_all('/"([^"]+)"/', $terms, $matches)) {
       $phrases = [];
       foreach ($matches[1] as $phrase) {
         $phrase = trim($phrase);
         if (!empty($phrase)) {
-          // Convert phrase to tsquery format
+          // Convert phrase to tsquery format.
           $phrase_words = preg_split('/\s+/', $phrase);
           $phrase_words = array_map([$this, 'escapeSearchTerm'], $phrase_words);
           $phrases[] = implode(' <-> ', $phrase_words);
         }
       }
-      
-      // Remove quoted phrases from original terms
+
+      // Remove quoted phrases from original terms.
       $terms = preg_replace('/"[^"]+"/', '', $terms);
-      
+
       if (!empty($phrases)) {
         $phrase_query = '(' . implode(' | ', $phrases) . ')';
         $terms = trim($terms);
@@ -552,7 +554,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
         return $phrase_query;
       }
     }
-    
+
     return $this->processWordTerms($terms);
   }
 
@@ -569,40 +571,40 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     if (empty($terms)) {
       return '';
     }
-    
-    // Split into words
+
+    // Split into words.
     $words = preg_split('/\s+/', trim($terms));
     $words = array_filter($words);
-    
+
     if (empty($words)) {
       return '';
     }
-    
-    // Process each word
+
+    // Process each word.
     $processed_words = [];
     foreach ($words as $word) {
       $word = trim($word);
       if (empty($word)) {
         continue;
       }
-      
-      // Handle boolean operators
+
+      // Handle boolean operators.
       if (in_array(strtoupper($word), ['AND', 'OR', 'NOT'])) {
         $processed_words[] = strtoupper($word);
         continue;
       }
-      
-      // Escape and add prefix matching for stemming
+
+      // Escape and add prefix matching for stemming.
       $escaped_word = $this->escapeSearchTerm($word);
-      
+
       if ($this->configuration['enable_stemming']) {
         $escaped_word .= ':*';
       }
-      
+
       $processed_words[] = $escaped_word;
     }
-    
-    // Join with AND by default
+
+    // Join with AND by default.
     return implode(' & ', $processed_words);
   }
 
@@ -616,14 +618,14 @@ class PostgreSQLFulltext extends DataTypePluginBase {
    *   The escaped term.
    */
   protected function escapeSearchTerm($term) {
-    // Remove characters that have special meaning in tsquery
+    // Remove characters that have special meaning in tsquery.
     $term = preg_replace('/[&|!():*<>]/', '', $term);
-    
-    // Quote the term if it contains spaces or special characters
+
+    // Quote the term if it contains spaces or special characters.
     if (preg_match('/[\s\'"\\\\]/', $term)) {
       $term = "'" . addslashes($term) . "'";
     }
-    
+
     return $term;
   }
 
@@ -644,14 +646,14 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     if (!$this->configuration['enable_highlighting']) {
       return $column_name;
     }
-    
+
     $config = $options['config'] ?? $this->configuration['text_search_config'];
     $max_words = $options['max_words'] ?? $this->configuration['highlight_max_words'];
     $min_words = $options['min_words'] ?? $this->configuration['highlight_min_words'];
     $max_fragments = $options['max_fragments'] ?? $this->configuration['highlight_max_fragments'];
-    
+
     $highlight_options = "MaxWords={$max_words}, MinWords={$min_words}, MaxFragments={$max_fragments}";
-    
+
     return "ts_headline('{$config}', {$column_name}, {$search_query}, '{$highlight_options}')";
   }
 
@@ -672,9 +674,9 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     if (!$this->configuration['enable_ranking']) {
       return '1.0';
     }
-    
+
     $normalization = $options['normalization'] ?? $this->configuration['ranking_normalization'];
-    
+
     return "ts_rank({$tsvector_column}, {$tsquery_param}, {$normalization})";
   }
 
@@ -710,18 +712,18 @@ class PostgreSQLFulltext extends DataTypePluginBase {
   public function getCombinedTsVectorSql(array $field_definitions) {
     $config = $this->configuration['text_search_config'];
     $expressions = [];
-    
+
     foreach ($field_definitions as $field_id => $definition) {
       $weight = $definition['weight'] ?? 'D';
       $column = $definition['column'] ?? $field_id;
-      
+
       $expressions[] = "setweight(to_tsvector('{$config}', COALESCE({$column}, '')), '{$weight}')";
     }
-    
+
     if (empty($expressions)) {
       return "''::tsvector";
     }
-    
+
     return implode(' || ', $expressions);
   }
 
@@ -741,33 +743,36 @@ class PostgreSQLFulltext extends DataTypePluginBase {
       'configurations' => [],
       'errors' => [],
     ];
-    
+
     try {
-      // Check for text search support
+      // Check for text search support.
       $stmt = $connection->query("SELECT to_tsvector('english', 'test')");
       $results['fulltext'] = TRUE;
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $results['errors'][] = 'PostgreSQL full-text search not available: ' . $e->getMessage();
     }
-    
+
     try {
       // Check for trigram extension (for fuzzy search)
       $stmt = $connection->query("SELECT similarity('test', 'text')");
       $results['trigram'] = TRUE;
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $results['errors'][] = 'PostgreSQL pg_trgm extension not available: ' . $e->getMessage();
     }
-    
+
     try {
-      // Get available text search configurations
+      // Get available text search configurations.
       $stmt = $connection->query("SELECT cfgname FROM pg_ts_config");
       while ($row = $stmt->fetch(\PDO::FETCH_ASSOC)) {
         $results['configurations'][] = $row['cfgname'];
       }
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $results['errors'][] = 'Could not retrieve text search configurations: ' . $e->getMessage();
     }
-    
+
     return $results;
   }
 

@@ -88,10 +88,10 @@ class ErrorClassificationService {
       'remediation_priority' => $this->calculateRemediationPriority($exception, $context),
     ];
 
-    // Add time-sensitive context
+    // Add time-sensitive context.
     $classification['temporal_context'] = $this->analyzeTemporalContext($exception, $context);
 
-    // Add correlation with historical data
+    // Add correlation with historical data.
     $classification['historical_correlation'] = $this->correlateWithHistory($exception, $context);
 
     return $classification;
@@ -109,12 +109,12 @@ class ErrorClassificationService {
    *   Severity level.
    */
   protected function determineSeverity(\Exception $exception, array $context) {
-    // Critical failures that affect system availability
+    // Critical failures that affect system availability.
     if ($exception instanceof DatabaseConnectionException) {
       return 'CRITICAL';
     }
 
-    // High impact failures affecting major functionality
+    // High impact failures affecting major functionality.
     if ($exception instanceof MemoryExhaustedException) {
       return 'HIGH';
     }
@@ -127,7 +127,7 @@ class ErrorClassificationService {
       return 'HIGH';
     }
 
-    // Medium impact failures with degraded functionality
+    // Medium impact failures with degraded functionality.
     if ($exception instanceof EmbeddingServiceUnavailableException) {
       return 'MEDIUM';
     }
@@ -144,12 +144,12 @@ class ErrorClassificationService {
       return 'MEDIUM';
     }
 
-    // Low impact failures with minimal user impact
+    // Low impact failures with minimal user impact.
     if ($exception instanceof CacheDegradedException) {
       return 'LOW';
     }
 
-    // Assess based on context
+    // Assess based on context.
     return $this->assessSeverityFromContext($exception, $context);
   }
 
@@ -165,7 +165,7 @@ class ErrorClassificationService {
    *   Impact scope.
    */
   protected function determineImpactScope(\Exception $exception, array $context) {
-    // System-wide impacts
+    // System-wide impacts.
     if ($exception instanceof DatabaseConnectionException) {
       return 'SYSTEM';
     }
@@ -173,19 +173,19 @@ class ErrorClassificationService {
     if ($exception instanceof MemoryExhaustedException) {
       $memory_usage = $context['memory_usage'] ?? 0;
       $memory_limit = $context['memory_limit'] ?? 0;
-      
+
       if ($memory_usage > ($memory_limit * 0.95)) {
         return 'SYSTEM';
       }
       return 'SERVER';
     }
 
-    // Index-specific impacts
+    // Index-specific impacts.
     if ($exception instanceof VectorIndexCorruptedException) {
       return 'INDEX';
     }
 
-    // Server-wide impacts
+    // Server-wide impacts.
     if ($exception instanceof ApiKeyExpiredException) {
       return 'SERVER';
     }
@@ -194,7 +194,7 @@ class ErrorClassificationService {
       return 'SERVER';
     }
 
-    // User-level impacts
+    // User-level impacts.
     if ($exception instanceof VectorSearchDegradedException) {
       return 'USER';
     }
@@ -211,7 +211,7 @@ class ErrorClassificationService {
       return 'USER';
     }
 
-    // Default based on context
+    // Default based on context.
     return $this->assessImpactFromContext($exception, $context);
   }
 
@@ -281,17 +281,17 @@ class ErrorClassificationService {
     $severity = $this->determineSeverity($exception, $context);
     $impact_scope = $this->determineImpactScope($exception, $context);
 
-    // Critical system failures
+    // Critical system failures.
     if ($severity === 'CRITICAL' || $impact_scope === 'SYSTEM') {
       return 'critical';
     }
 
-    // High impact failures
+    // High impact failures.
     if ($severity === 'HIGH' || $impact_scope === 'SERVER') {
       return 'error';
     }
 
-    // Medium impact with user-visible effects
+    // Medium impact with user-visible effects.
     if ($severity === 'MEDIUM') {
       if ($impact_scope === 'USER') {
         return 'warning';
@@ -299,7 +299,7 @@ class ErrorClassificationService {
       return 'info';
     }
 
-    // Low impact failures
+    // Low impact failures.
     if ($severity === 'LOW') {
       return 'minimal';
     }
@@ -322,23 +322,23 @@ class ErrorClassificationService {
     $severity = $this->determineSeverity($exception, $context);
     $impact_scope = $this->determineImpactScope($exception, $context);
 
-    // Always escalate critical and system-wide failures
+    // Always escalate critical and system-wide failures.
     if ($severity === 'CRITICAL' || $impact_scope === 'SYSTEM') {
       return TRUE;
     }
 
-    // Escalate high-severity failures
+    // Escalate high-severity failures.
     if ($severity === 'HIGH') {
       return TRUE;
     }
 
-    // Escalate repeated failures
+    // Escalate repeated failures.
     $failure_count = $context['failure_count'] ?? 0;
     if ($failure_count > 5) {
       return TRUE;
     }
 
-    // Escalate during business hours for medium severity
+    // Escalate during business hours for medium severity.
     if ($severity === 'MEDIUM' && $this->isBusinessHours()) {
       return TRUE;
     }
@@ -382,7 +382,7 @@ class ErrorClassificationService {
       $impact['revenue_impact'] = 'low';
     }
 
-    // Factor in timing
+    // Factor in timing.
     if ($this->isBusinessHours()) {
       $impact = $this->amplifyBusinessHoursImpact($impact);
     }
@@ -429,18 +429,18 @@ class ErrorClassificationService {
   protected function identifyErrorPatterns(\Exception $exception, array $context) {
     $patterns = [];
 
-    // Time-based patterns
+    // Time-based patterns.
     $hour = (int) date('H');
     if ($hour >= 9 && $hour <= 17) {
       $patterns[] = 'business_hours_failure';
     }
 
-    // Load-based patterns
+    // Load-based patterns.
     if (isset($context['concurrent_users']) && $context['concurrent_users'] > 100) {
       $patterns[] = 'high_load_failure';
     }
 
-    // Service-specific patterns
+    // Service-specific patterns.
     if ($exception instanceof EmbeddingServiceUnavailableException) {
       $patterns[] = 'external_service_dependency';
     }
@@ -449,7 +449,7 @@ class ErrorClassificationService {
       $patterns[] = 'resource_exhaustion';
     }
 
-    // Frequency patterns
+    // Frequency patterns.
     if (isset($context['recent_failures']) && $context['recent_failures'] > 3) {
       $patterns[] = 'recurring_failure';
     }
@@ -471,7 +471,7 @@ class ErrorClassificationService {
   protected function calculateRemediationPriority(\Exception $exception, array $context) {
     $priority = 0;
 
-    // Base priority from severity
+    // Base priority from severity.
     $severity = $this->determineSeverity($exception, $context);
     $severity_scores = [
       'CRITICAL' => 80,
@@ -481,7 +481,7 @@ class ErrorClassificationService {
     ];
     $priority += $severity_scores[$severity] ?? 20;
 
-    // Impact scope modifier
+    // Impact scope modifier.
     $impact_scope = $this->determineImpactScope($exception, $context);
     $impact_modifiers = [
       'SYSTEM' => 20,
@@ -491,12 +491,12 @@ class ErrorClassificationService {
     ];
     $priority += $impact_modifiers[$impact_scope] ?? 0;
 
-    // Business hours modifier
+    // Business hours modifier.
     if ($this->isBusinessHours()) {
       $priority += 10;
     }
 
-    // Frequency modifier
+    // Frequency modifier.
     $failure_count = $context['failure_count'] ?? 0;
     $priority += min($failure_count * 2, 20);
 
@@ -537,7 +537,7 @@ class ErrorClassificationService {
    *   Historical correlation data.
    */
   protected function correlateWithHistory(\Exception $exception, array $context) {
-    // In a real implementation, this would query historical error data
+    // In a real implementation, this would query historical error data.
     return [
       'similar_errors_24h' => 0,
       'similar_errors_7d' => 0,
@@ -562,7 +562,7 @@ class ErrorClassificationService {
     $code = $exception->getCode();
     $message = strtolower($exception->getMessage());
 
-    // HTTP-style error codes
+    // HTTP-style error codes.
     if ($code >= 500) {
       return 'HIGH';
     }
@@ -570,7 +570,7 @@ class ErrorClassificationService {
       return 'MEDIUM';
     }
 
-    // Message-based assessment
+    // Message-based assessment.
     $critical_keywords = ['fatal', 'critical', 'crash', 'corruption'];
     $high_keywords = ['timeout', 'unavailable', 'connection', 'memory'];
     $medium_keywords = ['rate limit', 'quota', 'permission'];
@@ -593,7 +593,8 @@ class ErrorClassificationService {
       }
     }
 
-    return 'MEDIUM'; // Default fallback
+    // Default fallback.
+    return 'MEDIUM';
   }
 
   /**
@@ -608,7 +609,7 @@ class ErrorClassificationService {
    *   Impact scope.
    */
   protected function assessImpactFromContext(\Exception $exception, array $context) {
-    // Check if specific services are mentioned
+    // Check if specific services are mentioned.
     if (isset($context['affected_service'])) {
       $service = $context['affected_service'];
       if (in_array($service, ['database', 'cache', 'file_system'])) {
@@ -619,17 +620,18 @@ class ErrorClassificationService {
       }
     }
 
-    // Check if specific indexes are mentioned
+    // Check if specific indexes are mentioned.
     if (isset($context['index_id'])) {
       return 'INDEX';
     }
 
-    // Check user context
+    // Check user context.
     if (isset($context['user_id']) || isset($context['session_id'])) {
       return 'USER';
     }
 
-    return 'SERVER'; // Default fallback
+    // Default fallback.
+    return 'SERVER';
   }
 
   /**
@@ -640,9 +642,10 @@ class ErrorClassificationService {
    */
   protected function isBusinessHours() {
     $hour = (int) date('H');
-    $day = (int) date('N'); // 1-7, Monday to Sunday
-    
-    // Monday to Friday, 9 AM to 5 PM
+    // 1-7, Monday to Sunday
+    $day = (int) date('N');
+
+    // Monday to Friday, 9 AM to 5 PM.
     return ($day >= 1 && $day <= 5) && ($hour >= 9 && $hour <= 17);
   }
 
@@ -683,7 +686,7 @@ class ErrorClassificationService {
    */
   protected function sanitizeContext(array $context) {
     $sensitive_keys = ['password', 'api_key', 'token', 'secret'];
-    
+
     foreach ($context as $key => $value) {
       foreach ($sensitive_keys as $sensitive_key) {
         if (stripos($key, $sensitive_key) !== FALSE) {
@@ -742,7 +745,7 @@ class ErrorClassificationService {
    *   Time in seconds since last similar error.
    */
   protected function getTimeSinceLastSimilar(\Exception $exception) {
-    // In a real implementation, this would query error logs
+    // In a real implementation, this would query error logs.
     return 0;
   }
 
@@ -756,7 +759,8 @@ class ErrorClassificationService {
    *   Trend description (increasing, decreasing, stable).
    */
   protected function getFrequencyTrend(\Exception $exception) {
-    // In a real implementation, this would analyze historical data
+    // In a real implementation, this would analyze historical data.
     return 'stable';
   }
+
 }

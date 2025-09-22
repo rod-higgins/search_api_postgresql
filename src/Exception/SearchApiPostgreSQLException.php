@@ -55,7 +55,7 @@ abstract class SearchApiPostgreSQLException extends SearchApiException {
    * @param array $context
    *   Additional context data.
    */
-  public function __construct($message = '', $code = 0, \Throwable $previous = NULL, $severity = 'critical', $retryable = FALSE, $fallback_strategy = 'none', array $context = []) {
+  public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, $severity = 'critical', $retryable = FALSE, $fallback_strategy = 'none', array $context = []) {
     parent::__construct($message, $code, $previous);
     $this->severity = $severity;
     $this->retryable = $retryable;
@@ -95,6 +95,7 @@ abstract class SearchApiPostgreSQLException extends SearchApiException {
    * Gets a user-friendly error message.
    */
   abstract public function getUserMessage();
+
 }
 
 /**
@@ -102,7 +103,7 @@ abstract class SearchApiPostgreSQLException extends SearchApiException {
  */
 class EmbeddingServiceException extends SearchApiPostgreSQLException {
 
-  public function __construct($message = '', $code = 0, \Throwable $previous = NULL, $retryable = TRUE, array $context = []) {
+  public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, $retryable = TRUE, array $context = []) {
     parent::__construct(
       $message,
       $code,
@@ -114,13 +115,20 @@ class EmbeddingServiceException extends SearchApiPostgreSQLException {
     );
   }
 
+  /**
+   *
+   */
   public function getUserMessage() {
     return $this->t('AI embeddings are temporarily unavailable. Search will continue using traditional text search.');
   }
 
+  /**
+   *
+   */
   private function t($string) {
     return \Drupal::translation()->translate($string);
   }
+
 }
 
 /**
@@ -128,7 +136,7 @@ class EmbeddingServiceException extends SearchApiPostgreSQLException {
  */
 class VectorSearchException extends SearchApiPostgreSQLException {
 
-  public function __construct($message = '', $code = 0, \Throwable $previous = NULL, array $context = []) {
+  public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, array $context = []) {
     parent::__construct(
       $message,
       $code,
@@ -140,13 +148,20 @@ class VectorSearchException extends SearchApiPostgreSQLException {
     );
   }
 
+  /**
+   *
+   */
   public function getUserMessage() {
     return $this->t('Vector search is temporarily unavailable. Falling back to text search.');
   }
 
+  /**
+   *
+   */
   private function t($string) {
     return \Drupal::translation()->translate($string);
   }
+
 }
 
 /**
@@ -154,7 +169,7 @@ class VectorSearchException extends SearchApiPostgreSQLException {
  */
 class DatabaseConnectionException extends SearchApiPostgreSQLException {
 
-  public function __construct($message = '', $code = 0, \Throwable $previous = NULL, $retryable = TRUE, array $context = []) {
+  public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, $retryable = TRUE, array $context = []) {
     parent::__construct(
       $message,
       $code,
@@ -166,13 +181,20 @@ class DatabaseConnectionException extends SearchApiPostgreSQLException {
     );
   }
 
+  /**
+   *
+   */
   public function getUserMessage() {
     return $this->t('Database connection is temporarily unavailable. Some features may be limited.');
   }
 
+  /**
+   *
+   */
   private function t($string) {
     return \Drupal::translation()->translate($string);
   }
+
 }
 
 /**
@@ -194,10 +216,10 @@ class BatchOperationException extends SearchApiPostgreSQLException {
    */
   protected $failedItems;
 
-  public function __construct($message = '', array $partial_results = [], array $failed_items = [], $code = 0, \Throwable $previous = NULL, array $context = []) {
+  public function __construct($message = '', array $partial_results = [], array $failed_items = [], $code = 0, ?\Throwable $previous = NULL, array $context = []) {
     $this->partialResults = $partial_results;
     $this->failedItems = $failed_items;
-    
+
     parent::__construct(
       $message,
       $code,
@@ -209,27 +231,40 @@ class BatchOperationException extends SearchApiPostgreSQLException {
     );
   }
 
+  /**
+   *
+   */
   public function getPartialResults() {
     return $this->partialResults;
   }
 
+  /**
+   *
+   */
   public function getFailedItems() {
     return $this->failedItems;
   }
 
+  /**
+   *
+   */
   public function getUserMessage() {
     $success_count = count($this->partialResults);
     $failed_count = count($this->failedItems);
-    
+
     return $this->t('@success items processed successfully, @failed items failed and will be retried.', [
       '@success' => $success_count,
       '@failed' => $failed_count,
     ]);
   }
 
+  /**
+   *
+   */
   private function t($string, array $args = []) {
     return \Drupal::translation()->translate($string, $args);
   }
+
 }
 
 /**
@@ -237,7 +272,7 @@ class BatchOperationException extends SearchApiPostgreSQLException {
  */
 class ConfigurationException extends SearchApiPostgreSQLException {
 
-  public function __construct($message = '', $code = 0, \Throwable $previous = NULL, array $context = []) {
+  public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, array $context = []) {
     parent::__construct(
       $message,
       $code,
@@ -249,13 +284,20 @@ class ConfigurationException extends SearchApiPostgreSQLException {
     );
   }
 
+  /**
+   *
+   */
   public function getUserMessage() {
     return $this->t('Configuration error detected. Some advanced features have been disabled. Please check your server configuration.');
   }
 
+  /**
+   *
+   */
   private function t($string) {
     return \Drupal::translation()->translate($string);
   }
+
 }
 
 /**
@@ -270,9 +312,9 @@ class RateLimitException extends SearchApiPostgreSQLException {
    */
   protected $retryAfter;
 
-  public function __construct($message = '', $retry_after = 60, $code = 0, \Throwable $previous = NULL, array $context = []) {
+  public function __construct($message = '', $retry_after = 60, $code = 0, ?\Throwable $previous = NULL, array $context = []) {
     $this->retryAfter = $retry_after;
-    
+
     parent::__construct(
       $message,
       $code,
@@ -284,17 +326,27 @@ class RateLimitException extends SearchApiPostgreSQLException {
     );
   }
 
+  /**
+   *
+   */
   public function getRetryAfter() {
     return $this->retryAfter;
   }
 
+  /**
+   *
+   */
   public function getUserMessage() {
     return $this->t('API rate limit reached. Operations will resume shortly.');
   }
 
+  /**
+   *
+   */
   private function t($string) {
     return \Drupal::translation()->translate($string);
   }
+
 }
 
 /**
@@ -302,7 +354,7 @@ class RateLimitException extends SearchApiPostgreSQLException {
  */
 class CacheException extends SearchApiPostgreSQLException {
 
-  public function __construct($message = '', $code = 0, \Throwable $previous = NULL, array $context = []) {
+  public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, array $context = []) {
     parent::__construct(
       $message,
       $code,
@@ -314,11 +366,18 @@ class CacheException extends SearchApiPostgreSQLException {
     );
   }
 
+  /**
+   *
+   */
   public function getUserMessage() {
     return $this->t('Cache temporarily unavailable. Performance may be reduced.');
   }
 
+  /**
+   *
+   */
   private function t($string) {
     return \Drupal::translation()->translate($string);
   }
+
 }

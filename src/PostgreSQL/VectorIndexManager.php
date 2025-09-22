@@ -19,14 +19,14 @@ class VectorIndexManager extends IndexManager {
 
   /**
    * {@inheritdoc}
-   * 
-   * FIXED: Accept $configuration parameter and pass all 4 parameters to parent
+   *
+   * FIXED: Accept $configuration parameter and pass all 4 parameters to parent.
    */
   public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $configuration, $embedding_service = NULL) {
-    // Call parent with only the 3 parameters it expects
+    // Call parent with only the 3 parameters it expects.
     parent::__construct($connector, $field_mapper, $configuration);
-    
-    // Handle embedding service in this enhanced version
+
+    // Handle embedding service in this enhanced version.
     $this->embeddingService = $embedding_service;
   }
 
@@ -35,9 +35,10 @@ class VectorIndexManager extends IndexManager {
    */
   protected function buildCreateTableSql($table_name, IndexInterface $index) {
     $sql = parent::buildCreateTableSql($table_name, $index);
-    
-    // Add vector column for embeddings
-    $vector_dimension = $this->config['vector_dimension'] ?? 1536; // OpenAI default
+
+    // Add vector column for embeddings.
+    // OpenAI default.
+    $vector_dimension = $this->config['vector_dimension'] ?? 1536;
     $sql = str_replace(
       "search_vector TSVECTOR\n);",
       "search_vector TSVECTOR,\n  content_embedding VECTOR({$vector_dimension})\n);"
@@ -51,15 +52,16 @@ class VectorIndexManager extends IndexManager {
    */
   protected function createFullTextIndexes($table_name, IndexInterface $index) {
     parent::createFullTextIndexes($table_name, $index);
-    
-    // Create vector similarity index
+
+    // Create vector similarity index.
     $index_method = $this->config['vector_index_method'] ?? 'ivfflat';
     $index_options = '';
-    
+
     if ($index_method === 'ivfflat') {
       $lists = $this->config['ivfflat_lists'] ?? 100;
       $index_options = "WITH (lists = {$lists})";
-    } elseif ($index_method === 'hnsw') {
+    }
+    elseif ($index_method === 'hnsw') {
       $m = $this->config['hnsw_m'] ?? 16;
       $ef_construction = $this->config['hnsw_ef_construction'] ?? 64;
       $index_options = "WITH (m = {$m}, ef_construction = {$ef_construction})";
@@ -74,7 +76,7 @@ class VectorIndexManager extends IndexManager {
    * {@inheritdoc}
    */
   protected function indexItem($table_name, IndexInterface $index, ItemInterface $item) {
-    // Get the parent indexing logic
+    // Get the parent indexing logic.
     $fields = $item->getFields(TRUE);
     $values = [
       'search_api_id' => $item->getId(),
@@ -82,52 +84,56 @@ class VectorIndexManager extends IndexManager {
       'search_api_language' => $item->getLanguage() ?: 'und',
     ];
 
-    // Map field values
+    // Map field values.
     $searchable_text = '';
     foreach ($fields as $field_id => $field) {
       $field_values = $field->getValues();
       if (!empty($field_values)) {
         $field_value = reset($field_values);
         $values[$field_id] = $field_value;
-        
-        // Collect text for full-text search and embeddings
+
+        // Collect text for full-text search and embeddings.
         if (in_array($field->getType(), ['text', 'string'])) {
           $searchable_text .= ' ' . $field_value;
         }
       }
     }
 
-    // Generate embedding if service is available
+    // Generate embedding if service is available.
     $embedding = NULL;
     if ($this->embeddingService && !empty(trim($searchable_text))) {
       try {
         $embedding = $this->embeddingService->generateEmbedding(trim($searchable_text));
-      } catch (\Exception $e) {
-        // Log error but continue indexing without embedding
+      }
+      catch (\Exception $e) {
+        // Log error but continue indexing without embedding.
         \Drupal::logger('search_api_postgresql')->warning(
           'Failed to generate embedding for item @id: @error',
           ['@id' => $item->getId(), '@error' => $e->getMessage()]
-        );
+              );
       }
     }
 
-    // Build full-text search vector
+    // Build full-text search vector.
     $fts_config = $this->config['fts_configuration'] ?? 'english';
     $values['search_vector'] = "to_tsvector('{$fts_config}', :searchable_text)";
 
-    // Build INSERT query
+    // Build INSERT query.
     $placeholders = [];
     foreach ($values as $key => $value) {
       if ($key === 'search_vector') {
-        $placeholders[] = $value; // Raw SQL function
-      } elseif ($key === 'content_embedding' && $embedding) {
+        // Raw SQL function.
+        $placeholders[] = $value;
+      }
+      elseif ($key === 'content_embedding' && $embedding) {
         $placeholders[] = ':content_embedding';
-      } else {
+      }
+      else {
         $placeholders[] = ":{$key}";
       }
     }
 
-    $insert_sql = "INSERT INTO {$table_name} (" . implode(', ', array_keys($values)) . 
+    $insert_sql = "INSERT INTO {$table_name} (" . implode(', ', array_keys($values)) .
                   ") VALUES (" . implode(', ', $placeholders) . ")";
 
     $params = [];
@@ -137,13 +143,14 @@ class VectorIndexManager extends IndexManager {
       }
     }
     $params[':searchable_text'] = trim($searchable_text);
-    
+
     if ($embedding) {
       $params[':content_embedding'] = '[' . implode(',', $embedding) . ']';
     }
 
     $this->connector->executeQuery($insert_sql, $params);
   }
+
 }
 
 /**
@@ -160,8 +167,8 @@ class VectorQueryBuilder extends QueryBuilder {
 
   /**
    * {@inheritdoc}
-   * 
-   * FIXED: Accept $configuration parameter, parent only needs 3 parameters
+   *
+   * FIXED: Accept $configuration parameter, parent only needs 3 parameters.
    */
   public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $configuration, $embedding_service = NULL) {
     // Parent QueryBuilder only expects 3 parameters (no embedding service)
@@ -174,14 +181,14 @@ class VectorQueryBuilder extends QueryBuilder {
    */
   public function buildSearchQuery(QueryInterface $query) {
     $search_mode = $query->getOption('search_mode', 'hybrid');
-    
+
     switch ($search_mode) {
       case 'vector_only':
         return $this->buildVectorSearchQuery($query);
-      
+
       case 'text_only':
         return parent::buildSearchQuery($query);
-        
+
       case 'hybrid':
       default:
         return $this->buildHybridSearchQuery($query);
@@ -194,17 +201,17 @@ class VectorQueryBuilder extends QueryBuilder {
   protected function buildVectorSearchQuery(QueryInterface $query) {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
-    
+
     $keys = $query->getKeys();
     if (!$keys || !$this->embeddingService) {
-      // Fallback to traditional search
+      // Fallback to traditional search.
       return parent::buildSearchQuery($query);
     }
 
-    // Generate embedding for search query
+    // Generate embedding for search query.
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
     $query_embedding = $this->embeddingService->generateEmbedding($search_text);
-    
+
     if (!$query_embedding) {
       return parent::buildSearchQuery($query);
     }
@@ -230,21 +237,22 @@ class VectorQueryBuilder extends QueryBuilder {
   protected function buildHybridSearchQuery(QueryInterface $query) {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
-    
+
     $keys = $query->getKeys();
     if (!$keys) {
       return parent::buildSearchQuery($query);
     }
 
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
-    
-    // Try to generate embedding for hybrid search
+
+    // Try to generate embedding for hybrid search.
     $query_embedding = NULL;
     if ($this->embeddingService) {
       try {
         $query_embedding = $this->embeddingService->generateEmbedding($search_text);
-      } catch (\Exception $e) {
-        // Fall back to text-only search if embedding fails
+      }
+      catch (\Exception $e) {
+        // Fall back to text-only search if embedding fails.
         return parent::buildSearchQuery($query);
       }
     }
@@ -253,7 +261,7 @@ class VectorQueryBuilder extends QueryBuilder {
       return parent::buildSearchQuery($query);
     }
 
-    // Build hybrid query
+    // Build hybrid query.
     $text_weight = $this->config['hybrid_search']['text_weight'] ?? 0.7;
     $vector_weight = $this->config['hybrid_search']['vector_weight'] ?? 0.3;
 
@@ -283,23 +291,24 @@ class VectorQueryBuilder extends QueryBuilder {
    */
   protected function buildVectorSelectClause(QueryInterface $query) {
     $fields = [];
-    
-    // Add system fields
+
+    // Add system fields.
     $fields[] = 'search_api_id';
     $fields[] = 'search_api_datasource';
     $fields[] = 'search_api_language';
-    
-    // Add requested fields
+
+    // Add requested fields.
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
       $fields[] = $field_id;
     }
 
-    // ALWAYS add relevance score - required by Search API specification
+    // ALWAYS add relevance score - required by Search API specification.
     if ($query->getKeys() && $this->embeddingService) {
-      // With search keys and embedding service: use vector similarity score
+      // With search keys and embedding service: use vector similarity score.
       $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS search_api_relevance";
-    } else {
-      // Without search keys or embedding service: provide default relevance value
+    }
+    else {
+      // Without search keys or embedding service: provide default relevance value.
       $fields[] = "1.0 AS search_api_relevance";
     }
 
@@ -321,34 +330,35 @@ class VectorQueryBuilder extends QueryBuilder {
    */
   protected function buildHybridSelectClause(QueryInterface $query, $text_weight, $vector_weight) {
     $fields = [];
-    
-    // Add system fields
+
+    // Add system fields.
     $fields[] = 'search_api_id';
     $fields[] = 'search_api_datasource';
     $fields[] = 'search_api_language';
-    
-    // Add requested fields
+
+    // Add requested fields.
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
       $fields[] = $field_id;
     }
 
-    // ALWAYS add relevance score - required by Search API specification
+    // ALWAYS add relevance score - required by Search API specification.
     if ($query->getKeys() && $this->embeddingService) {
-      // With search keys and embedding service: use hybrid scoring
+      // With search keys and embedding service: use hybrid scoring.
       $fts_config = $this->config['fts_configuration'] ?? 'english';
-      
-      // Combine text and vector scores
+
+      // Combine text and vector scores.
       $fields[] = "
         (
           {$text_weight} * ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query)) +
           {$vector_weight} * (1 - (content_embedding <=> :query_embedding))
         ) AS hybrid_score";
-      
+
       $fields[] = "ts_rank(search_vector, to_tsquery('{$fts_config}', :ts_query)) AS text_score";
       $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS vector_score";
       $fields[] = "hybrid_score AS search_api_relevance";
-    } else {
-      // Without search keys or embedding service: provide default relevance value
+    }
+    else {
+      // Without search keys or embedding service: provide default relevance value.
       $fields[] = "1.0 AS search_api_relevance";
     }
 
@@ -361,7 +371,7 @@ class VectorQueryBuilder extends QueryBuilder {
   protected function buildHybridWhereClause(QueryInterface $query) {
     $conditions = ['1=1'];
 
-    // Include both text and vector conditions
+    // Include both text and vector conditions.
     if ($keys = $query->getKeys()) {
       $fts_config = $this->config['fts_configuration'];
       $conditions[] = "(
@@ -370,7 +380,7 @@ class VectorQueryBuilder extends QueryBuilder {
       )";
     }
 
-    // Handle filters
+    // Handle filters.
     if ($condition_group = $query->getConditionGroup()) {
       $condition_sql = $this->buildConditionGroup($condition_group);
       if (!empty($condition_sql)) {
@@ -378,7 +388,7 @@ class VectorQueryBuilder extends QueryBuilder {
       }
     }
 
-    // Handle language filtering
+    // Handle language filtering.
     if ($languages = $query->getLanguages()) {
       if ($languages !== [NULL]) {
         $language_placeholders = [];
@@ -397,7 +407,7 @@ class VectorQueryBuilder extends QueryBuilder {
    */
   protected function buildVectorOrderClause(QueryInterface $query) {
     $sorts = $query->getSorts();
-    
+
     if (empty($sorts)) {
       return 'ORDER BY search_api_relevance DESC';
     }
@@ -418,7 +428,7 @@ class VectorQueryBuilder extends QueryBuilder {
       if ($key === '#conjunction') {
         continue;
       }
-      
+
       if (is_array($value)) {
         $text_parts[] = $this->extractTextFromKeys($value);
       }
@@ -429,4 +439,5 @@ class VectorQueryBuilder extends QueryBuilder {
 
     return implode(' ', $text_parts);
   }
+
 }

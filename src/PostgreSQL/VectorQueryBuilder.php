@@ -2,7 +2,6 @@
 
 namespace Drupal\search_api_postgresql\PostgreSQL;
 
-use Drupal\search_api\IndexInterface;
 use Drupal\search_api\Query\QueryInterface;
 
 /**
@@ -29,25 +28,25 @@ class VectorQueryBuilder extends QueryBuilder {
    * {@inheritdoc}
    */
   public function buildSearchQuery(QueryInterface $query) {
-    // Handle queries without search keys using parent method
+    // Handle queries without search keys using parent method.
     if (!$query->getKeys()) {
       return parent::buildSearchQuery($query);
     }
 
-    // Check if vector search is enabled and available
+    // Check if vector search is enabled and available.
     if (!$this->isVectorSearchEnabled()) {
       return parent::buildSearchQuery($query);
     }
 
     $search_mode = $query->getOption('search_mode', 'hybrid');
-    
+
     switch ($search_mode) {
       case 'vector_only':
         return $this->buildVectorSearchQuery($query);
-      
+
       case 'text_only':
         return parent::buildSearchQuery($query);
-        
+
       case 'hybrid':
       default:
         return $this->buildHybridSearchQuery($query);
@@ -56,32 +55,33 @@ class VectorQueryBuilder extends QueryBuilder {
 
   /**
    * {@inheritdoc}
-   * 
+   *
    * Overrides parent to ensure search_api_relevance is always included.
    */
   protected function buildSelectClause(QueryInterface $query) {
     $fields = [];
-    
+
     // Add system fields (properly quoted)
     $fields[] = $this->connector->quoteColumnName('search_api_id');
     $fields[] = $this->connector->quoteColumnName('search_api_datasource');
     $fields[] = $this->connector->quoteColumnName('search_api_language');
-    
-    // Add requested fields from the index
+
+    // Add requested fields from the index.
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
       $safe_field = $this->validateIndexField($query->getIndex(), $field_id);
       $fields[] = $safe_field;
     }
 
-    // ALWAYS add relevance score - required by Search API specification
+    // ALWAYS add relevance score - required by Search API specification.
     if ($query->getKeys()) {
-      // With search keys: use actual relevance calculation
+      // With search keys: use actual relevance calculation.
       $fts_config = $this->validateFtsConfiguration();
-      $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') . 
-                ", to_tsquery('{$fts_config}', :ts_query)) AS " . 
+      $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') .
+                ", to_tsquery('{$fts_config}', :ts_query)) AS " .
                 $this->connector->quoteColumnName('search_api_relevance');
-    } else {
-      // Without search keys: provide default relevance value
+    }
+    else {
+      // Without search keys: provide default relevance value.
       $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
     }
 
@@ -100,26 +100,26 @@ class VectorQueryBuilder extends QueryBuilder {
   protected function buildVectorSearchQuery(QueryInterface $query) {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
-    
+
     $keys = $query->getKeys();
     if (!$keys || !$this->embeddingService) {
-      // Fallback to traditional search
+      // Fallback to traditional search.
       return parent::buildSearchQuery($query);
     }
 
-    // Generate embedding for search query
+    // Generate embedding for search query.
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
-    
+
     try {
       $query_embedding = $this->embeddingService->generateEmbedding($search_text);
     }
     catch (\Exception $e) {
       \Drupal::logger('search_api_postgresql')->error('Failed to generate query embedding: @message', [
-        '@message' => $e->getMessage()
+        '@message' => $e->getMessage(),
       ]);
       return parent::buildSearchQuery($query);
     }
-    
+
     if (!$query_embedding) {
       return parent::buildSearchQuery($query);
     }
@@ -151,20 +151,20 @@ class VectorQueryBuilder extends QueryBuilder {
   protected function buildHybridSearchQuery(QueryInterface $query) {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
-    
+
     $keys = $query->getKeys();
     if (!$keys) {
       return parent::buildSearchQuery($query);
     }
 
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
-    
+
     try {
       $query_embedding = $this->embeddingService ? $this->embeddingService->generateEmbedding($search_text) : NULL;
     }
     catch (\Exception $e) {
       \Drupal::logger('search_api_postgresql')->error('Embedding failed, falling back to text search: @message', [
-        '@message' => $e->getMessage()
+        '@message' => $e->getMessage(),
       ]);
       return parent::buildSearchQuery($query);
     }
@@ -173,7 +173,7 @@ class VectorQueryBuilder extends QueryBuilder {
       return parent::buildSearchQuery($query);
     }
 
-    // Weights for combining scores
+    // Weights for combining scores.
     $text_weight = $this->getTextWeight();
     $vector_weight = $this->getVectorWeight();
 
@@ -203,24 +203,25 @@ class VectorQueryBuilder extends QueryBuilder {
    */
   protected function buildVectorSelectClause(QueryInterface $query) {
     $fields = [];
-    
+
     // Add system fields (properly quoted)
     $fields[] = $this->connector->quoteColumnName('search_api_id');
     $fields[] = $this->connector->quoteColumnName('search_api_datasource');
     $fields[] = $this->connector->quoteColumnName('search_api_language');
-    
-    // Add requested fields
+
+    // Add requested fields.
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
       $fields[] = $this->connector->quoteColumnName($field_id);
     }
 
-    // ALWAYS add relevance score - required by Search API specification
+    // ALWAYS add relevance score - required by Search API specification.
     if ($query->getKeys() && $this->embeddingService) {
-      // With search keys and embedding service: use vector similarity score
+      // With search keys and embedding service: use vector similarity score.
       $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS " .
                 $this->connector->quoteColumnName('search_api_relevance');
-    } else {
-      // Without search keys or embedding service: provide default relevance value
+    }
+    else {
+      // Without search keys or embedding service: provide default relevance value.
       $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
     }
 
@@ -239,11 +240,11 @@ class VectorQueryBuilder extends QueryBuilder {
   protected function buildVectorWhereClause(QueryInterface $query) {
     $conditions = ['content_embedding IS NOT NULL'];
 
-    // Add minimum similarity threshold
+    // Add minimum similarity threshold.
     $similarity_threshold = $this->getSimilarityThreshold();
     $conditions[] = "(1 - (content_embedding <=> :query_embedding)) >= {$similarity_threshold}";
 
-    // Handle filters
+    // Handle filters.
     if ($condition_group = $query->getConditionGroup()) {
       $condition_sql = $this->buildConditionGroupSql($condition_group, $query->getIndex());
       if (!empty($condition_sql)) {
@@ -281,36 +282,37 @@ class VectorQueryBuilder extends QueryBuilder {
    */
   protected function buildHybridSelectClause(QueryInterface $query, $text_weight, $vector_weight) {
     $fields = [];
-    
+
     // Add system fields (properly quoted)
     $fields[] = $this->connector->quoteColumnName('search_api_id');
     $fields[] = $this->connector->quoteColumnName('search_api_datasource');
     $fields[] = $this->connector->quoteColumnName('search_api_language');
-    
-    // Add requested fields
+
+    // Add requested fields.
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
       $fields[] = $this->connector->quoteColumnName($field_id);
     }
 
-    // ALWAYS add relevance score - required by Search API specification
+    // ALWAYS add relevance score - required by Search API specification.
     if ($query->getKeys() && $this->embeddingService) {
-      // With search keys and embedding service: use hybrid scoring
+      // With search keys and embedding service: use hybrid scoring.
       $fts_config = $this->config['fts_configuration'] ?? 'english';
-      
-      // Combine text and vector scores
+
+      // Combine text and vector scores.
       $fields[] = "
         (
-          {$text_weight} * ts_rank(" . $this->connector->quoteColumnName('search_vector') . 
+          {$text_weight} * ts_rank(" . $this->connector->quoteColumnName('search_vector') .
           ", to_tsquery('{$fts_config}', :ts_query)) +
           {$vector_weight} * (1 - (content_embedding <=> :query_embedding))
         ) AS hybrid_score";
-      
-      $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') . 
+
+      $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') .
                 ", to_tsquery('{$fts_config}', :ts_query)) AS text_score";
       $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS vector_score";
       $fields[] = "hybrid_score AS " . $this->connector->quoteColumnName('search_api_relevance');
-    } else {
-      // Without search keys or embedding service: provide default relevance value
+    }
+    else {
+      // Without search keys or embedding service: provide default relevance value.
       $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
     }
 
@@ -330,7 +332,7 @@ class VectorQueryBuilder extends QueryBuilder {
     $conditions = ['1=1'];
     $search_vector_field = $this->connector->quoteColumnName('search_vector');
 
-    // Include items that match either text search OR have vector similarity
+    // Include items that match either text search OR have vector similarity.
     if ($keys = $query->getKeys()) {
       $fts_config = $this->config['fts_configuration'] ?? 'english';
       $similarity_threshold = $this->getSimilarityThreshold();
@@ -340,7 +342,7 @@ class VectorQueryBuilder extends QueryBuilder {
       )";
     }
 
-    // Handle filters
+    // Handle filters.
     if ($condition_group = $query->getConditionGroup()) {
       $condition_sql = $this->buildConditionGroupSql($condition_group, $query->getIndex());
       if (!empty($condition_sql)) {
@@ -382,7 +384,7 @@ class VectorQueryBuilder extends QueryBuilder {
       if ($key === '#conjunction') {
         continue;
       }
-      
+
       if (is_array($value)) {
         $text_parts[] = $this->extractTextFromKeys($value);
       }
@@ -401,7 +403,7 @@ class VectorQueryBuilder extends QueryBuilder {
    *   TRUE if vector search is enabled, FALSE otherwise.
    */
   protected function isVectorSearchEnabled() {
-    return !empty($this->config['vector_search']['enabled']) || 
+    return !empty($this->config['vector_search']['enabled']) ||
            !empty($this->config['ai_embeddings']['enabled']);
   }
 
@@ -446,7 +448,7 @@ class VectorQueryBuilder extends QueryBuilder {
    */
   protected function assembleSqlQuery(array $parts) {
     $sql = [];
-    
+
     foreach (['SELECT', 'FROM', 'WHERE', 'ORDER', 'LIMIT'] as $clause) {
       if (!empty($parts[$clause])) {
         if ($clause === 'SELECT') {
@@ -463,4 +465,5 @@ class VectorQueryBuilder extends QueryBuilder {
 
     return implode("\n", $sql);
   }
+
 }

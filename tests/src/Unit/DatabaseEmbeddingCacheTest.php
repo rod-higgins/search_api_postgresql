@@ -2,6 +2,7 @@
 
 namespace Drupal\Tests\search_api_postgresql\Unit\Cache;
 
+use Drupal\Core\Database\Query\UpdateInterface;
 use Drupal\search_api_postgresql\Cache\DatabaseEmbeddingCache;
 use Drupal\Tests\UnitTestCase;
 use Drupal\Core\Database\Connection;
@@ -56,16 +57,17 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
 
     $this->connection = $this->createMock(Connection::class);
     $this->logger = $this->createMock(LoggerInterface::class);
-    
+
     $this->config = [
       'table_name' => 'test_embedding_cache',
       'default_ttl' => 3600,
       'max_entries' => 1000,
-      'cleanup_probability' => 0.0, // Disable random cleanup for tests
+      // Disable random cleanup for tests.
+      'cleanup_probability' => 0.0,
       'enable_compression' => FALSE,
     ];
 
-    // Mock schema to avoid table creation during tests
+    // Mock schema to avoid table creation during tests.
     $schema = $this->createMock(Schema::class);
     $schema->method('tableExists')->willReturn(TRUE);
     $this->connection->method('schema')->willReturn($schema);
@@ -80,15 +82,15 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
    */
   public function testCacheMiss() {
     $hash = str_repeat('a', 64);
-    
+
     $select = $this->createMock(SelectInterface::class);
     $select->method('fields')->willReturnSelf();
     $select->method('condition')->willReturnSelf();
     $select->method('range')->willReturnSelf();
-    
+
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchAssoc')->willReturn(FALSE);
-    
+
     $select->method('execute')->willReturn($statement);
     $this->connection->method('select')->willReturn($select);
 
@@ -110,19 +112,19 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
     $select->method('fields')->willReturnSelf();
     $select->method('condition')->willReturnSelf();
     $select->method('range')->willReturnSelf();
-    
+
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchAssoc')->willReturn([
       'embedding_data' => $serialized_embedding,
       'created' => time() - 100,
       'expires' => time() + 3600,
     ]);
-    
+
     $select->method('execute')->willReturn($statement);
     $this->connection->method('select')->willReturn($select);
 
-    // Mock update query for last_accessed
-    $update = $this->createMock(\Drupal\Core\Database\Query\UpdateInterface::class);
+    // Mock update query for last_accessed.
+    $update = $this->createMock(UpdateInterface::class);
     $update->method('fields')->willReturnSelf();
     $update->method('condition')->willReturnSelf();
     $update->method('execute')->willReturn(1);
@@ -139,15 +141,16 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
    */
   public function testExpiredCacheEntry() {
     $hash = str_repeat('a', 64);
-    
+
     $select = $this->createMock(SelectInterface::class);
     $select->method('fields')->willReturnSelf();
     $select->method('condition')->willReturnSelf();
     $select->method('range')->willReturnSelf();
-    
+
     $statement = $this->createMock(StatementInterface::class);
-    $statement->method('fetchAssoc')->willReturn(FALSE); // No results due to expiry condition
-    
+    // No results due to expiry condition.
+    $statement->method('fetchAssoc')->willReturn(FALSE);
+
     $select->method('execute')->willReturn($statement);
     $this->connection->method('select')->willReturn($select);
 
@@ -169,7 +172,7 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
     $merge->method('fields')->willReturnSelf();
     $merge->method('expression')->willReturnSelf();
     $merge->method('execute')->willReturn(1);
-    
+
     $this->connection->method('merge')->willReturn($merge);
 
     $result = $this->cache->set($hash, $embedding);
@@ -187,7 +190,7 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
     $delete = $this->createMock(DeleteInterface::class);
     $delete->method('condition')->willReturnSelf();
     $delete->method('execute')->willReturn(1);
-    
+
     $this->connection->method('delete')->willReturn($delete);
 
     $result = $this->cache->invalidate($hash);
@@ -209,25 +212,25 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
     $select = $this->createMock(SelectInterface::class);
     $select->method('fields')->willReturnSelf();
     $select->method('condition')->willReturnSelf();
-    
+
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchAllKeyed')->willReturn([
       $hashes[0] => serialize($embeddings[0]),
       $hashes[1] => serialize($embeddings[1]),
     ]);
-    
+
     $select->method('execute')->willReturn($statement);
     $this->connection->method('select')->willReturn($select);
 
-    // Mock update query for last_accessed
-    $update = $this->createMock(\Drupal\Core\Database\Query\UpdateInterface::class);
+    // Mock update query for last_accessed.
+    $update = $this->createMock(UpdateInterface::class);
     $update->method('fields')->willReturnSelf();
     $update->method('condition')->willReturnSelf();
     $update->method('execute')->willReturn(2);
     $this->connection->method('update')->willReturn($update);
 
     $result = $this->cache->getMultiple($hashes);
-    
+
     $this->assertCount(2, $result);
     $this->assertEquals($embeddings[0], $result[$hashes[0]]);
     $this->assertEquals($embeddings[1], $result[$hashes[1]]);
@@ -249,7 +252,7 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
     $merge->method('fields')->willReturnSelf();
     $merge->method('expression')->willReturnSelf();
     $merge->method('execute')->willReturn(1);
-    
+
     $this->connection->method('merge')->willReturn($merge);
     $this->connection->method('startTransaction')->willReturn(TRUE);
 
@@ -265,7 +268,7 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
   public function testClear() {
     $delete = $this->createMock(DeleteInterface::class);
     $delete->method('execute')->willReturn(5);
-    
+
     $this->connection->method('delete')->willReturn($delete);
 
     $result = $this->cache->clear();
@@ -278,10 +281,10 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
    * @covers ::getStats
    */
   public function testGetStats() {
-    // Mock main stats query
+    // Mock main stats query.
     $select = $this->createMock(SelectInterface::class);
     $select->method('addExpression')->willReturnSelf();
-    
+
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchAssoc')->willReturn([
       'total_entries' => 100,
@@ -290,14 +293,14 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
       'oldest_entry' => time() - 86400,
       'newest_entry' => time(),
     ]);
-    
+
     $select->method('execute')->willReturn($statement);
-    
-    // Mock expired count query
+
+    // Mock expired count query.
     $count_select = $this->createMock(SelectInterface::class);
     $count_select->method('condition')->willReturnSelf();
     $count_select->method('countQuery')->willReturnSelf();
-    
+
     $count_statement = $this->createMock(StatementInterface::class);
     $count_statement->method('fetchField')->willReturn(5);
     $count_select->method('execute')->willReturn($count_statement);
@@ -306,7 +309,7 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
       ->willReturnOnConsecutiveCalls($select, $count_select);
 
     $stats = $this->cache->getStats();
-    
+
     $this->assertIsArray($stats);
     $this->assertEquals(100, $stats['total_entries']);
     $this->assertEquals(5, $stats['expired_entries']);
@@ -321,13 +324,13 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
   public function testHashValidation() {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Invalid hash format');
-    
-    // Use reflection to test protected method
+
+    // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateHash');
     $method->setAccessible(TRUE);
-    
-    // Test with invalid hash
+
+    // Test with invalid hash.
     $method->invokeArgs($this->cache, ['invalid_hash']);
   }
 
@@ -339,13 +342,13 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
   public function testEmbeddingValidation() {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Embedding cannot be empty');
-    
-    // Use reflection to test protected method
+
+    // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateEmbedding');
     $method->setAccessible(TRUE);
-    
-    // Test with empty embedding
+
+    // Test with empty embedding.
     $method->invokeArgs($this->cache, [[]]);
   }
 
@@ -355,13 +358,13 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
   public function testEmbeddingDimensionsValidation() {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Embedding too large');
-    
-    // Use reflection to test protected method
+
+    // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateEmbedding');
     $method->setAccessible(TRUE);
-    
-    // Test with too many dimensions
+
+    // Test with too many dimensions.
     $large_embedding = array_fill(0, 20000, 1.0);
     $method->invokeArgs($this->cache, [$large_embedding]);
   }
@@ -372,13 +375,13 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
   public function testEmbeddingNonNumericValidation() {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('is not numeric');
-    
-    // Use reflection to test protected method
+
+    // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateEmbedding');
     $method->setAccessible(TRUE);
-    
-    // Test with non-numeric values
+
+    // Test with non-numeric values.
     $invalid_embedding = [1.0, 'not_a_number', 3.0];
     $method->invokeArgs($this->cache, [$invalid_embedding]);
   }
@@ -388,21 +391,21 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
    */
   public function testEmbeddingSerialization() {
     $embedding = [1.0, 2.5, -3.7, 0.0];
-    
-    // Use reflection to test protected methods
+
+    // Use reflection to test protected methods.
     $reflection = new \ReflectionClass($this->cache);
-    
+
     $serialize_method = $reflection->getMethod('serializeEmbedding');
     $serialize_method->setAccessible(TRUE);
-    
+
     $unserialize_method = $reflection->getMethod('unserializeEmbedding');
     $unserialize_method->setAccessible(TRUE);
-    
-    // Test serialization
+
+    // Test serialization.
     $serialized = $serialize_method->invokeArgs($this->cache, [$embedding]);
     $this->assertIsString($serialized);
-    
-    // Test unserialization
+
+    // Test unserialization.
     $unserialized = $unserialize_method->invokeArgs($this->cache, [$serialized]);
     $this->assertEquals($embedding, $unserialized);
   }

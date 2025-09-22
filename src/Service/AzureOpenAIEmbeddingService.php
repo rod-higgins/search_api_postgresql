@@ -83,10 +83,10 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
    *   Maximum number of retries for API calls.
    * @param int $retry_delay
    *   Delay between retries in milliseconds.
-   * @param \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager $cache_manager
+   * @param \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager|null $cache_manager
    *   The embedding cache manager (optional).
    */
-  public function __construct($endpoint, $api_key, $deployment_name, $api_version = '2024-02-01', $dimension = 1536, $max_retries = 3, $retry_delay = 1000, EmbeddingCacheManager $cache_manager = NULL) {
+  public function __construct($endpoint, $api_key, $deployment_name, $api_version = '2024-02-01', $dimension = 1536, $max_retries = 3, $retry_delay = 1000, ?EmbeddingCacheManager $cache_manager = NULL) {
     $this->endpoint = rtrim($endpoint, '/');
     $this->apiKey = $api_key;
     $this->deploymentName = $deployment_name;
@@ -101,27 +101,27 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
    * {@inheritdoc}
    */
   public function generateEmbedding($text) {
-    // Clean and prepare text
+    // Clean and prepare text.
     $text = $this->preprocessText($text);
-    
+
     if (empty($text)) {
       return NULL;
     }
 
-    // Try to get from cache first
+    // Try to get from cache first.
     if ($this->cacheManager) {
       $metadata = $this->getCacheMetadata();
       $cached_embedding = $this->cacheManager->getCachedEmbedding($text, $metadata);
-      
+
       if ($cached_embedding !== NULL) {
         return $cached_embedding;
       }
     }
 
-    // Generate embedding via API
+    // Generate embedding via API.
     $embedding = $this->generateEmbeddingFromApi($text);
 
-    // Cache the result if successful
+    // Cache the result if successful.
     if ($embedding && $this->cacheManager) {
       $metadata = $this->getCacheMetadata();
       $this->cacheManager->cacheEmbedding($text, $embedding, $metadata);
@@ -138,7 +138,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
       return [];
     }
 
-    // Preprocess all texts
+    // Preprocess all texts.
     $processed_texts = [];
     $original_indices = [];
     foreach ($texts as $index => $text) {
@@ -157,33 +157,35 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
     $texts_to_generate = [];
     $indices_to_generate = [];
 
-    // Check cache for all texts
+    // Check cache for all texts.
     if ($this->cacheManager) {
       $metadata = $this->getCacheMetadata();
       $cached_embeddings = $this->cacheManager->getCachedEmbeddingsBatch($processed_texts, $metadata);
 
-      // Separate cached and uncached texts
+      // Separate cached and uncached texts.
       foreach ($processed_texts as $i => $text) {
         $original_index = $original_indices[$i];
-        
+
         if (isset($cached_embeddings[$i])) {
           $final_embeddings[$original_index] = $cached_embeddings[$i];
-        } else {
+        }
+        else {
           $texts_to_generate[] = $text;
           $indices_to_generate[] = $original_index;
         }
       }
-    } else {
-      // No cache, generate all embeddings
+    }
+    else {
+      // No cache, generate all embeddings.
       $texts_to_generate = $processed_texts;
       $indices_to_generate = $original_indices;
     }
 
-    // Generate embeddings for uncached texts
+    // Generate embeddings for uncached texts.
     if (!empty($texts_to_generate)) {
       $new_embeddings = $this->generateBatchEmbeddingsFromApi($texts_to_generate);
 
-      // Add new embeddings to final result
+      // Add new embeddings to final result.
       foreach ($new_embeddings as $i => $embedding) {
         if (isset($indices_to_generate[$i])) {
           $original_index = $indices_to_generate[$i];
@@ -191,7 +193,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
         }
       }
 
-      // Cache the new embeddings
+      // Cache the new embeddings.
       if ($this->cacheManager && !empty($new_embeddings)) {
         $metadata = $this->getCacheMetadata();
         $this->cacheManager->cacheEmbeddingsBatch($texts_to_generate, $new_embeddings, $metadata);
@@ -223,10 +225,10 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
    */
   public function testConnection() {
     try {
-      // Test with a simple embedding generation
+      // Test with a simple embedding generation.
       $test_text = 'test connection';
       $embedding = $this->generateEmbedding($test_text);
-      
+
       if ($embedding && is_array($embedding) && count($embedding) === $this->dimension) {
         return [
           'success' => TRUE,
@@ -237,15 +239,16 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
           'api_version' => $this->apiVersion,
         ];
       }
-      
+
       return [
         'success' => FALSE,
         'message' => 'Invalid response from Azure OpenAI API',
         'endpoint' => $this->endpoint,
         'dimension' => $embedding ? count($embedding) : 0,
       ];
-      
-    } catch (\Exception $e) {
+
+    }
+    catch (\Exception $e) {
       return [
         'success' => FALSE,
         'message' => 'Azure OpenAI connection failed: ' . $e->getMessage(),
@@ -271,7 +274,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
       $this->deploymentName,
       $this->apiVersion
     );
-    
+
     $data = [
       'input' => $text,
     ];
@@ -296,7 +299,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
       $this->deploymentName,
       $this->apiVersion
     );
-    
+
     $data = [
       'input' => $texts,
     ];
@@ -353,7 +356,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
       if ($http_code === 200) {
         $result = json_decode($response, TRUE);
-        
+
         if (isset($result['error'])) {
           throw new SearchApiException('Azure OpenAI API error: ' . $result['error']['message']);
         }
@@ -364,15 +367,17 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
             $embeddings[] = $item['embedding'];
           }
           return $embeddings;
-        } else {
+        }
+        else {
           return $result['data'][0]['embedding'] ?? NULL;
         }
       }
 
-      // Handle rate limiting and temporary errors
+      // Handle rate limiting and temporary errors.
       if (in_array($http_code, [429, 500, 502, 503, 504]) && $attempt < $this->maxRetries) {
         $attempt++;
-        $delay = $this->retryDelay * pow(2, $attempt - 1); // Exponential backoff
+        // Exponential backoff.
+        $delay = $this->retryDelay * pow(2, $attempt - 1);
         usleep($delay * 1000);
         continue;
       }
@@ -409,17 +414,18 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
    *   The preprocessed text.
    */
   protected function preprocessText($text) {
-    // Remove excessive whitespace
+    // Remove excessive whitespace.
     $text = preg_replace('/\s+/', ' ', trim($text));
-    
-    // Remove null bytes and control characters
+
+    // Remove null bytes and control characters.
     $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
-    
+
     // Limit text length (Azure OpenAI has token limits)
-    $max_chars = 8000; // Conservative limit for token count
+    // Conservative limit for token count.
+    $max_chars = 8000;
     if (strlen($text) > $max_chars) {
       $text = substr($text, 0, $max_chars);
-      // Try to break at word boundary
+      // Try to break at word boundary.
       $last_space = strrpos($text, ' ');
       if ($last_space !== FALSE && $last_space > $max_chars * 0.8) {
         $text = substr($text, 0, $last_space);

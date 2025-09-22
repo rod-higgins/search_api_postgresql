@@ -47,7 +47,7 @@ class ConfigurationValidationService {
   public function __construct(
     EntityTypeManagerInterface $entity_type_manager,
     KeyRepositoryInterface $key_repository,
-    LoggerInterface $logger
+    LoggerInterface $logger,
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->keyRepository = $key_repository;
@@ -66,39 +66,40 @@ class ConfigurationValidationService {
   public function validateServerConfiguration(ServerInterface $server) {
     $errors = [];
     $warnings = [];
-    
+
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
 
-      // Check if it's a PostgreSQL backend
+      // Check if it's a PostgreSQL backend.
       if ($backend->getPluginId() !== 'postgresql') {
         $errors[] = 'Server is not using the PostgreSQL backend.';
         return ['errors' => $errors, 'warnings' => $warnings];
       }
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $errors[] = 'Unable to validate server configuration: ' . $e->getMessage();
       return ['errors' => $errors, 'warnings' => $warnings];
     }
 
-    // Validate database connection
+    // Validate database connection.
     $db_validation = $this->validateDatabaseConnection($config);
     $errors = array_merge($errors, $db_validation['errors']);
     $warnings = array_merge($warnings, $db_validation['warnings']);
 
-    // Validate key storage
+    // Validate key storage.
     $key_validation = $this->validateKeyStorage($config);
     $errors = array_merge($errors, $key_validation['errors']);
     $warnings = array_merge($warnings, $key_validation['warnings']);
 
-    // Validate AI embeddings configuration
+    // Validate AI embeddings configuration.
     if ($this->isAiEmbeddingsEnabled($config)) {
       $ai_validation = $this->validateAiEmbeddingsConfiguration($config);
       $errors = array_merge($errors, $ai_validation['errors']);
       $warnings = array_merge($warnings, $ai_validation['warnings']);
     }
 
-    // Validate vector search configuration
+    // Validate vector search configuration.
     if ($this->isVectorSearchEnabled($config)) {
       $vector_validation = $this->validateVectorSearchConfiguration($config);
       $errors = array_merge($errors, $vector_validation['errors']);
@@ -116,7 +117,7 @@ class ConfigurationValidationService {
     $warnings = [];
     $connection = $config['connection'] ?? [];
 
-    // Check required fields
+    // Check required fields.
     $required_fields = ['host', 'port', 'database', 'username'];
     foreach ($required_fields as $field) {
       if (empty($connection[$field])) {
@@ -124,28 +125,28 @@ class ConfigurationValidationService {
       }
     }
 
-    // Validate password configuration - passwords are optional for development
+    // Validate password configuration - passwords are optional for development.
     $password_key = $connection['password_key'] ?? '';
     $direct_password = $connection['password'] ?? '';
-    
+
     if (empty($password_key) && empty($direct_password)) {
       $warnings[] = 'No database password configured. This may be acceptable for development environments (like Lando with trust authentication) but is not recommended for production.';
     }
-    
-    // If a password key is specified, validate it exists
+
+    // If a password key is specified, validate it exists.
     if (!empty($password_key)) {
       $key_validation = $this->validateKey($password_key, 'Database password');
       $errors = array_merge($errors, $key_validation['errors']);
       $warnings = array_merge($warnings, $key_validation['warnings']);
     }
 
-    // Validate port
+    // Validate port.
     $port = $connection['port'] ?? 0;
     if ($port < 1 || $port > 65535) {
       $errors[] = 'Database port must be between 1 and 65535.';
     }
 
-    // Check SSL configuration for production
+    // Check SSL configuration for production.
     $ssl_mode = $connection['ssl_mode'] ?? 'require';
     if (!in_array($ssl_mode, ['require', 'verify-ca', 'verify-full']) && empty($direct_password) && empty($password_key)) {
       $warnings[] = 'Using weak SSL mode without password authentication. Consider using "require", "verify-ca", or "verify-full" for better security.';
@@ -169,25 +170,27 @@ class ConfigurationValidationService {
       $warnings = array_merge($warnings, $key_validation['warnings']);
     }
 
-    // Check AI API keys if enabled
+    // Check AI API keys if enabled.
     if ($this->isAiEmbeddingsEnabled($config)) {
       $ai_config = $config['ai_embeddings'] ?? [];
-      
-      // Check Azure OpenAI API key
+
+      // Check Azure OpenAI API key.
       if (!empty($ai_config['azure']['api_key_key'])) {
         $key_validation = $this->validateKey($ai_config['azure']['api_key_key'], 'Azure OpenAI API');
         $errors = array_merge($errors, $key_validation['errors']);
         $warnings = array_merge($warnings, $key_validation['warnings']);
-      } elseif (empty($ai_config['azure']['api_key'])) {
+      }
+      elseif (empty($ai_config['azure']['api_key'])) {
         $warnings[] = 'Azure OpenAI API key not configured. Use Key module for secure storage.';
       }
 
-      // Check OpenAI API key
+      // Check OpenAI API key.
       if (!empty($ai_config['openai']['api_key_key'])) {
         $key_validation = $this->validateKey($ai_config['openai']['api_key_key'], 'OpenAI API');
         $errors = array_merge($errors, $key_validation['errors']);
         $warnings = array_merge($warnings, $key_validation['warnings']);
-      } elseif (empty($ai_config['openai']['api_key'])) {
+      }
+      elseif (empty($ai_config['openai']['api_key'])) {
         $warnings[] = 'OpenAI API key not configured. Use Key module for secure storage.';
       }
     }
@@ -211,14 +214,16 @@ class ConfigurationValidationService {
       $key = $this->keyRepository->getKey($key_name);
       if (!$key) {
         $errors[] = "{$type} key '{$key_name}' not found.";
-      } else {
-        // Check if key has a value
+      }
+      else {
+        // Check if key has a value.
         $key_value = $key->getKeyValue();
         if (empty($key_value)) {
           $errors[] = "{$type} key '{$key_name}' exists but has no value.";
         }
       }
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $errors[] = "Error accessing {$type} key '{$key_name}': " . $e->getMessage();
     }
 
@@ -240,10 +245,10 @@ class ConfigurationValidationService {
       return ['errors' => $errors, 'warnings' => $warnings];
     }
 
-    // Validate provider-specific configuration
+    // Validate provider-specific configuration.
     if ($provider === 'azure') {
       $azure_config = $ai_config['azure'] ?? [];
-      
+
       if (empty($azure_config['endpoint'])) {
         $errors[] = 'Azure OpenAI endpoint is required when Azure provider is selected.';
       }
@@ -256,20 +261,21 @@ class ConfigurationValidationService {
         $errors[] = 'Azure OpenAI API key is required when Azure provider is selected.';
       }
 
-      // Validate model configuration
+      // Validate model configuration.
       $model = $azure_config['model'] ?? 'text-embedding-3-small';
       $valid_models = ['text-embedding-ada-002', 'text-embedding-3-small', 'text-embedding-3-large'];
       if (!in_array($model, $valid_models)) {
         $warnings[] = "Unknown embedding model '{$model}'. Supported models: " . implode(', ', $valid_models);
       }
-    } elseif ($provider === 'openai') {
+    }
+    elseif ($provider === 'openai') {
       $openai_config = $ai_config['openai'] ?? [];
-      
+
       if (empty($openai_config['api_key']) && empty($openai_config['api_key_key'])) {
         $errors[] = 'OpenAI API key is required when OpenAI provider is selected.';
       }
 
-      // Validate model configuration
+      // Validate model configuration.
       $model = $openai_config['model'] ?? 'text-embedding-3-small';
       $valid_models = ['text-embedding-ada-002', 'text-embedding-3-small', 'text-embedding-3-large'];
       if (!in_array($model, $valid_models)) {
@@ -289,25 +295,25 @@ class ConfigurationValidationService {
 
     $vector_config = $config['vector_index'] ?? [];
 
-    // Validate distance method
+    // Validate distance method.
     $distance = $vector_config['distance'] ?? 'cosine';
     if (!in_array($distance, ['cosine', 'l2', 'inner_product'])) {
       $errors[] = 'Vector distance method must be one of: cosine, l2, inner_product.';
     }
 
-    // Validate index method
+    // Validate index method.
     $method = $vector_config['method'] ?? 'ivfflat';
     if (!in_array($method, ['ivfflat', 'hnsw'])) {
       $errors[] = 'Vector index method must be either "ivfflat" or "hnsw".';
     }
 
-    // Validate method-specific parameters
+    // Validate method-specific parameters.
     if ($method === 'ivfflat') {
       $lists = $vector_config['lists'] ?? 100;
       if ($lists < 1 || $lists > 10000) {
         $warnings[] = 'IVFFlat lists parameter should be between 1 and 10000.';
       }
-      
+
       $probes = $vector_config['probes'] ?? 10;
       if ($probes < 1 || $probes > $lists) {
         $warnings[] = 'IVFFlat probes parameter should be between 1 and the number of lists.';
@@ -328,29 +334,29 @@ class ConfigurationValidationService {
    */
   public function runComprehensiveTests(ServerInterface $server) {
     $results = [];
-    
-    // Run configuration validation
+
+    // Run configuration validation.
     $validation_results = $this->validateServerConfiguration($server);
     $results['configuration'] = [
       'success' => empty($validation_results['errors']),
       'errors' => $validation_results['errors'],
       'warnings' => $validation_results['warnings'],
     ];
-    
-    // Run server health checks
+
+    // Run server health checks.
     $health_results = $this->checkServerHealth($server);
     $results['health'] = $health_results;
-    
-    // Determine overall success
+
+    // Determine overall success.
     $overall_success = $results['configuration']['success'] && $health_results['overall'];
-    
+
     $results['overall'] = [
       'success' => $overall_success,
-      'message' => $overall_success ? 
-        'All comprehensive tests passed' : 
-        'Some tests failed - see details above',
+      'message' => $overall_success ?
+      'All comprehensive tests passed' :
+      'Some tests failed - see details above',
     ];
-    
+
     return $results;
   }
 
@@ -365,7 +371,7 @@ class ConfigurationValidationService {
    * Checks if vector search is enabled.
    */
   protected function isVectorSearchEnabled($config) {
-    // Vector search is available when AI embeddings are enabled
+    // Vector search is available when AI embeddings are enabled.
     return $this->isAiEmbeddingsEnabled($config);
   }
 
@@ -376,56 +382,56 @@ class ConfigurationValidationService {
     return !empty($config['ai_features']['enabled']);
   }
 
-/**
- * Validate AI features configuration (REPLACES OLD METHODS).
- */
-private function validateAiFeaturesConfiguration(array $config) {
-  $errors = [];
-  $warnings = [];
-  
-  $ai_config = $config['ai_features'] ?? [];
-  $provider = $ai_config['provider'] ?? '';
-  
-  if (empty($provider)) {
-    $errors[] = 'AI provider must be selected when AI features are enabled.';
-    return ['errors' => $errors, 'warnings' => $warnings];
-  }
+  /**
+   * Validate AI features configuration (REPLACES OLD METHODS).
+   */
+  private function validateAiFeaturesConfiguration(array $config) {
+    $errors = [];
+    $warnings = [];
 
-  // Validate provider-specific configuration
-  switch ($provider) {
-    case 'openai':
-      $provider_config = $ai_config['openai'] ?? [];
-      if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
-        $errors[] = 'OpenAI API key is required.';
-      }
-      break;
+    $ai_config = $config['ai_features'] ?? [];
+    $provider = $ai_config['provider'] ?? '';
 
-    case 'azure_openai':
-      $provider_config = $ai_config['azure_openai'] ?? [];
-      if (empty($provider_config['endpoint'])) {
-        $errors[] = 'Azure OpenAI endpoint is required.';
-      }
-      if (empty($provider_config['deployment_name'])) {
-        $errors[] = 'Azure OpenAI deployment name is required.';
-      }
-      if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
-        $errors[] = 'Azure OpenAI API key is required.';
-      }
-      break;
+    if (empty($provider)) {
+      $errors[] = 'AI provider must be selected when AI features are enabled.';
+      return ['errors' => $errors, 'warnings' => $warnings];
+    }
 
-    case 'huggingface':
-      $provider_config = $ai_config['huggingface'] ?? [];
-      if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
-        $errors[] = 'Hugging Face API key is required.';
-      }
-      break;
+    // Validate provider-specific configuration.
+    switch ($provider) {
+      case 'openai':
+        $provider_config = $ai_config['openai'] ?? [];
+        if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
+          $errors[] = 'OpenAI API key is required.';
+        }
+        break;
 
-    case 'local':
-      $provider_config = $ai_config['local'] ?? [];
-      if (empty($provider_config['model_path'])) {
-        $errors[] = 'Local model path is required.';
-      }
-      break;
+      case 'azure_openai':
+        $provider_config = $ai_config['azure_openai'] ?? [];
+        if (empty($provider_config['endpoint'])) {
+          $errors[] = 'Azure OpenAI endpoint is required.';
+        }
+        if (empty($provider_config['deployment_name'])) {
+          $errors[] = 'Azure OpenAI deployment name is required.';
+        }
+        if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
+          $errors[] = 'Azure OpenAI API key is required.';
+        }
+        break;
+
+      case 'huggingface':
+        $provider_config = $ai_config['huggingface'] ?? [];
+        if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
+          $errors[] = 'Hugging Face API key is required.';
+        }
+        break;
+
+      case 'local':
+        $provider_config = $ai_config['local'] ?? [];
+        if (empty($provider_config['model_path'])) {
+          $errors[] = 'Local model path is required.';
+        }
+        break;
 
       default:
         $errors[] = "Unknown AI provider: {$provider}";
@@ -442,10 +448,10 @@ private function validateAiFeaturesConfiguration(array $config) {
    */
   public function runSystemHealthChecks() {
     $checks = [];
-    
-    // Get all PostgreSQL servers
+
+    // Get all PostgreSQL servers.
     $servers = $this->entityTypeManager->getStorage('search_api_server')->loadMultiple();
-    $postgresql_servers = array_filter($servers, function($server) {
+    $postgresql_servers = array_filter($servers, function ($server) {
       return in_array($server->getBackend()->getPluginId(), ['postgresql']);
     });
 
@@ -460,17 +466,17 @@ private function validateAiFeaturesConfiguration(array $config) {
 
     foreach ($postgresql_servers as $server) {
       $server_id = $server->id();
-      
-      // Test database connection
+
+      // Test database connection.
       $checks["db_connection_{$server_id}"] = $this->testDatabaseConnection($server);
-      
-      // Test key access
+
+      // Test key access.
       $checks["key_access_{$server_id}"] = $this->testKeyAccess($server);
-      
-      // Test pgvector extension
+
+      // Test pgvector extension.
       $checks["pgvector_{$server_id}"] = $this->testPgVectorExtension($server);
-      
-      // Test AI service if enabled
+
+      // Test AI service if enabled.
       if ($this->isAiEmbeddingsEnabled($server->getBackend()->getConfiguration())) {
         $checks["ai_service_{$server_id}"] = $this->testAiService($server);
       }
@@ -490,41 +496,41 @@ private function validateAiFeaturesConfiguration(array $config) {
    */
   public function checkServerHealth(ServerInterface $server) {
     $tests = [];
-    
-    // Test database connection
+
+    // Test database connection.
     $tests['database_connection'] = $this->testDatabaseConnection($server);
-    
-    // Test key access
+
+    // Test key access.
     $tests['key_access'] = $this->testKeyAccess($server);
-    
-    // Test pgvector extension
+
+    // Test pgvector extension.
     $tests['pgvector_extension'] = $this->testPgVectorExtension($server);
-    
-    // Test AI service if enabled
+
+    // Test AI service if enabled.
     $backend = $server->getBackend();
     $config = $backend->getConfiguration();
     if ($this->isAiEmbeddingsEnabled($config)) {
       $tests['ai_service'] = $this->testAiService($server);
     }
-    
-    // Determine overall health status
+
+    // Determine overall health status.
     $overall_health = TRUE;
     $failed_tests = [];
-    
+
     foreach ($tests as $test_name => $result) {
       if (!$result['success']) {
         $overall_health = FALSE;
         $failed_tests[] = $test_name;
       }
     }
-    
+
     return [
       'overall' => $overall_health,
       'tests' => $tests,
       'failed_tests' => $failed_tests,
-      'message' => $overall_health ? 
-        'All health checks passed' : 
-        sprintf('Failed tests: %s', implode(', ', $failed_tests))
+      'message' => $overall_health ?
+      'All health checks passed' :
+      sprintf('Failed tests: %s', implode(', ', $failed_tests)),
     ];
   }
 
@@ -542,7 +548,8 @@ private function validateAiFeaturesConfiguration(array $config) {
       $sql = "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')";
       $stmt = $connector->executeQuery($sql);
       return (bool) $stmt->fetchColumn();
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       return FALSE;
     }
   }
@@ -550,15 +557,15 @@ private function validateAiFeaturesConfiguration(array $config) {
   /**
    * Tests database connection.
    */
-  protected function testDatabaseConnection(ServerInterface $server) {
+  public function testDatabaseConnection(ServerInterface $server) {
     try {
       $backend = $server->getBackend();
-      
-      // Get configuration from the backend
+
+      // Get configuration from the backend.
       $config = $backend->getConfiguration();
       $connection_config = $config['connection'] ?? [];
-      
-      // Use the backend's password resolution method
+
+      // Use the backend's password resolution method.
       if (method_exists($backend, 'getDatabasePassword')) {
         $reflection = new \ReflectionClass($backend);
         $method = $reflection->getMethod('getDatabasePassword');
@@ -568,7 +575,7 @@ private function validateAiFeaturesConfiguration(array $config) {
 
       $connector = new PostgreSQLConnector($connection_config, $this->logger);
       $result = $connector->testConnection();
-      
+
       if (!$result['success']) {
         throw new \Exception($result['error'] ?? 'Connection test failed');
       }
@@ -589,7 +596,8 @@ private function validateAiFeaturesConfiguration(array $config) {
         'message' => 'Database connection successful',
         'details' => 'Connected to ' . $connection_config['host'] . ':' . $connection_config['port'] . $password_info,
       ];
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       return [
         'success' => FALSE,
         'message' => 'Database connection failed',
@@ -601,7 +609,7 @@ private function validateAiFeaturesConfiguration(array $config) {
   /**
    * Tests key access.
    */
-  protected function testKeyAccess(ServerInterface $server) {
+  public function testKeyAccess(ServerInterface $server) {
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
@@ -614,14 +622,14 @@ private function validateAiFeaturesConfiguration(array $config) {
           $method = $reflection->getMethod('getDatabasePassword');
           $method->setAccessible(TRUE);
           $password = $method->invoke($backend);
-          
+
           if (empty($password)) {
             throw new \Exception('Database password key returned empty value');
           }
         }
       }
 
-      // Test AI API key if enabled
+      // Test AI API key if enabled.
       if ($this->isAiEmbeddingsEnabled($config)) {
         $method_name = method_exists($backend, 'getAzureApiKey') ? 'getAzureApiKey' : 'getAzureEmbeddingApiKey';
         if (method_exists($backend, $method_name)) {
@@ -629,7 +637,7 @@ private function validateAiFeaturesConfiguration(array $config) {
           $method = $reflection->getMethod($method_name);
           $method->setAccessible(TRUE);
           $api_key = $method->invoke($backend);
-          
+
           if (empty($api_key)) {
             throw new \Exception('AI API key returned empty value');
           }
@@ -641,7 +649,8 @@ private function validateAiFeaturesConfiguration(array $config) {
         'message' => 'Key access successful',
         'details' => 'All configured keys are accessible',
       ];
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       return [
         'success' => FALSE,
         'message' => 'Key access failed',
@@ -653,30 +662,31 @@ private function validateAiFeaturesConfiguration(array $config) {
   /**
    * Tests pgvector extension.
    */
-  protected function testPgVectorExtension(ServerInterface $server) {
+  public function testPgVectorExtension(ServerInterface $server) {
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
       $connection_config = $config['connection'] ?? [];
-      
-      // Create a direct connection to test pgvector
+
+      // Create a direct connection to test pgvector.
       $connector = new PostgreSQLConnector($connection_config, $this->logger);
-      
-      // Test the connection first
+
+      // Test the connection first.
       $connection_test = $connector->testConnection();
       if (!$connection_test['success']) {
         throw new \Exception('Cannot connect to database: ' . ($connection_test['error'] ?? 'Unknown error'));
       }
-      
-      // Check for pgvector extension
+
+      // Check for pgvector extension.
       $available = $this->checkPgVectorExtension($connector);
-      
+
       return [
         'success' => $available,
         'message' => $available ? 'pgvector extension is available' : 'pgvector extension not found',
         'details' => $available ? 'Vector search capabilities enabled' : 'Install pgvector extension for vector search',
       ];
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       return [
         'success' => FALSE,
         'message' => 'pgvector extension check failed',
@@ -688,25 +698,44 @@ private function validateAiFeaturesConfiguration(array $config) {
   /**
    * Tests AI service connectivity.
    */
-  protected function testAiService(ServerInterface $server) {
+  public function testAiService(ServerInterface $server) {
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
-      
-      // This would test the actual AI service connection
-      // For now, just validate configuration
-      $ai_config = $config['ai_embeddings']['azure_ai'] ?? [];
-      
-      if (empty($ai_config['endpoint']) || empty($ai_config['deployment_name'])) {
-        throw new \Exception('AI service configuration incomplete');
+
+      // Check if AI embeddings are enabled.
+      if (!$this->isAiEmbeddingsEnabled($config)) {
+        throw new \Exception('AI embeddings are not enabled');
+      }
+
+      $provider = $config['ai_embeddings']['provider'] ?? '';
+
+      if ($provider === 'azure') {
+        // Fix: Use 'azure' instead of 'azure_ai'.
+        $ai_config = $config['ai_embeddings']['azure'] ?? [];
+
+        if (empty($ai_config['endpoint']) || empty($ai_config['deployment_name'])) {
+          throw new \Exception('AI service configuration incomplete - missing endpoint or deployment_name');
+        }
+      }
+      elseif ($provider === 'openai') {
+        $ai_config = $config['ai_embeddings']['openai'] ?? [];
+
+        if (empty($ai_config['api_key']) && empty($ai_config['api_key_key'])) {
+          throw new \Exception('OpenAI API key not configured');
+        }
+      }
+      else {
+        throw new \Exception('Unknown AI provider: ' . $provider);
       }
 
       return [
         'success' => TRUE,
         'message' => 'AI service configuration valid',
-        'details' => 'Configuration appears correct for ' . $ai_config['endpoint'],
+        'details' => 'Configuration appears correct for ' . ($ai_config['endpoint'] ?? 'OpenAI'),
       ];
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       return [
         'success' => FALSE,
         'message' => 'AI service test failed',

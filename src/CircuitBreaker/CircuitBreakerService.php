@@ -60,12 +60,15 @@ class CircuitBreakerService {
     $this->state = $state;
     $this->cache = $cache;
     $this->logger = $logger;
-    
+
     $this->config = [
       'failure_threshold' => 5,
-      'recovery_timeout' => 60, // seconds
-      'success_threshold' => 3, // for half-open state
-      'monitor_window' => 300, // 5 minutes
+    // Seconds.
+      'recovery_timeout' => 60,
+    // For half-open state.
+      'success_threshold' => 3,
+    // 5 minutes
+      'monitor_window' => 300,
     ];
   }
 
@@ -87,17 +90,18 @@ class CircuitBreakerService {
    * @throws \Drupal\search_api_postgresql\Exception\CircuitBreakerException
    *   When circuit is open and no fallback provided.
    */
-  public function execute($service_name, callable $operation, callable $fallback = NULL, array $context = []) {
+  public function execute($service_name, callable $operation, ?callable $fallback = NULL, array $context = []) {
     $circuit_state = $this->getCircuitState($service_name);
-    
-    // If circuit is open, try fallback or throw exception
+
+    // If circuit is open, try fallback or throw exception.
     if ($circuit_state === self::STATE_OPEN) {
       if ($this->shouldAttemptRecovery($service_name)) {
         $this->setState($service_name, self::STATE_HALF_OPEN);
         $this->logger->info('Circuit breaker for @service entering half-open state', [
           '@service' => $service_name,
         ]);
-      } else {
+      }
+      else {
         return $this->handleOpenCircuit($service_name, $fallback, $context);
       }
     }
@@ -109,8 +113,8 @@ class CircuitBreakerService {
     }
     catch (\Exception $e) {
       $this->recordFailure($service_name, $e);
-      
-      // If we have a fallback, use it
+
+      // If we have a fallback, use it.
       if ($fallback) {
         $this->logger->warning('Circuit breaker for @service: operation failed, using fallback. Error: @error', [
           '@service' => $service_name,
@@ -118,7 +122,7 @@ class CircuitBreakerService {
         ]);
         return $fallback($e);
       }
-      
+
       throw $e;
     }
   }
@@ -164,14 +168,14 @@ class CircuitBreakerService {
     $failures = $this->getFailureCount($service_name);
     $last_failure = $this->state->get("circuit_breaker.{$service_name}.last_failure");
     $last_success = $this->state->get("circuit_breaker.{$service_name}.last_success");
-    
+
     return [
       'service' => $service_name,
       'state' => $state,
       'failure_count' => $failures,
       'last_failure' => $last_failure,
       'last_success' => $last_success,
-      'next_attempt' => $state === self::STATE_OPEN ? $last_failure + $this->config['recovery_timeout'] : null,
+      'next_attempt' => $state === self::STATE_OPEN ? $last_failure + $this->config['recovery_timeout'] : NULL,
     ];
   }
 
@@ -184,7 +188,7 @@ class CircuitBreakerService {
   public function resetCircuit($service_name) {
     $this->setState($service_name, self::STATE_CLOSED);
     $this->clearFailures($service_name);
-    
+
     $this->logger->info('Circuit breaker for @service manually reset', [
       '@service' => $service_name,
     ]);
@@ -198,7 +202,7 @@ class CircuitBreakerService {
    */
   public function getAllServiceStats() {
     // This would need to track service names, for now return empty
-    // In a real implementation, you'd maintain a list of monitored services
+    // In a real implementation, you'd maintain a list of monitored services.
     return [];
   }
 
@@ -210,21 +214,21 @@ class CircuitBreakerService {
    */
   protected function recordSuccess($service_name) {
     $current_state = $this->getCircuitState($service_name);
-    
+
     if ($current_state === self::STATE_HALF_OPEN) {
       $success_count = $this->incrementSuccessCount($service_name);
-      
+
       if ($success_count >= $this->config['success_threshold']) {
         $this->setState($service_name, self::STATE_CLOSED);
         $this->clearFailures($service_name);
         $this->clearSuccessCount($service_name);
-        
+
         $this->logger->info('Circuit breaker for @service recovered to closed state', [
           '@service' => $service_name,
         ]);
       }
     }
-    
+
     $this->state->set("circuit_breaker.{$service_name}.last_success", time());
   }
 
@@ -240,22 +244,23 @@ class CircuitBreakerService {
     $failure_count = $this->incrementFailureCount($service_name);
     $this->state->set("circuit_breaker.{$service_name}.last_failure", time());
     $this->state->set("circuit_breaker.{$service_name}.last_error", $exception->getMessage());
-    
+
     $current_state = $this->getCircuitState($service_name);
-    
+
     if ($current_state !== self::STATE_OPEN && $failure_count >= $this->config['failure_threshold']) {
       $this->setState($service_name, self::STATE_OPEN);
-      
+
       $this->logger->error('Circuit breaker for @service opened due to @count failures. Last error: @error', [
         '@service' => $service_name,
         '@count' => $failure_count,
         '@error' => $exception->getMessage(),
       ]);
-    } elseif ($current_state === self::STATE_HALF_OPEN) {
-      // Failed during recovery attempt, back to open
+    }
+    elseif ($current_state === self::STATE_HALF_OPEN) {
+      // Failed during recovery attempt, back to open.
       $this->setState($service_name, self::STATE_OPEN);
       $this->clearSuccessCount($service_name);
-      
+
       $this->logger->warning('Circuit breaker for @service failed during recovery, returning to open state', [
         '@service' => $service_name,
       ]);
@@ -278,14 +283,14 @@ class CircuitBreakerService {
    * @throws \Drupal\search_api_postgresql\Exception\CircuitBreakerException
    *   When no fallback is available.
    */
-  protected function handleOpenCircuit($service_name, callable $fallback = NULL, array $context = []) {
+  protected function handleOpenCircuit($service_name, ?callable $fallback = NULL, array $context = []) {
     if ($fallback) {
       $this->logger->info('Circuit breaker for @service is open, using fallback', [
         '@service' => $service_name,
       ]);
       return $fallback(new \Exception("Service {$service_name} circuit breaker is open"));
     }
-    
+
     throw new \Exception("Service {$service_name} is currently unavailable (circuit breaker open)");
   }
 

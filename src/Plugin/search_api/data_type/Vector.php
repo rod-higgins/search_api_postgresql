@@ -26,7 +26,7 @@ class Vector extends DataTypePluginBase {
       // Ensure all values are floats.
       return array_map('floatval', $value);
     }
-    
+
     if (is_string($value)) {
       // Handle PostgreSQL vector format: [1.0,2.0,3.0].
       $value = trim($value, '[]');
@@ -34,7 +34,7 @@ class Vector extends DataTypePluginBase {
         return array_map('floatval', explode(',', $value));
       }
     }
-    
+
     // Return empty array for invalid input.
     return [];
   }
@@ -44,19 +44,19 @@ class Vector extends DataTypePluginBase {
    */
   public function prepareValue($value) {
     $value = $this->getValue($value);
-    
+
     // Validate that we have a non-empty numeric array.
     if (empty($value) || !is_array($value)) {
       return NULL;
     }
-    
+
     // Ensure all values are numeric.
     foreach ($value as $component) {
       if (!is_numeric($component)) {
         return NULL;
       }
     }
-    
+
     return $value;
   }
 

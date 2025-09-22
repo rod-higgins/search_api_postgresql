@@ -48,7 +48,7 @@ class BulkRegenerateForm extends FormBase {
   public function __construct(
     EntityTypeManagerInterface $entity_type_manager,
     MessengerInterface $messenger,
-    EmbeddingQueueManager $queue_manager
+    EmbeddingQueueManager $queue_manager,
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->messenger = $messenger;
@@ -82,15 +82,15 @@ class BulkRegenerateForm extends FormBase {
       '#markup' => '<p>' . $this->t('This form allows you to regenerate embeddings for all items in selected indexes. This is useful after changing embedding models or fixing corrupted data.') . '</p>',
     ];
 
-    // Get all PostgreSQL servers with AI enabled
+    // Get all PostgreSQL servers with AI enabled.
     $servers = $this->getAiEnabledServers();
-    
+
     if (empty($servers)) {
       $form['no_servers'] = [
         '#type' => 'markup',
-        '#markup' => '<div class="messages messages--warning">' . 
-          $this->t('No PostgreSQL servers with AI embeddings enabled were found.') . 
-          '</div>',
+        '#markup' => '<div class="messages messages--warning">' .
+        $this->t('No PostgreSQL servers with AI embeddings enabled were found.') .
+        '</div>',
       ];
       return $form;
     }
@@ -188,7 +188,7 @@ class BulkRegenerateForm extends FormBase {
   public function validateForm(array &$form, FormStateInterface $form_state) {
     $indexes = $form_state->getValue('indexes', []);
     $selected = array_filter($indexes);
-    
+
     if (empty($selected)) {
       $form_state->setErrorByName('indexes', $this->t('Please select at least one index.'));
     }
@@ -205,10 +205,11 @@ class BulkRegenerateForm extends FormBase {
     $force = $form_state->getValue('force', FALSE);
 
     if ($mode === 'queue') {
-      // Queue mode - add items to queue for background processing
+      // Queue mode - add items to queue for background processing.
       $this->processViaQueue($server_id, $indexes, $force);
-    } else {
-      // Batch mode - process immediately using Batch API
+    }
+    else {
+      // Batch mode - process immediately using Batch API.
       $this->processViaBatch($server_id, $indexes, $batch_size, $force);
     }
   }
@@ -218,7 +219,7 @@ class BulkRegenerateForm extends FormBase {
    */
   protected function processViaQueue($server_id, array $index_ids, $force) {
     $total_items = 0;
-    
+
     foreach ($index_ids as $index_id) {
       $index = $this->entityTypeManager->getStorage('search_api_index')->load($index_id);
       if ($index) {
@@ -231,7 +232,8 @@ class BulkRegenerateForm extends FormBase {
       $this->messenger->addStatus($this->t('@count items have been queued for embedding regeneration. They will be processed in the background via cron.', [
         '@count' => $total_items,
       ]));
-    } else {
+    }
+    else {
       $this->messenger->addWarning($this->t('No items were queued. All items may already have embeddings.'));
     }
   }
@@ -247,7 +249,7 @@ class BulkRegenerateForm extends FormBase {
       'progress_message' => $this->t('Processing @current of @total indexes.'),
     ];
 
-    // Create batch operations for each index
+    // Create batch operations for each index.
     foreach ($index_ids as $index_id) {
       $batch['operations'][] = [
         '\Drupal\search_api_postgresql\Form\BulkRegenerateForm::batchProcessIndex',
@@ -262,7 +264,7 @@ class BulkRegenerateForm extends FormBase {
    * Batch operation: Process a single index.
    */
   public static function batchProcessIndex($server_id, $index_id, $batch_size, $force, &$context) {
-    // Initialize batch context
+    // Initialize batch context.
     if (!isset($context['sandbox']['progress'])) {
       $index = \Drupal::entityTypeManager()->getStorage('search_api_index')->load($index_id);
       $context['sandbox']['progress'] = 0;
@@ -272,17 +274,17 @@ class BulkRegenerateForm extends FormBase {
       $context['results']['errors'] = 0;
     }
 
-    // Load services
+    // Load services.
     $entity_type_manager = \Drupal::entityTypeManager();
     $index = $entity_type_manager->getStorage('search_api_index')->load($index_id);
     $server = $entity_type_manager->getStorage('search_api_server')->load($server_id);
-    
+
     if (!$index || !$server) {
       $context['finished'] = 1;
       return;
     }
 
-    // Get items to process
+    // Get items to process.
     $tracker = $index->getTrackerInstance();
     $item_ids = $tracker->getRemainingItems($batch_size, $context['sandbox']['current_item']);
 
@@ -291,16 +293,16 @@ class BulkRegenerateForm extends FormBase {
       return;
     }
 
-    // Process items
+    // Process items.
     $backend = $server->getBackend();
     foreach ($item_ids as $item_id) {
       try {
         // This would call the actual embedding regeneration method
-        // The actual implementation would depend on your backend
+        // The actual implementation would depend on your backend.
         if (method_exists($backend, 'regenerateItemEmbedding')) {
           $backend->regenerateItemEmbedding($index, $item_id, $force);
         }
-        
+
         $context['results']['processed']++;
       }
       catch (\Exception $e) {
@@ -310,17 +312,17 @@ class BulkRegenerateForm extends FormBase {
           '@message' => $e->getMessage(),
         ]);
       }
-      
+
       $context['sandbox']['progress']++;
       $context['sandbox']['current_item'] = $item_id;
     }
 
-    // Update progress
+    // Update progress.
     if ($context['sandbox']['progress'] != $context['sandbox']['max']) {
       $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
     }
 
-    // Set message
+    // Set message.
     $context['message'] = t('Processing index @index: @current of @total items', [
       '@index' => $index->label(),
       '@current' => $context['sandbox']['progress'],
@@ -359,7 +361,7 @@ class BulkRegenerateForm extends FormBase {
       }
 
       $config = $backend->getConfiguration();
-      if (!empty($config['ai_embeddings']['enabled']) || 
+      if (!empty($config['ai_embeddings']['enabled']) ||
           !empty($config['azure_embedding']['enabled']) ||
           !empty($config['vector_search']['enabled'])) {
         $ai_servers[$server->id()] = $server;
@@ -398,7 +400,7 @@ class BulkRegenerateForm extends FormBase {
       $tracker = $index->getTrackerInstance();
       $indexed = $tracker->getIndexedItemsCount();
       $total = $tracker->getTotalItemsCount();
-      
+
       $options[$id] = $this->t('@label (@indexed/@total items)', [
         '@label' => $index->label(),
         '@indexed' => $indexed,
@@ -407,4 +409,5 @@ class BulkRegenerateForm extends FormBase {
     }
     return $options;
   }
+
 }

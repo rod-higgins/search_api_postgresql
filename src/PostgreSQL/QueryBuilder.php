@@ -137,27 +137,28 @@ class QueryBuilder {
    */
   protected function buildSelectClause(QueryInterface $query) {
     $fields = [];
-    
+
     // Add system fields (always safe)
     $fields[] = $this->connector->quoteColumnName('search_api_id');
     $fields[] = $this->connector->quoteColumnName('search_api_datasource');
     $fields[] = $this->connector->quoteColumnName('search_api_language');
-    
-    // Add requested fields from the index
+
+    // Add requested fields from the index.
     foreach ($query->getIndex()->getFields() as $field_id => $field) {
       $safe_field = $this->validateIndexField($query->getIndex(), $field_id);
       $fields[] = $safe_field;
     }
 
-    // ALWAYS add relevance score - required by Search API specification
+    // ALWAYS add relevance score - required by Search API specification.
     if ($query->getKeys()) {
-      // With search keys: use actual relevance calculation
+      // With search keys: use actual relevance calculation.
       $fts_config = $this->validateFtsConfiguration();
-      $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') . 
-                ", to_tsquery('{$fts_config}', :ts_query)) AS " . 
+      $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') .
+                ", to_tsquery('{$fts_config}', :ts_query)) AS " .
                 $this->connector->quoteColumnName('search_api_relevance');
-    } else {
-      // Without search keys: provide default relevance value
+    }
+    else {
+      // Without search keys: provide default relevance value.
       $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
     }
 
@@ -176,14 +177,14 @@ class QueryBuilder {
   protected function buildWhereClause(QueryInterface $query) {
     $conditions = [];
 
-    // Add full-text search condition
+    // Add full-text search condition.
     if ($keys = $query->getKeys()) {
       $fts_config = $this->validateFtsConfiguration();
-      $conditions[] = $this->connector->quoteColumnName('search_vector') . 
+      $conditions[] = $this->connector->quoteColumnName('search_vector') .
                      " @@ to_tsquery('{$fts_config}', :ts_query)";
     }
 
-    // Add other conditions
+    // Add other conditions.
     $condition_group = $query->getConditionGroup();
     if ($condition_sql = $this->buildConditionGroupSql($condition_group, $query->getIndex())) {
       $conditions[] = $condition_sql;
@@ -243,21 +244,21 @@ class QueryBuilder {
     $value = $condition->getValue();
     $operator = strtoupper($condition->getOperator());
 
-    // Validate operator
+    // Validate operator.
     if (!in_array($operator, self::$validOperators)) {
       throw new \InvalidArgumentException("Invalid operator: {$operator}");
     }
 
-    // Validate and quote field name
+    // Validate and quote field name.
     $safe_field = $this->validateConditionField($index, $field);
 
-    // Special handling for boolean fields - cast the parameter in SQL
+    // Special handling for boolean fields - cast the parameter in SQL.
     $parameter_ref = ":{$field}";
     if (in_array($field, ['status', 'sticky']) && in_array($operator, ['=', '<>', '!='])) {
       $parameter_ref = ":{$field}::boolean";
     }
 
-    // Build SQL based on operator
+    // Build SQL based on operator.
     switch ($operator) {
       case '=':
         return "{$safe_field} = {$parameter_ref}";
@@ -283,7 +284,7 @@ class QueryBuilder {
           $placeholders = [];
           foreach ($value as $i => $val) {
             $placeholder = ":{$field}_in_{$i}";
-            // Cast each placeholder for boolean fields
+            // Cast each placeholder for boolean fields.
             if (in_array($field, ['status', 'sticky'])) {
               $placeholder .= "::boolean";
             }
@@ -291,14 +292,15 @@ class QueryBuilder {
           }
           return "{$safe_field} IN (" . implode(', ', $placeholders) . ")";
         }
-        return '1=0'; // Empty IN should match nothing
+        // Empty IN should match nothing.
+        return '1=0';
 
       case 'NOT IN':
         if (is_array($value) && !empty($value)) {
           $placeholders = [];
           foreach ($value as $i => $val) {
             $placeholder = ":{$field}_not_in_{$i}";
-            // Cast each placeholder for boolean fields
+            // Cast each placeholder for boolean fields.
             if (in_array($field, ['status', 'sticky'])) {
               $placeholder .= "::boolean";
             }
@@ -306,7 +308,8 @@ class QueryBuilder {
           }
           return "{$safe_field} NOT IN (" . implode(', ', $placeholders) . ")";
         }
-        return '1=1'; // Empty NOT IN should match everything
+        // Empty NOT IN should match everything.
+        return '1=1';
 
       case 'BETWEEN':
         if (is_array($value) && count($value) === 2) {
@@ -356,7 +359,7 @@ class QueryBuilder {
    */
   protected function buildOrderClause(QueryInterface $query) {
     $sorts = $query->getSorts();
-    
+
     if (empty($sorts)) {
       return '';
     }
@@ -407,7 +410,7 @@ class QueryBuilder {
    */
   protected function assembleSqlQuery(array $parts) {
     $sql = [];
-    
+
     foreach (['SELECT', 'FROM', 'WHERE', 'ORDER', 'LIMIT'] as $clause) {
       if (!empty($parts[$clause])) {
         if ($clause === 'SELECT') {
@@ -437,12 +440,12 @@ class QueryBuilder {
   protected function getQueryParameters(QueryInterface $query) {
     $params = [];
 
-    // Add full-text search parameter
+    // Add full-text search parameter.
     if ($keys = $query->getKeys()) {
       $params[':ts_query'] = $this->processSearchKeys($keys);
     }
 
-    // Add condition parameters
+    // Add condition parameters.
     $this->addConditionGroupParameters($query->getConditionGroup(), $params);
 
     return $params;
@@ -459,12 +462,12 @@ class QueryBuilder {
    */
   protected function processSearchKeys($keys) {
     if (is_string($keys)) {
-      // Simple string search
+      // Simple string search.
       return $this->escapeSearchString($keys);
     }
-    
+
     if (is_array($keys)) {
-      // Complex search query
+      // Complex search query.
       return $this->processComplexKeys($keys);
     }
 
@@ -481,17 +484,17 @@ class QueryBuilder {
    *   The escaped string.
    */
   protected function escapeSearchString($string) {
-    // Remove special characters that have meaning in tsquery
+    // Remove special characters that have meaning in tsquery.
     $string = preg_replace('/[&|!():*]/', ' ', $string);
-    
-    // Trim and collapse whitespace
+
+    // Trim and collapse whitespace.
     $string = preg_replace('/\s+/', ' ', trim($string));
-    
+
     // Convert to tsquery format (AND by default)
     $terms = explode(' ', $string);
     $terms = array_filter($terms);
-    
-    return implode(' & ', array_map(function($term) {
+
+    return implode(' & ', array_map(function ($term) {
       return "'" . addslashes($term) . "'";
     }, $terms));
   }
@@ -506,7 +509,7 @@ class QueryBuilder {
    *   The processed search query string.
    */
   protected function processComplexKeys(array $keys) {
-    $conjunction = isset($keys['#conjunction']) ? $keys['#conjunction'] : 'AND';
+    $conjunction = $keys['#conjunction'] ?? 'AND';
     $processed = [];
 
     foreach ($keys as $key => $value) {
@@ -524,7 +527,7 @@ class QueryBuilder {
           $processed[] = '(' . $sub_query . ')';
         }
       }
-      // Handle other types (integers, etc.) by converting to string
+      // Handle other types (integers, etc.) by converting to string.
       elseif (is_scalar($value)) {
         $processed[] = $this->escapeSearchString((string) $value);
       }
@@ -566,7 +569,7 @@ class QueryBuilder {
     $value = $condition->getValue();
     $operator = strtoupper($condition->getOperator());
 
-    // Validate field name for parameter generation
+    // Validate field name for parameter generation.
     $this->connector->validateIdentifier($field, 'field name');
 
     if ($field === 'node_grants' && is_string($value)) {
@@ -576,7 +579,7 @@ class QueryBuilder {
       }
     }
 
-    // SPECIAL HANDLING for boolean fields - convert integer to boolean
+    // SPECIAL HANDLING for boolean fields - convert integer to boolean.
     if (in_array($field, ['status', 'sticky']) && is_numeric($value)) {
       $value = (bool) $value;
     }
@@ -632,17 +635,18 @@ class QueryBuilder {
 
       case 'IS NULL':
       case 'IS NOT NULL':
-        // No parameters needed for NULL checks
+        // No parameters needed for NULL checks.
         break;
 
       default:
         // For boolean fields that need casting, ensure we bind as integer
-        // The ::boolean cast in SQL will handle the conversion
+        // The ::boolean cast in SQL will handle the conversion.
         if (in_array($field, ['status', 'sticky']) && is_bool($value)) {
           // Convert PHP boolean back to integer for PostgreSQL parameter binding
-          // The SQL will use ::boolean cast to convert it properly
+          // The SQL will use ::boolean cast to convert it properly.
           $params[":{$field}"] = $value ? 1 : 0;
-        } else {
+        }
+        else {
           $params[":{$field}"] = $value;
         }
         break;
@@ -660,12 +664,12 @@ class QueryBuilder {
    */
   protected function getIndexTableName(IndexInterface $index) {
     $index_id = $index->id();
-    
-    // Validate index ID
+
+    // Validate index ID.
     if (!preg_match('/^[a-z][a-z0-9_]*$/', $index_id)) {
       throw new \InvalidArgumentException("Invalid index ID: {$index_id}");
     }
-    
+
     $table_name = ($this->config['index_prefix'] ?? 'search_api_') . $index_id;
     return $this->connector->quoteTableName($table_name);
   }
@@ -685,12 +689,12 @@ class QueryBuilder {
    *   If the field is not valid for the index.
    */
   protected function validateIndexField(IndexInterface $index, $field_id) {
-    // System fields are always allowed
+    // System fields are always allowed.
     if (in_array($field_id, self::$systemFields)) {
       return $this->connector->quoteColumnName($field_id);
     }
 
-    // Check if field exists in the index
+    // Check if field exists in the index.
     if (!$index->getField($field_id)) {
       throw new \InvalidArgumentException("Field '{$field_id}' does not exist in index '{$index->id()}'");
     }
@@ -721,18 +725,19 @@ class QueryBuilder {
    */
   protected function validateFtsConfiguration() {
     $fts_config = $this->config['fts_configuration'] ?? 'english';
-    
-    // Allowed PostgreSQL text search configurations
+
+    // Allowed PostgreSQL text search configurations.
     $allowed_configs = [
       'simple', 'english', 'french', 'german', 'spanish', 'portuguese',
       'italian', 'dutch', 'russian', 'norwegian', 'swedish', 'danish',
-      'finnish', 'hungarian', 'romanian', 'turkish'
+      'finnish', 'hungarian', 'romanian', 'turkish',
     ];
-    
+
     if (!in_array($fts_config, $allowed_configs)) {
       throw new \InvalidArgumentException("Invalid FTS configuration: {$fts_config}");
     }
-    
+
     return $fts_config;
   }
+
 }

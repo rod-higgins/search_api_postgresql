@@ -43,7 +43,7 @@ class EmbeddingDashboardForm extends ConfigFormBase {
     ConfigFactoryInterface $config_factory,
     EntityTypeManagerInterface $entity_type_manager,
     CacheBackendInterface $cache,
-    EmbeddingAnalyticsService $analytics_service
+    EmbeddingAnalyticsService $analytics_service,
   ) {
     parent::__construct($config_factory);
     $this->entityTypeManager = $entity_type_manager;
@@ -85,7 +85,7 @@ class EmbeddingDashboardForm extends ConfigFormBase {
 
     $form['#attached']['library'][] = 'search_api_postgresql/admin';
 
-    // Page header
+    // Page header.
     $form['header'] = [
       '#type' => 'container',
       '#attributes' => ['class' => ['dashboard-settings-header']],
@@ -103,7 +103,7 @@ class EmbeddingDashboardForm extends ConfigFormBase {
       '#value' => $this->t('Configure the Search API PostgreSQL administration dashboard display and behavior.'),
     ];
 
-    // Display settings
+    // Display settings.
     $form['display'] = [
       '#type' => 'details',
       '#title' => $this->t('Display Settings'),
@@ -160,7 +160,7 @@ class EmbeddingDashboardForm extends ConfigFormBase {
       '#default_value' => $config->get('display.show_quick_actions') ?? FALSE,
     ];
 
-    // Cards and widgets
+    // Cards and widgets.
     $form['cards'] = [
       '#type' => 'details',
       '#title' => $this->t('Dashboard Cards'),
@@ -186,7 +186,7 @@ class EmbeddingDashboardForm extends ConfigFormBase {
       '#rows' => 8,
     ];
 
-    // Notifications and alerts
+    // Notifications and alerts.
     $form['notifications'] = [
       '#type' => 'details',
       '#title' => $this->t('Notifications & Alerts'),
@@ -250,7 +250,7 @@ class EmbeddingDashboardForm extends ConfigFormBase {
       '#default_value' => $config->get('notifications.alert_thresholds.server_down_alert') ?? TRUE,
     ];
 
-    // Analytics settings
+    // Analytics settings.
     $form['analytics'] = [
       '#type' => 'details',
       '#title' => $this->t('Analytics Settings'),
@@ -297,7 +297,7 @@ class EmbeddingDashboardForm extends ConfigFormBase {
       ],
     ];
 
-    // Performance settings
+    // Performance settings.
     $form['performance'] = [
       '#type' => 'details',
       '#title' => $this->t('Performance Settings'),
@@ -337,7 +337,7 @@ class EmbeddingDashboardForm extends ConfigFormBase {
       '#default_value' => $config->get('performance.lazy_load_charts') ?? TRUE,
     ];
 
-    // Custom CSS
+    // Custom CSS.
     $form['customization'] = [
       '#type' => 'details',
       '#title' => $this->t('Customization'),
@@ -365,7 +365,7 @@ class EmbeddingDashboardForm extends ConfigFormBase {
       '#default_value' => $config->get('customization.hide_branding') ?? FALSE,
     ];
 
-    // Actions
+    // Actions.
     $form['actions']['clear_cache'] = [
       '#type' => 'submit',
       '#value' => $this->t('Clear Dashboard Cache'),
@@ -396,25 +396,25 @@ class EmbeddingDashboardForm extends ConfigFormBase {
   public function validateForm(array &$form, FormStateInterface $form_state) {
     parent::validateForm($form, $form_state);
 
-    // Validate refresh interval
+    // Validate refresh interval.
     if ($form_state->getValue('auto_refresh')) {
       $interval = $form_state->getValue('refresh_interval');
       if ($interval < 10 || $interval > 600) {
-        $form_state->setErrorByName('refresh_interval', 
+        $form_state->setErrorByName('refresh_interval',
           $this->t('Refresh interval must be between 10 seconds and 10 minutes.')
         );
       }
     }
 
-    // Validate card order
+    // Validate card order.
     $card_order = $form_state->getValue('card_order');
     if (!empty($card_order)) {
       $available_cards = array_keys($this->getAvailableCards());
       $order_lines = array_filter(array_map('trim', explode("\n", $card_order)));
-      
+
       foreach ($order_lines as $card_id) {
         if (!in_array($card_id, $available_cards)) {
-          $form_state->setErrorByName('card_order', 
+          $form_state->setErrorByName('card_order',
             $this->t('Invalid card ID "@card_id". Available cards: @available', [
               '@card_id' => $card_id,
               '@available' => implode(', ', $available_cards),
@@ -425,25 +425,25 @@ class EmbeddingDashboardForm extends ConfigFormBase {
       }
     }
 
-    // Validate thresholds
+    // Validate thresholds.
     $low_coverage = $form_state->getValue(['alert_thresholds', 'low_coverage_threshold']);
     if ($low_coverage < 0 || $low_coverage > 100) {
-      $form_state->setErrorByName('alert_thresholds][low_coverage_threshold', 
+      $form_state->setErrorByName('alert_thresholds][low_coverage_threshold',
         $this->t('Coverage threshold must be between 0 and 100.')
       );
     }
 
     $high_cost = $form_state->getValue(['alert_thresholds', 'high_cost_threshold']);
     if ($high_cost < 0) {
-      $form_state->setErrorByName('alert_thresholds][high_cost_threshold', 
+      $form_state->setErrorByName('alert_thresholds][high_cost_threshold',
         $this->t('Cost threshold must be a positive number.')
       );
     }
 
-    // Validate retention period
+    // Validate retention period.
     $retention = $form_state->getValue('data_retention_days');
     if ($retention < 1 || $retention > 365) {
-      $form_state->setErrorByName('data_retention_days', 
+      $form_state->setErrorByName('data_retention_days',
         $this->t('Data retention must be between 1 and 365 days.')
       );
     }
@@ -455,53 +455,54 @@ class EmbeddingDashboardForm extends ConfigFormBase {
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $config = $this->config('search_api_postgresql.dashboard');
 
-    // Save display settings
+    // Save display settings.
     $config->set('display.auto_refresh', $form_state->getValue('auto_refresh'));
     $config->set('display.refresh_interval', $form_state->getValue('refresh_interval'));
     $config->set('display.items_per_table', $form_state->getValue('items_per_table'));
     $config->set('display.show_health_checks', $form_state->getValue('show_health_checks'));
     $config->set('display.show_quick_actions', $form_state->getValue('show_quick_actions'));
 
-    // Save card settings
+    // Save card settings.
     $enabled_cards = array_filter($form_state->getValue('enabled'));
     $config->set('cards.enabled', array_keys($enabled_cards));
-    
+
     $card_order = $form_state->getValue('card_order');
     if (!empty($card_order)) {
       $order_lines = array_filter(array_map('trim', explode("\n", $card_order)));
       $config->set('cards.order', $order_lines);
-    } else {
+    }
+    else {
       $config->clear('cards.order');
     }
 
-    // Save notification settings
+    // Save notification settings.
     $config->set('notifications.enable_alerts', $form_state->getValue('enable_alerts'));
-    $config->set('notifications.alert_thresholds.low_coverage_threshold', 
+    $config->set('notifications.alert_thresholds.low_coverage_threshold',
       $form_state->getValue(['alert_thresholds', 'low_coverage_threshold']));
-    $config->set('notifications.alert_thresholds.high_queue_threshold', 
+    $config->set('notifications.alert_thresholds.high_queue_threshold',
       $form_state->getValue(['alert_thresholds', 'high_queue_threshold']));
-    $config->set('notifications.alert_thresholds.high_cost_threshold', 
+    $config->set('notifications.alert_thresholds.high_cost_threshold',
       $form_state->getValue(['alert_thresholds', 'high_cost_threshold']));
-    $config->set('notifications.alert_thresholds.server_down_alert', 
+    $config->set('notifications.alert_thresholds.server_down_alert',
       $form_state->getValue(['alert_thresholds', 'server_down_alert']));
 
-    // Save analytics settings
+    // Save analytics settings.
     $config->set('analytics.enable_analytics', $form_state->getValue('enable_analytics'));
     $config->set('analytics.default_time_range', $form_state->getValue('default_time_range'));
     $config->set('analytics.data_retention_days', $form_state->getValue('data_retention_days'));
 
-    // Save performance settings
+    // Save performance settings.
     $config->set('performance.cache_stats', $form_state->getValue('cache_stats'));
     $config->set('performance.cache_duration', $form_state->getValue('cache_duration'));
     $config->set('performance.lazy_load_charts', $form_state->getValue('lazy_load_charts'));
 
-    // Save customization settings
+    // Save customization settings.
     $config->set('customization.custom_css', $form_state->getValue('custom_css'));
     $config->set('customization.hide_branding', $form_state->getValue('hide_branding'));
 
     $config->save();
 
-    // Clear dashboard cache when settings change
+    // Clear dashboard cache when settings change.
     $this->clearDashboardCache();
 
     parent::submitForm($form, $form_state);
@@ -522,7 +523,8 @@ class EmbeddingDashboardForm extends ConfigFormBase {
     try {
       $this->analyticsService->resetAnalyticsData();
       $this->messenger()->addStatus($this->t('Analytics data has been reset.'));
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       $this->messenger()->addError($this->t('Failed to reset analytics data: @error', [
         '@error' => $e->getMessage(),
       ]));
@@ -553,7 +555,7 @@ class EmbeddingDashboardForm extends ConfigFormBase {
    * Clear dashboard-related caches.
    */
   protected function clearDashboardCache() {
-    // Clear dashboard statistics cache
+    // Clear dashboard statistics cache.
     $this->cache->deleteMultiple([
       'search_api_postgresql:dashboard:overview_stats',
       'search_api_postgresql:dashboard:server_stats',
@@ -561,17 +563,17 @@ class EmbeddingDashboardForm extends ConfigFormBase {
       'search_api_postgresql:dashboard:health_checks',
     ]);
 
-    // Clear analytics caches
+    // Clear analytics caches.
     $cache_tags = [
       'search_api_postgresql:analytics',
       'search_api_postgresql:dashboard',
     ];
-    
+
     foreach ($cache_tags as $tag) {
       \Drupal::service('cache_tags.invalidator')->invalidateTags([$tag]);
     }
 
-    // Clear render caches for dashboard pages
+    // Clear render caches for dashboard pages.
     \Drupal::service('cache.render')->deleteAll();
   }
 

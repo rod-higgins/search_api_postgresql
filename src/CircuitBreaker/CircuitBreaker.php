@@ -107,39 +107,41 @@ class CircuitBreaker {
   public function execute(callable $operation, $fallback = NULL, array $context = []) {
     $state = $this->getState();
 
-    // If circuit is open, check if we can transition to half-open
+    // If circuit is open, check if we can transition to half-open.
     if ($state === self::STATE_OPEN) {
       if ($this->canAttemptReset()) {
         $this->setState(self::STATE_HALF_OPEN);
         $this->logger->info('Circuit breaker @service transitioning to half-open state', [
           '@service' => $this->serviceId,
         ]);
-      } else {
+      }
+      else {
         return $this->handleOpenCircuit($fallback, $context);
       }
     }
 
-    // Execute the operation
+    // Execute the operation.
     try {
       $start_time = microtime(TRUE);
       $result = $operation();
       $duration = (microtime(TRUE) - $start_time) * 1000;
 
-      // Operation succeeded
+      // Operation succeeded.
       $this->recordSuccess($duration);
       return $result;
 
-    } catch (\Throwable $e) {
-      // Operation failed
+    }
+    catch (\Throwable $e) {
+      // Operation failed.
       $this->recordFailure($e, $context);
-      
-      // If we have a fallback, use it instead of throwing
+
+      // If we have a fallback, use it instead of throwing.
       if ($fallback !== NULL) {
         $this->logger->warning('Circuit breaker @service operation failed, using fallback', [
           '@service' => $this->serviceId,
           '@error' => $e->getMessage(),
         ]);
-        
+
         return is_callable($fallback) ? $fallback($e, $context) : $fallback;
       }
 
@@ -176,10 +178,10 @@ class CircuitBreaker {
    */
   protected function recordSuccess($duration) {
     $current_state = $this->getState();
-    
+
     if ($current_state === self::STATE_HALF_OPEN) {
       $success_count = $this->incrementSuccessCount();
-      
+
       if ($success_count >= $this->config['success_threshold']) {
         $this->setState(self::STATE_CLOSED);
         $this->resetCounters();
@@ -187,12 +189,13 @@ class CircuitBreaker {
           '@service' => $this->serviceId,
         ]);
       }
-    } elseif ($current_state === self::STATE_CLOSED) {
-      // Reset failure count on success
+    }
+    elseif ($current_state === self::STATE_CLOSED) {
+      // Reset failure count on success.
       $this->resetFailureCount();
     }
 
-    // Record metrics
+    // Record metrics.
     $this->recordMetrics('success', $duration);
   }
 
@@ -206,8 +209,8 @@ class CircuitBreaker {
    */
   protected function recordFailure(\Throwable $exception, array $context = []) {
     $current_state = $this->getState();
-    
-    // Check if this is an expected exception type that shouldn't trigger circuit
+
+    // Check if this is an expected exception type that shouldn't trigger circuit.
     if ($this->isExpectedException($exception)) {
       $this->logger->debug('Circuit breaker @service: Expected exception, not counting as failure', [
         '@service' => $this->serviceId,
@@ -217,18 +220,19 @@ class CircuitBreaker {
     }
 
     $failure_count = $this->incrementFailureCount();
-    
-    // Record metrics
+
+    // Record metrics.
     $this->recordMetrics('failure', 0, $exception);
-    
+
     if ($current_state === self::STATE_CLOSED && $failure_count >= $this->config['failure_threshold']) {
       $this->setState(self::STATE_OPEN);
       $this->logger->error('Circuit breaker @service opened after @count failures', [
         '@service' => $this->serviceId,
         '@count' => $failure_count,
       ]);
-    } elseif ($current_state === self::STATE_HALF_OPEN) {
-      // Single failure in half-open state reopens the circuit
+    }
+    elseif ($current_state === self::STATE_HALF_OPEN) {
+      // Single failure in half-open state reopens the circuit.
       $this->setState(self::STATE_OPEN);
       $this->logger->warning('Circuit breaker @service reopened from half-open state', [
         '@service' => $this->serviceId,
@@ -255,7 +259,7 @@ class CircuitBreaker {
       $this->logger->debug('Circuit breaker @service is open, using fallback', [
         '@service' => $this->serviceId,
       ]);
-      
+
       return is_callable($fallback) ? $fallback(NULL, $context) : $fallback;
     }
 
@@ -342,7 +346,7 @@ class CircuitBreaker {
    * @param \Throwable $exception
    *   Exception if failed.
    */
-  protected function recordMetrics($result, $duration, \Throwable $exception = NULL) {
+  protected function recordMetrics($result, $duration, ?\Throwable $exception = NULL) {
     $metrics = [
       'service_id' => $this->serviceId,
       'result' => $result,
@@ -356,7 +360,7 @@ class CircuitBreaker {
       $metrics['exception_message'] = $exception->getMessage();
     }
 
-    // Cache metrics for retrieval
+    // Cache metrics for retrieval.
     $cache_key = 'circuit_breaker:metrics:' . $this->serviceId . ':' . time();
     $this->cache->set($cache_key, $metrics, time() + 3600);
   }
@@ -384,7 +388,7 @@ class CircuitBreaker {
   public function reset() {
     $this->setState(self::STATE_CLOSED);
     $this->resetCounters();
-    
+
     $this->logger->info('Circuit breaker @service manually reset', [
       '@service' => $this->serviceId,
     ]);
@@ -417,6 +421,7 @@ class CircuitBreaker {
   protected function getSuccessCountKey() {
     return 'circuit_breaker:successes:' . $this->serviceId;
   }
+
 }
 
 /**
@@ -475,7 +480,7 @@ class CircuitBreakerFactory {
   public function getCircuitBreaker($service_id, array $config = []) {
     if (!isset(self::$instances[$service_id])) {
       $logger = $this->loggerFactory->get('search_api_postgresql.circuit_breaker');
-      
+
       self::$instances[$service_id] = new CircuitBreaker(
         $service_id,
         $this->state,
@@ -501,4 +506,5 @@ class CircuitBreakerFactory {
     }
     return $stats;
   }
+
 }

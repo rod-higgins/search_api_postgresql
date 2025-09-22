@@ -54,11 +54,12 @@ class VectorSearchTest extends KernelTestBase {
   protected function setUp(): void {
     parent::setUp();
 
-    // Create test server with UNIFIED backend
+    // Create test server with UNIFIED backend.
     $this->server = Server::create([
       'id' => 'postgresql_test_server',
       'name' => 'PostgreSQL Test Server',
-      'backend' => 'postgresql', // SINGLE BACKEND ID
+    // SINGLE BACKEND ID.
+      'backend' => 'postgresql',
       'backend_config' => [
         'connection' => [
           'host' => 'localhost',
@@ -74,7 +75,7 @@ class VectorSearchTest extends KernelTestBase {
           'batch_size' => 50,
           'debug' => TRUE,
         ],
-        // Test AI features
+        // Test AI features.
         'ai_features' => [
           'enabled' => TRUE,
           'provider' => 'azure_openai',
@@ -144,7 +145,7 @@ class VectorSearchTest extends KernelTestBase {
   public function testUnifiedBackendFeatures() {
     $backend = $this->server->getBackend();
     $features = $backend->getSupportedFeatures();
-    
+
     $expected_features = [
       'search_api_facets',
       'search_api_autocomplete',
@@ -152,7 +153,7 @@ class VectorSearchTest extends KernelTestBase {
       'search_api_mlt',
       'search_api_random_sort',
       'search_api_grouping',
-      // AI & Vector features now in single backend
+      // AI & Vector features now in single backend.
       'search_api_vector_search',
       'search_api_semantic_search',
       'search_api_hybrid_search',
@@ -170,12 +171,12 @@ class VectorSearchTest extends KernelTestBase {
   public function testAiProviderSwitching() {
     $backend = $this->server->getBackend();
     $config = $backend->getConfiguration();
-    
-    // Test Azure OpenAI provider
+
+    // Test Azure OpenAI provider.
     $this->assertEquals('azure_openai', $config['ai_features']['provider']);
     $this->assertTrue($config['ai_features']['enabled']);
-    
-    // Test configuration structure
+
+    // Test configuration structure.
     $this->assertArrayHasKey('azure_openai', $config['ai_features']);
     $this->assertArrayHasKey('endpoint', $config['ai_features']['azure_openai']);
     $this->assertArrayHasKey('deployment_name', $config['ai_features']['azure_openai']);
@@ -191,18 +192,18 @@ class VectorSearchTest extends KernelTestBase {
       'test-deployment'
     );
 
-    // Use reflection to access protected method
+    // Use reflection to access protected method.
     $reflection = new \ReflectionClass($service);
     $method = $reflection->getMethod('preprocessText');
     $method->setAccessible(TRUE);
 
-    // Test whitespace normalization
+    // Test whitespace normalization.
     $input = "This  has   multiple    spaces\n\nand\tlines";
     $expected = "This has multiple spaces and lines";
     $result = $method->invokeArgs($service, [$input]);
     $this->assertEquals($expected, $result);
 
-    // Test length limiting
+    // Test length limiting.
     $long_text = str_repeat('a', 9000);
     $result = $method->invokeArgs($service, [$long_text]);
     $this->assertLessThanOrEqual(8000, strlen($result));
@@ -213,17 +214,17 @@ class VectorSearchTest extends KernelTestBase {
    */
   public function testQueryModeHandling() {
     $query = $this->index->query();
-    
+
     // Test default mode (should be hybrid)
     $this->assertNull($query->getOption('search_mode'));
-    
-    // Test setting different modes
+
+    // Test setting different modes.
     $query->setOption('search_mode', 'vector_only');
     $this->assertEquals('vector_only', $query->getOption('search_mode'));
-    
+
     $query->setOption('search_mode', 'text_only');
     $this->assertEquals('text_only', $query->getOption('search_mode'));
-    
+
     $query->setOption('search_mode', 'hybrid');
     $this->assertEquals('hybrid', $query->getOption('search_mode'));
   }
@@ -233,14 +234,14 @@ class VectorSearchTest extends KernelTestBase {
    */
   public function testConfigurationValidation() {
     $backend = $this->server->getBackend();
-    
-    // Test valid configuration
+
+    // Test valid configuration.
     $config = $backend->defaultConfiguration();
     $this->assertArrayHasKey('azure_embedding', $config);
     $this->assertArrayHasKey('vector_index', $config);
     $this->assertArrayHasKey('hybrid_search', $config);
-    
-    // Test weight validation
+
+    // Test weight validation.
     $text_weight = $config['hybrid_search']['text_weight'];
     $vector_weight = $config['hybrid_search']['vector_weight'];
     $this->assertEquals(1.0, $text_weight + $vector_weight, 'Weights should sum to 1.0', 0.01);
@@ -251,15 +252,15 @@ class VectorSearchTest extends KernelTestBase {
    */
   public function testVectorStatistics() {
     $backend = $this->server->getBackend();
-    
-    // Get stats for empty index
+
+    // Get stats for empty index.
     $stats = $backend->getAzureVectorStats($this->index);
-    
+
     $this->assertIsArray($stats);
     $this->assertArrayHasKey('azure_service', $stats);
     $this->assertArrayHasKey('embedding_model', $stats);
     $this->assertArrayHasKey('vector_dimension', $stats);
-    
+
     $this->assertEquals('azure_openai', $stats['azure_service']);
     $this->assertEquals(1536, $stats['vector_dimension']);
   }

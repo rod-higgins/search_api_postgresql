@@ -2,12 +2,11 @@
 
 namespace Drupal\search_api_postgresql\Controller;
 
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Link;
 use Drupal\Core\Url;
-use Drupal\Core\Ajax\AjaxResponse;
-use Drupal\Core\Ajax\ReplaceCommand;
 use Drupal\search_api\Entity\Server;
 use Drupal\search_api\Entity\Index;
 use Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService;
@@ -59,13 +58,24 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Constructs an EmbeddingAdminController object.
+   *
+   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
+   *   The entity type manager.
+   * @param \Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService $analytics_service
+   *   The embedding analytics service.
+   * @param \Drupal\search_api_postgresql\Service\ConfigurationValidationService $validation_service
+   *   The configuration validation service.
+   * @param \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager $cache_manager
+   *   The embedding cache manager.
+   * @param \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager $queue_manager
+   *   The embedding queue manager.
    */
   public function __construct(
     EntityTypeManagerInterface $entity_type_manager,
     EmbeddingAnalyticsService $analytics_service,
     ConfigurationValidationService $validation_service,
     EmbeddingCacheManager $cache_manager,
-    EmbeddingQueueManager $queue_manager
+    EmbeddingQueueManager $queue_manager,
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->analyticsService = $analytics_service;
@@ -89,11 +99,14 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Main dashboard page.
+   *
+   * @return array
+   *   A renderable array for the dashboard page.
    */
   public function dashboard() {
     $build = [];
 
-    // Page header
+    // Page header.
     $build['header'] = [
       '#type' => 'container',
       '#attributes' => ['class' => ['search-api-postgresql-header']],
@@ -113,14 +126,14 @@ class EmbeddingAdminController extends ControllerBase {
       '#attributes' => ['class' => ['page-description']],
     ];
 
-    // Quick stats overview
+    // Quick stats overview.
     $build['overview'] = [
       '#type' => 'container',
       '#attributes' => ['class' => ['overview-cards']],
     ];
 
     $overview_stats = $this->getOverviewStatistics();
-    
+
     $build['overview']['servers'] = [
       '#theme' => 'search_api_postgresql_stat_card',
       '#title' => $this->t('PostgreSQL Servers'),
@@ -157,7 +170,7 @@ class EmbeddingAdminController extends ControllerBase {
       '#color' => 'orange',
     ];
 
-    // Server status table
+    // Server status table.
     $build['servers'] = [
       '#type' => 'details',
       '#title' => $this->t('Server Status'),
@@ -167,7 +180,7 @@ class EmbeddingAdminController extends ControllerBase {
 
     $build['servers']['table'] = $this->buildServerStatusTable();
 
-    // Index status table
+    // Index status table.
     $build['indexes'] = [
       '#type' => 'details',
       '#title' => $this->t('Index Status'),
@@ -177,7 +190,7 @@ class EmbeddingAdminController extends ControllerBase {
 
     $build['indexes']['table'] = $this->buildIndexStatusTable();
 
-    // System health
+    // System health.
     $build['health'] = [
       '#type' => 'details',
       '#title' => $this->t('System Health'),
@@ -187,7 +200,7 @@ class EmbeddingAdminController extends ControllerBase {
 
     $build['health']['checks'] = $this->buildHealthChecks();
 
-    // Quick actions
+    // Quick actions.
     $build['actions'] = [
       '#type' => 'details',
       '#title' => $this->t('Quick Actions'),
@@ -197,14 +210,17 @@ class EmbeddingAdminController extends ControllerBase {
 
     $build['actions']['links'] = $this->buildQuickActionLinks();
 
-    // Attach CSS and JS
+    // Attach CSS and JS.
     $build['#attached']['library'][] = 'search_api_postgresql/admin';
-    
+
     return $build;
   }
 
   /**
    * Analytics page.
+   *
+   * @return array
+   *   A renderable array for the analytics page.
    */
   public function analytics() {
     $build = [];
@@ -215,7 +231,7 @@ class EmbeddingAdminController extends ControllerBase {
       '#value' => $this->t('Embedding Analytics'),
     ];
 
-    // Check if any servers have AI enabled
+    // Check if any servers have AI enabled.
     $servers = $this->entityTypeManager
       ->getStorage('search_api_server')
       ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure']]);
@@ -232,26 +248,26 @@ class EmbeddingAdminController extends ControllerBase {
       $build['no_ai'] = [
         '#type' => 'html_tag',
         '#tag' => 'div',
-        '#value' => '<div class="messages messages--info">' . 
-          '<h3>' . $this->t('Analytics Not Available') . '</h3>' .
-          '<p>' . $this->t('Analytics are only available for servers with AI embedding features enabled.') . '</p>' .
-          '<p>' . $this->t('To enable analytics:') . '</p>' .
-          '<ol>' .
-            '<li>' . $this->t('Configure AI embeddings (Azure OpenAI, OpenAI, etc.) on your PostgreSQL server') . '</li>' .
-            '<li>' . $this->t('Enable AI features in your server configuration') . '</li>' .
-            '<li>' . $this->t('Re-index your content to generate embeddings') . '</li>' .
-          '</ol>' .
-          '<p><a href="/admin/config/search/search-api/server/search/edit" class="button button--primary">' . $this->t('Configure Server') . '</a></p>' .
-          '</div>',
+        '#value' => '<div class="messages messages--info">' .
+        '<h3>' . $this->t('Analytics Not Available') . '</h3>' .
+        '<p>' . $this->t('Analytics are only available for servers with AI embedding features enabled.') . '</p>' .
+        '<p>' . $this->t('To enable analytics:') . '</p>' .
+        '<ol>' .
+        '<li>' . $this->t('Configure AI embeddings (Azure OpenAI, OpenAI, etc.) on your PostgreSQL server') . '</li>' .
+        '<li>' . $this->t('Enable AI features in your server configuration') . '</li>' .
+        '<li>' . $this->t('Re-index your content to generate embeddings') . '</li>' .
+        '</ol>' .
+        '<p><a href="/admin/config/search/search-api/server/search/edit" class="button button--primary">' . $this->t('Configure Server') . '</a></p>' .
+        '</div>',
       ];
-      
+
       return $build;
     }
 
     // If we reach here, we have AI-enabled servers, so proceed with analytics
-    // But wrap everything in try-catch to handle any remaining issues
+    // But wrap everything in try-catch to handle any remaining issues.
     try {
-      // Date range filter
+      // Date range filter.
       $build['filters'] = [
         '#type' => 'container',
         '#attributes' => ['class' => ['analytics-filters']],
@@ -273,10 +289,11 @@ class EmbeddingAdminController extends ControllerBase {
         ],
       ];
 
-      // Try to get cost data, but handle failures gracefully
+      // Try to get cost data, but handle failures gracefully.
       try {
         $cost_data = $this->analyticsService->getCostAnalytics('7d');
-      } catch (\Exception $e) {
+      }
+      catch (\Exception $e) {
         $cost_data = [
           'current_cost' => 0,
           'tokens_used' => 0,
@@ -288,7 +305,7 @@ class EmbeddingAdminController extends ControllerBase {
           'by_operation' => [],
         ];
       }
-      
+
       $build['cost_overview'] = [
         '#type' => 'container',
         '#attributes' => ['class' => ['cost-overview']],
@@ -318,10 +335,11 @@ class EmbeddingAdminController extends ControllerBase {
         '#is_projection' => TRUE,
       ];
 
-      // Try to get performance data, but handle failures gracefully
+      // Try to get performance data, but handle failures gracefully.
       try {
         $perf_data = $this->analyticsService->getPerformanceMetrics('7d');
-      } catch (\Exception $e) {
+      }
+      catch (\Exception $e) {
         $perf_data = [
           'search_latency' => [],
           'cache_hit_rate' => [],
@@ -329,7 +347,7 @@ class EmbeddingAdminController extends ControllerBase {
           'throughput' => [],
         ];
       }
-      
+
       $build['performance'] = [
         '#type' => 'container',
         '#attributes' => ['class' => ['performance-metrics']],
@@ -357,16 +375,17 @@ class EmbeddingAdminController extends ControllerBase {
         '#unit' => '%',
       ];
 
-      // Try to get usage data, but handle failures gracefully
+      // Try to get usage data, but handle failures gracefully.
       try {
         $usage_data = $this->analyticsService->getUsagePatterns('7d');
-      } catch (\Exception $e) {
+      }
+      catch (\Exception $e) {
         $usage_data = [
           'query_volume' => [],
           'embedding_generation' => [],
         ];
       }
-      
+
       $build['usage'] = [
         '#type' => 'container',
         '#attributes' => ['class' => ['usage-patterns']],
@@ -395,38 +414,45 @@ class EmbeddingAdminController extends ControllerBase {
       ];
 
       $build['#attached']['library'][] = 'search_api_postgresql/analytics';
-      
+
       return $build;
-      
-    } catch (\Exception $e) {
-      // If anything fails, show an error message instead of crashing
+
+    }
+    catch (\Exception $e) {
+      // If anything fails, show an error message instead of crashing.
       $build['error'] = [
         '#type' => 'html_tag',
         '#tag' => 'div',
-        '#value' => '<div class="messages messages--error">' . 
-          '<h3>' . $this->t('Analytics Error') . '</h3>' .
-          '<p>' . $this->t('There was an error loading analytics data. This may be because:') . '</p>' .
-          '<ul>' .
-            '<li>' . $this->t('Analytics tables are not properly configured') . '</li>' .
-            '<li>' . $this->t('Database connection issues') . '</li>' .
-            '<li>' . $this->t('AI features are not fully set up') . '</li>' .
-          '</ul>' .
-          '<p>' . $this->t('Error: @error', ['@error' => $e->getMessage()]) . '</p>' .
-          '</div>',
+        '#value' => '<div class="messages messages--error">' .
+        '<h3>' . $this->t('Analytics Error') . '</h3>' .
+        '<p>' . $this->t('There was an error loading analytics data. This may be because:') . '</p>' .
+        '<ul>' .
+        '<li>' . $this->t('Analytics tables are not properly configured') . '</li>' .
+        '<li>' . $this->t('Database connection issues') . '</li>' .
+        '<li>' . $this->t('AI features are not fully set up') . '</li>' .
+        '</ul>' .
+        '<p>' . $this->t('Error: @error', ['@error' => $e->getMessage()]) . '</p>' .
+        '</div>',
       ];
-      
+
       return $build;
     }
   }
 
   /**
    * Server status page.
+   *
+   * @param string $server_id
+   *   The server ID.
+   *
+   * @return array
+   *   A renderable array for the server status page.
    */
   public function serverStatus($server_id) {
     $server = Server::load($server_id);
-    
+
     if (!$server) {
-      throw $this->createNotFoundException();
+      throw new NotFoundHttpException('Server not found');
     }
 
     $backend = $server->getBackend();
@@ -457,9 +483,9 @@ class EmbeddingAdminController extends ControllerBase {
       '#attributes' => ['class' => ['breadcrumb-link']],
     ];
 
-    // Server information
+    // Server information.
     $server_info = $this->getServerInformation($server);
-    
+
     $build['info'] = [
       '#type' => 'details',
       '#title' => $this->t('Server Information'),
@@ -483,9 +509,9 @@ class EmbeddingAdminController extends ControllerBase {
       ],
     ];
 
-    // Configuration validation
+    // Configuration validation.
     $validation_results = $this->validationService->validateServerConfiguration($server);
-    
+
     $build['validation'] = [
       '#type' => 'details',
       '#title' => $this->t('Configuration Validation'),
@@ -516,14 +542,14 @@ class EmbeddingAdminController extends ControllerBase {
       $build['validation']['success'] = [
         '#type' => 'html_tag',
         '#tag' => 'p',
-        '#value' => $this->t('✓ Configuration is valid.'),
+        '#value' => $this->t('Configuration is valid.'),
         '#attributes' => ['class' => ['validation-success']],
       ];
     }
 
-    // Performance metrics for this server
+    // Performance metrics for this server.
     $server_metrics = $this->analyticsService->getServerMetrics($server_id, '24h');
-    
+
     $build['metrics'] = [
       '#type' => 'details',
       '#title' => $this->t('Performance Metrics (24h)'),
@@ -545,9 +571,9 @@ class EmbeddingAdminController extends ControllerBase {
       ],
     ];
 
-    // Indexes on this server
+    // Indexes on this server.
     $indexes = $this->getServerIndexes($server);
-    
+
     $build['indexes'] = [
       '#type' => 'details',
       '#title' => $this->t('Indexes on this Server'),
@@ -560,7 +586,8 @@ class EmbeddingAdminController extends ControllerBase {
         '#tag' => 'p',
         '#value' => $this->t('No indexes found on this server.'),
       ];
-    } else {
+    }
+    else {
       $index_rows = [];
       foreach ($indexes as $index) {
         if ($this->shouldDisplayEmbeddingStats()) {
@@ -591,23 +618,29 @@ class EmbeddingAdminController extends ControllerBase {
     }
 
     $build['#attached']['library'][] = 'search_api_postgresql/admin';
-    
+
     return $build;
   }
 
   /**
    * Index embeddings page.
+   *
+   * @param string $index_id
+   *   The index ID.
+   *
+   * @return array
+   *   A renderable array for the index embeddings page.
    */
   public function indexEmbeddings($index_id) {
     $index = Index::load($index_id);
-    
+
     if (!$index) {
-      throw $this->createNotFoundException();
+      throw new NotFoundHttpException('Index not found');
     }
 
     $server = $index->getServerInstance();
     $backend = $server->getBackend();
-    
+
     if (!in_array($backend->getPluginId(), ['postgresql', 'postgresql_azure'])) {
       $this->messenger()->addError($this->t('Index @index is not using a PostgreSQL backend.', [
         '@index' => $index->label(),
@@ -635,9 +668,9 @@ class EmbeddingAdminController extends ControllerBase {
       '#attributes' => ['class' => ['breadcrumb-link']],
     ];
 
-    // Embedding statistics
+    // Embedding statistics.
     $stats = $this->getIndexEmbeddingStats($index);
-    
+
     $build['stats'] = [
       '#type' => 'container',
       '#attributes' => ['class' => ['embedding-stats-cards']],
@@ -677,7 +710,7 @@ class EmbeddingAdminController extends ControllerBase {
       '#color' => 'purple',
     ];
 
-    // Embedding progress
+    // Embedding progress.
     if ($stats['embedding_coverage'] < 100) {
       $build['progress'] = [
         '#type' => 'details',
@@ -705,9 +738,9 @@ class EmbeddingAdminController extends ControllerBase {
       }
     }
 
-    // Field analysis
+    // Field analysis.
     $field_stats = $this->getFieldEmbeddingStats($index);
-    
+
     $build['fields'] = [
       '#type' => 'details',
       '#title' => $this->t('Field Analysis'),
@@ -739,9 +772,9 @@ class EmbeddingAdminController extends ControllerBase {
       ];
     }
 
-    // Recent embedding activity
+    // Recent embedding activity.
     $recent_activity = $this->getRecentEmbeddingActivity($index, 10);
-    
+
     $build['activity'] = [
       '#type' => 'details',
       '#title' => $this->t('Recent Activity'),
@@ -771,7 +804,8 @@ class EmbeddingAdminController extends ControllerBase {
         ],
         '#rows' => $activity_rows,
       ];
-    } else {
+    }
+    else {
       $build['activity']['empty'] = [
         '#type' => 'html_tag',
         '#tag' => 'p',
@@ -779,7 +813,7 @@ class EmbeddingAdminController extends ControllerBase {
       ];
     }
 
-    // Actions
+    // Actions.
     $build['actions'] = [
       '#type' => 'details',
       '#title' => $this->t('Actions'),
@@ -805,17 +839,31 @@ class EmbeddingAdminController extends ControllerBase {
     ];
 
     $build['#attached']['library'][] = 'search_api_postgresql/admin';
-    
+
     return $build;
   }
 
   /**
    * Formats currency for display in the admin interface.
+   *
+   * @param float $amount
+   *   The amount to format.
+   * @param string $currency
+   *   The currency code.
+   *
+   * @return string
+   *   The formatted currency string.
    */
   protected function formatCurrency($amount, $currency = 'AUD') {
     return '$' . number_format($amount, 2) . ' ' . $currency;
   }
 
+  /**
+   * Gets all indexes on PostgreSQL servers.
+   *
+   * @return array
+   *   An array of search API index entities.
+   */
   protected function getAllIndexes() {
     $servers = $this->entityTypeManager
       ->getStorage('search_api_server')
@@ -826,12 +874,15 @@ class EmbeddingAdminController extends ControllerBase {
       $indexes = $this->getServerIndexes($server);
       $all_indexes = array_merge($all_indexes, $indexes);
     }
-    
+
     return $all_indexes;
   }
 
   /**
    * Test configuration page.
+   *
+   * @return array
+   *   A renderable array for the test configuration page.
    */
   public function testConfiguration() {
     $build = [];
@@ -848,7 +899,7 @@ class EmbeddingAdminController extends ControllerBase {
       '#value' => $this->t('This page tests the configuration of all PostgreSQL servers and their embedding services.'),
     ];
 
-    // Get all PostgreSQL servers
+    // Get all PostgreSQL servers.
     $servers = $this->entityTypeManager
       ->getStorage('search_api_server')
       ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure', 'postgresql_vector']]);
@@ -869,27 +920,27 @@ class EmbeddingAdminController extends ControllerBase {
 
     foreach ($servers as $server) {
       $test_results = $this->validationService->runComprehensiveTests($server);
-      
-      // Check if test results are valid
+
+      // Check if test results are valid.
       if (!is_array($test_results)) {
         $test_results = [
-          'configuration' => ['success' => false, 'errors' => ['Failed to run tests'], 'warnings' => []],
-          'health' => ['overall' => false],
-          'overall' => ['success' => false, 'message' => 'Test execution failed'],
+          'configuration' => ['success' => FALSE, 'errors' => ['Failed to run tests'], 'warnings' => []],
+          'health' => ['overall' => FALSE],
+          'overall' => ['success' => FALSE, 'message' => 'Test execution failed'],
         ];
       }
-      
+
       $build['results'][$server->id()] = [
         '#type' => 'details',
         '#title' => $this->t('Server: @server', ['@server' => $server->label()]),
-        // Fix: Use the correct key structure from runComprehensiveTests
-        '#open' => !($test_results['overall']['success'] ?? true),
+        // Fix: Use the correct key structure from runComprehensiveTests.
+        '#open' => !($test_results['overall']['success'] ?? TRUE),
       ];
 
-      // Fix: Use the correct key structure
-      $overall_status = ($test_results['overall']['success'] ?? false) ? 'success' : 'error';
-      $status_text = ($test_results['overall']['success'] ?? false) ? 
-        $this->t('All tests passed') : 
+      // Fix: Use the correct key structure.
+      $overall_status = ($test_results['overall']['success'] ?? FALSE) ? 'success' : 'error';
+      $status_text = ($test_results['overall']['success'] ?? FALSE) ?
+        $this->t('All tests passed') :
         $this->t('Some tests failed');
 
       $build['results'][$server->id()]['status'] = [
@@ -899,15 +950,15 @@ class EmbeddingAdminController extends ControllerBase {
         '#value' => $status_text,
       ];
 
-      // Configuration tests
+      // Configuration tests.
       if (!empty($test_results['configuration'])) {
         $config_result = $test_results['configuration'];
         $build['results'][$server->id()]['configuration'] = [
           '#type' => 'details',
           '#title' => $this->t('Configuration Tests'),
-          '#open' => !($config_result['success'] ?? true),
+          '#open' => !($config_result['success'] ?? TRUE),
         ];
-        
+
         if (!empty($config_result['errors'])) {
           $build['results'][$server->id()]['configuration']['errors'] = [
             '#theme' => 'item_list',
@@ -916,7 +967,7 @@ class EmbeddingAdminController extends ControllerBase {
             '#attributes' => ['class' => ['test-errors']],
           ];
         }
-        
+
         if (!empty($config_result['warnings'])) {
           $build['results'][$server->id()]['configuration']['warnings'] = [
             '#theme' => 'item_list',
@@ -927,36 +978,38 @@ class EmbeddingAdminController extends ControllerBase {
         }
       }
 
-      // Health tests
+      // Health tests.
       if (!empty($test_results['health'])) {
         $health_result = $test_results['health'];
         $build['results'][$server->id()]['health'] = [
           '#type' => 'details',
           '#title' => $this->t('Health Tests'),
-          '#open' => !($health_result['overall'] ?? true),
+          '#open' => !($health_result['overall'] ?? TRUE),
         ];
-        
-        // Add health check details if available
+
+        // Add health check details if available.
         if (is_array($health_result)) {
           foreach ($health_result as $check_name => $check_result) {
-            if ($check_name === 'overall') continue;
-            
+            if ($check_name === 'overall') {
+              continue;
+            }
+
             $build['results'][$server->id()]['health'][$check_name] = [
               '#type' => 'html_tag',
               '#tag' => 'div',
               '#attributes' => ['class' => ['health-check']],
               '#value' => $this->t('@check: @status', [
                 '@check' => ucfirst(str_replace('_', ' ', $check_name)),
-                '@status' => is_array($check_result) ? 
-                  (($check_result['success'] ?? false) ? $this->t('Passed') : $this->t('Failed')) :
-                  ($check_result ? $this->t('Passed') : $this->t('Failed'))
+                '@status' => is_array($check_result) ?
+                (($check_result['success'] ?? FALSE) ? $this->t('Passed') : $this->t('Failed')) :
+                ($check_result ? $this->t('Passed') : $this->t('Failed')),
               ]),
             ];
           }
         }
       }
 
-      // Overall result
+      // Overall result.
       if (!empty($test_results['overall']['message'])) {
         $build['results'][$server->id()]['overall_message'] = [
           '#type' => 'html_tag',
@@ -968,22 +1021,28 @@ class EmbeddingAdminController extends ControllerBase {
     }
 
     $build['#attached']['library'][] = 'search_api_postgresql/admin';
-    
+
     return $build;
   }
 
   /**
    * Ajax endpoint for server statistics.
+   *
+   * @param string $server_id
+   *   The server ID.
+   *
+   * @return \Symfony\Component\HttpFoundation\JsonResponse
+   *   JSON response with server statistics.
    */
   public function ajaxServerStats($server_id) {
     $server = Server::load($server_id);
-    
+
     if (!$server) {
       return new JsonResponse(['error' => 'Server not found'], 404);
     }
 
     $stats = $this->analyticsService->getServerMetrics($server_id, '1h');
-    
+
     return new JsonResponse([
       'server_id' => $server_id,
       'stats' => $stats,
@@ -993,16 +1052,22 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Ajax endpoint for embedding progress.
+   *
+   * @param string $index_id
+   *   The index ID.
+   *
+   * @return \Symfony\Component\HttpFoundation\JsonResponse
+   *   JSON response with embedding progress data.
    */
   public function ajaxEmbeddingProgress($index_id) {
     $index = Index::load($index_id);
-    
+
     if (!$index) {
       return new JsonResponse(['error' => 'Index not found'], 404);
     }
 
     $stats = $this->getIndexEmbeddingStats($index);
-    
+
     return new JsonResponse([
       'index_id' => $index_id,
       'progress' => $stats,
@@ -1012,7 +1077,11 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Gets overview statistics for the dashboard.
-   * FIXED: Only calls AI methods when AI is enabled.
+   *
+   * Only calls AI methods when AI is enabled.
+   *
+   * @return array
+   *   An array of overview statistics.
    */
   protected function getOverviewStatistics() {
     $servers = $this->entityTypeManager
@@ -1024,55 +1093,59 @@ class EmbeddingAdminController extends ControllerBase {
     $total_embeddings = 0;
     $total_items = 0;
 
-    // Get basic stats without expensive database queries
+    // Get basic stats without expensive database queries.
     foreach ($servers as $server) {
       if ($server->status()) {
         $enabled_servers++;
       }
-      
+
       $indexes = $this->getServerIndexes($server);
       foreach ($indexes as $index) {
         $backend = $server->getBackend();
         $config = $backend->getConfiguration();
-        
-        $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) || 
+
+        $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) ||
                       ($config['azure_embedding']['enabled'] ?? FALSE);
-        
+
         if ($ai_enabled) {
           $ai_indexes++;
-          
-          // Only get detailed stats if we should display them
+
+          // Only get detailed stats if we should display them.
           if ($this->shouldDisplayEmbeddingStats()) {
             try {
               $stats = $this->getIndexEmbeddingStats($index);
               $total_embeddings += $stats['items_with_embeddings'];
               $total_items += $stats['total_items'];
-            } catch (\Exception $e) {
-              // Skip this index if stats fail
             }
-          } else {
-            // Use basic tracker stats for overview
+            catch (\Exception $e) {
+              // Skip this index if stats fail.
+            }
+          }
+          else {
+            // Use basic tracker stats for overview.
             try {
               $tracker = $index->getTrackerInstance();
               $total_items += $tracker->getTotalItemsCount();
-              // Can't get embedding count without database query, so estimate as 0
-            } catch (\Exception $e) {
-              // Skip if tracker fails
+              // Can't get embedding count without database query, so estimate as 0.
+            }
+            catch (\Exception $e) {
+              // Skip if tracker fails.
             }
           }
         }
       }
     }
 
-    // Get queue stats safely
+    // Get queue stats safely.
     $queue_items = 0;
     try {
       if ($this->queueManager && $this->shouldDisplayEmbeddingStats()) {
         $queue_stats = $this->queueManager->getQueueStats();
         $queue_items = $queue_stats['items_pending'] ?? 0;
       }
-    } catch (\Exception $e) {
-      // Queue might not be available
+    }
+    catch (\Exception $e) {
+      // Queue might not be available.
       $queue_items = 0;
     }
 
@@ -1087,6 +1160,12 @@ class EmbeddingAdminController extends ControllerBase {
     ];
   }
 
+  /**
+   * Builds the index status table.
+   *
+   * @return array
+   *   A renderable array for the index status table.
+   */
   protected function buildIndexStatusTable() {
     $servers = $this->entityTypeManager
       ->getStorage('search_api_server')
@@ -1111,40 +1190,42 @@ class EmbeddingAdminController extends ControllerBase {
       $server = $index->getServerInstance();
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
-      
-      // Check if AI is enabled for this index
-      $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) || 
+
+      // Check if AI is enabled for this index.
+      $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) ||
                     ($config['azure_embedding']['enabled'] ?? FALSE);
-      
+
       $status = $index->status() ? $this->t('Enabled') : $this->t('Disabled');
-      
+
       // GET BASIC STATS FOR ALL INDEXES (AI and non-AI)
       try {
         // Get basic index statistics from Search API tracker (no database queries)
         $tracker = $index->getTrackerInstance();
         $basic_total = $tracker->getTotalItemsCount();
         $basic_indexed = $tracker->getIndexedItemsCount();
-        
+
         if ($ai_enabled && $this->shouldDisplayEmbeddingStats()) {
-          // Get AI-specific stats for AI-enabled indexes ONLY when appropriate
+          // Get AI-specific stats for AI-enabled indexes ONLY when appropriate.
           $stats = $this->getIndexEmbeddingStats($index);
           $total_items = number_format($stats['total_items'] ?: $basic_total);
           $items_with_embeddings = number_format($stats['items_with_embeddings']);
           $coverage = round($stats['embedding_coverage'], 1) . '%';
-        } else {
-          // Use basic Search API stats without database queries
+        }
+        else {
+          // Use basic Search API stats without database queries.
           $total_items = number_format($basic_total);
           $items_with_embeddings = $ai_enabled ? $this->t('Not calculated') : $this->t('N/A');
           $coverage = $ai_enabled ? $this->t('Not calculated') : $this->t('N/A');
         }
-        
-      } catch (\Exception $e) {
-        // Fallback for any errors
+
+      }
+      catch (\Exception $e) {
+        // Fallback for any errors.
         $total_items = $this->t('Error');
         $items_with_embeddings = $this->t('Error');
         $coverage = $this->t('Error');
       }
-      
+
       $rows[] = [
         Link::createFromRoute($index->label(), 'entity.search_api_index.canonical', ['search_api_index' => $index->id()]),
         $status,
@@ -1173,33 +1254,50 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Helper method to safely check if AI is enabled for a server.
+   *
+   * @param \Drupal\search_api\Entity\Server $server
+   *   The server entity.
+   *
+   * @return bool
+   *   TRUE if AI is enabled for the server.
    */
   protected function isAiEnabledForServer($server) {
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
-      
-      return ($config['ai_embeddings']['enabled'] ?? FALSE) || 
+
+      return ($config['ai_embeddings']['enabled'] ?? FALSE) ||
             ($config['azure_embedding']['enabled'] ?? FALSE);
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       return FALSE;
     }
   }
 
   /**
    * Helper method to safely check if AI is enabled for an index.
+   *
+   * @param \Drupal\search_api\Entity\Index $index
+   *   The index entity.
+   *
+   * @return bool
+   *   TRUE if AI is enabled for the index.
    */
   protected function isAiEnabledForIndex($index) {
     try {
       $server = $index->getServerInstance();
       return $this->isAiEnabledForServer($server);
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       return FALSE;
     }
   }
 
   /**
    * Helper method to determine if on admin route.
+   *
+   * @return bool
+   *   TRUE if embedding stats should be displayed.
    */
   protected function shouldDisplayEmbeddingStats() {
     $route = \Drupal::routeMatch()->getRouteName();
@@ -1213,20 +1311,27 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Gets embedding statistics for an index.
-   * FIXED: Only calls AI methods when AI is enabled.
+   *
+   * Only calls AI methods when AI is enabled.
+   *
+   * @param \Drupal\search_api\Entity\Index $index
+   *   The index entity.
+   *
+   * @return array
+   *   An array of embedding statistics.
    */
   protected function getIndexEmbeddingStats($index) {
     try {
       $server = $index->getServerInstance();
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
-      
-      // Check AI is enabled
-      $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) || 
+
+      // Check AI is enabled.
+      $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) ||
                     ($config['azure_embedding']['enabled'] ?? FALSE);
-      
+
       if (!$ai_enabled) {
-        // Return default stats for non-AI indexes
+        // Return default stats for non-AI indexes.
         return [
           'total_items' => 0,
           'items_with_embeddings' => 0,
@@ -1234,21 +1339,23 @@ class EmbeddingAdminController extends ControllerBase {
           'pending_embeddings' => 0,
         ];
       }
-      
-      // Only call AI methods if AI is enabled
+
+      // Only call AI methods if AI is enabled.
       if (method_exists($backend, 'getVectorStats')) {
         return $backend->getVectorStats($index);
-      } elseif (method_exists($backend, 'getAzureVectorStats')) {
+      }
+      elseif (method_exists($backend, 'getAzureVectorStats')) {
         return $backend->getAzureVectorStats($index);
       }
-      
+
       return [
         'total_items' => 0,
         'items_with_embeddings' => 0,
         'embedding_coverage' => 0,
         'pending_embeddings' => 0,
       ];
-    } catch (\Exception $e) {
+    }
+    catch (\Exception $e) {
       return [
         'error' => $e->getMessage(),
         'total_items' => 0,
@@ -1261,6 +1368,9 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Builds the server status table.
+   *
+   * @return array
+   *   A renderable array for the server status table.
    */
   protected function buildServerStatusTable() {
     $servers = $this->entityTypeManager
@@ -1279,13 +1389,13 @@ class EmbeddingAdminController extends ControllerBase {
     foreach ($servers as $server) {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
-      
+
       $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) || ($config['azure_embedding']['enabled'] ?? FALSE);
       $status = $server->status() ? $this->t('Enabled') : $this->t('Disabled');
-      
+
       $health = $this->validationService->checkServerHealth($server);
-      $health_status = $health['overall'] ? '✓' : '✗';
-      
+      $health_status = $health['overall'] ? 'OK' : 'FAIL';
+
       $rows[] = [
         Link::createFromRoute($server->label(), 'search_api_postgresql.admin.server_status', ['server_id' => $server->id()]),
         $backend->getPluginDefinition()['label'],
@@ -1313,20 +1423,23 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Builds system health checks.
+   *
+   * @return array
+   *   A renderable array for the health checks.
    */
   protected function buildHealthChecks() {
     $health_checks = $this->validationService->runSystemHealthChecks();
-    
+
     $build = [
       '#type' => 'container',
       '#attributes' => ['class' => ['health-checks']],
     ];
 
     foreach ($health_checks as $check_name => $check_result) {
-      // FIX: Use 'success' key instead of 'status'
+      // FIX: Use 'success' key instead of 'status'.
       $status_class = $check_result['success'] ? 'success' : 'error';
-      $status_icon = $check_result['success'] ? '✓' : '✗';
-      
+      $status_icon = $check_result['success'] ? 'OK' : 'FAIL';
+
       $build[$check_name] = [
         '#type' => 'html_tag',
         '#tag' => 'div',
@@ -1349,6 +1462,9 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Builds quick action links.
+   *
+   * @return array
+   *   A renderable array for the quick action links.
    */
   protected function buildQuickActionLinks() {
     return [
@@ -1367,12 +1483,18 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Gets server information.
+   *
+   * @param \Drupal\search_api\Entity\Server $server
+   *   The server entity.
+   *
+   * @return array
+   *   An array of server information.
    */
   protected function getServerInformation($server) {
     $backend = $server->getBackend();
     $config = $backend->getConfiguration();
-    
-    // Always available from config
+
+    // Always available from config.
     $result = [
       'host' => $config['connection']['host'] ?? 'Unknown',
       'database' => $config['connection']['database'] ?? 'Unknown',
@@ -1381,20 +1503,21 @@ class EmbeddingAdminController extends ControllerBase {
     ];
 
     try {
-      // Only database-dependent operations in try block
+      // Only database-dependent operations in try block.
       $reflection = new \ReflectionClass($backend);
       $connect_method = $reflection->getMethod('connect');
       $connect_method->setAccessible(TRUE);
       $connect_method->invoke($backend);
-      
+
       $connector_property = $reflection->getProperty('connector');
       $connector_property->setAccessible(TRUE);
       $connector = $connector_property->getValue($backend);
-      
+
       $result['pg_version'] = $connector->getVersion();
       $result['has_pgvector'] = $this->validationService->checkPgVectorExtension($connector);
-    } catch (\Exception $e) {
-      // Only set defaults for database-dependent values
+    }
+    catch (\Exception $e) {
+      // Only set defaults for database-dependent values.
       $result['pg_version'] = 'Unknown';
       $result['has_pgvector'] = FALSE;
     }
@@ -1404,6 +1527,12 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Gets indexes for a server.
+   *
+   * @param \Drupal\search_api\Entity\Server $server
+   *   The server entity.
+   *
+   * @return array
+   *   An array of index entities.
    */
   protected function getServerIndexes($server) {
     return $this->entityTypeManager
@@ -1413,29 +1542,44 @@ class EmbeddingAdminController extends ControllerBase {
 
   /**
    * Gets field embedding statistics for an index.
+   *
+   * @param \Drupal\search_api\Entity\Index $index
+   *   The index entity.
+   *
+   * @return array
+   *   An array of field statistics.
    */
   protected function getFieldEmbeddingStats($index) {
     $field_stats = [];
-    
+
     foreach ($index->getFields() as $field_id => $field) {
       $field_stats[$field_id] = [
         'label' => $field->getLabel(),
         'type' => $field->getType(),
         'searchable' => in_array($field->getType(), ['text', 'postgresql_fulltext', 'string']),
         'included_in_embeddings' => in_array($field->getType(), ['text', 'postgresql_fulltext']),
-        'avg_length' => 0, // Would need to query database for actual stats
+      // Would need to query database for actual stats.
+        'avg_length' => 0,
       ];
     }
-    
+
     return $field_stats;
   }
 
   /**
    * Gets recent embedding activity for an index.
+   *
+   * @param \Drupal\search_api\Entity\Index $index
+   *   The index entity.
+   * @param int $limit
+   *   The maximum number of activity records to return.
+   *
+   * @return array
+   *   An array of recent activity records.
    */
   protected function getRecentEmbeddingActivity($index, $limit = 10) {
     // This would typically query a log table or activity table
-    // For now, return mock data
+    // For now, return mock data.
     return [];
   }
 

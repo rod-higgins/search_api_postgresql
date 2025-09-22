@@ -46,7 +46,7 @@ class IndexManager {
     $this->connector = $connector;
     $this->fieldMapper = $field_mapper;
     $this->config = $config;
-    // No embedding service for basic IndexManager
+    // No embedding service for basic IndexManager.
   }
 
   /**
@@ -67,24 +67,24 @@ class IndexManager {
       throw new SearchApiException("Index table '{$unquoted_table_name}' already exists.");
     }
 
-    // Ensure vector extension is available if needed
+    // Ensure vector extension is available if needed.
     if ($this->isVectorSearchEnabled() && !$this->checkVectorSupport()) {
       throw new SearchApiException('Vector search is enabled but pgvector extension is not available. Please install and enable the pgvector extension.');
     }
 
-    // Create main index table
+    // Create main index table.
     $sql = $this->buildCreateTableSql($table_name, $index);
     $this->connector->executeQuery($sql);
 
-    // Create full-text indexes
+    // Create full-text indexes.
     $this->createFullTextIndexes($table_name, $index);
 
-    // Create vector indexes if enabled
+    // Create vector indexes if enabled.
     if ($this->isVectorSearchEnabled()) {
       $this->createVectorIndexes($table_name, $index);
     }
 
-    // Create supporting indexes for faceting and filtering
+    // Create supporting indexes for faceting and filtering.
     $this->createSupportingIndexes($table_name, $index);
   }
 
@@ -104,25 +104,26 @@ class IndexManager {
 
     $table_name = $this->getIndexTableName($index);
 
-    // Get current table structure
+    // Get current table structure.
     $current_columns = $this->getTableColumns($unquoted_table_name);
     $required_columns = $this->fieldMapper->getFieldDefinitions($index);
 
-    // Add missing columns
+    // Add missing columns.
     foreach ($required_columns as $field_id => $field_info) {
       if (!in_array($field_id, $current_columns)) {
         $safe_field_id = $this->connector->quoteColumnName($field_id);
-        $safe_type = $field_info['type']; // FIXED: Use the PostgreSQL type directly
+        // FIXED: Use the PostgreSQL type directly.
+        $safe_type = $field_info['type'];
         $sql = "ALTER TABLE {$table_name} ADD COLUMN {$safe_field_id} {$safe_type}";
         $this->connector->executeQuery($sql);
       }
     }
 
-    // Recreate full-text indexes
+    // Recreate full-text indexes.
     $this->dropFullTextIndexes($table_name, $index);
     $this->createFullTextIndexes($table_name, $index);
 
-    // Recreate vector indexes if enabled
+    // Recreate vector indexes if enabled.
     if ($this->isVectorSearchEnabled()) {
       $this->dropVectorIndexes($table_name, $index);
       $this->createVectorIndexes($table_name, $index);
@@ -137,7 +138,7 @@ class IndexManager {
    */
   public function dropIndex($index) {
     $table_name = $this->getIndexTableName($index);
-    
+
     // Drop the table (CASCADE will remove dependent objects)
     $sql = "DROP TABLE IF EXISTS {$table_name} CASCADE";
     $this->connector->executeQuery($sql);
@@ -148,6 +149,7 @@ class IndexManager {
    */
   public function indexItem($table_name, IndexInterface $index, ItemInterface $item) {
     $fields = $item->getFields(TRUE);
+
     $values = [
       'search_api_id' => $item->getId(),
       'search_api_datasource' => $item->getDatasourceId(),
@@ -156,55 +158,52 @@ class IndexManager {
 
     $searchable_text_parts = [];
 
-    // Process field values with enhanced extraction
+    // Process field values - let FieldMapper handle all array conversion.
     foreach ($fields as $field_id => $field) {
-      // Validate field ID to prevent SQL injection
+      // Validate field ID to prevent SQL injection.
       $this->connector->validateIdentifier($field_id, 'field ID');
-      
+
       $field_values = $field->getValues();
       $field_type = $field->getType();
-      
+
       if (!empty($field_values)) {
         try {
-          // Get the first value and extract scalar data
-          $raw_value = reset($field_values);
-          
-          // Use the enhanced extraction method
-          $scalar_value = $this->fieldMapper->extractScalarValue($raw_value, $field_type);
-          
-          // Now prepare the value for the field type
-          $prepared_value = $this->fieldMapper->prepareFieldValue($scalar_value, $field_type);
+          // Pass ALL field values to FieldMapper for processing (handles arrays internally)
+          $prepared_value = $this->fieldMapper->prepareFieldValue($field_values, $field_type, $field);
           $values[$field_id] = $prepared_value;
-          
-          // Collect text for full-text search if this is a searchable field
+
+          // Collect searchable text only from text/string fields.
           $searchable_fields = $this->fieldMapper->getSearchableFields($index);
           if (in_array($field_id, $searchable_fields) && in_array($field_type, ['text', 'string'])) {
-            if (is_array($scalar_value)) {
-              $searchable_text_parts[] = implode(' ', array_filter($scalar_value, 'is_scalar'));
-            } elseif (is_scalar($scalar_value)) {
+            // Extract searchable text from first value only (entity IDs don't contribute to FTS)
+            $first_value = reset($field_values);
+            $scalar_value = $this->fieldMapper->extractScalarValue($first_value, $field_type);
+
+            if (is_scalar($scalar_value)) {
               $searchable_text_parts[] = (string) $scalar_value;
             }
           }
+
         }
         catch (\Exception $e) {
-          // Log the error with field details for debugging
+          // Log error and set to NULL to prevent indexing failure.
           \Drupal::logger('search_api_postgresql')->error('Failed to process field @field_id (@field_type) for item @item_id: @message', [
             '@field_id' => $field_id,
             '@field_type' => $field_type,
             '@item_id' => $item->getId(),
             '@message' => $e->getMessage(),
           ]);
-          
-          // Set field to NULL to prevent indexing failure
+
           $values[$field_id] = NULL;
         }
-      } else {
-        // Set empty fields to NULL
+      }
+      else {
+        // Set empty fields to NULL.
         $values[$field_id] = NULL;
       }
     }
 
-    // Generate full-text search vector
+    // Generate full-text search vector.
     $searchable_text = trim(implode(' ', array_filter($searchable_text_parts)));
     if (!empty($searchable_text)) {
       $fts_config = $this->validateFtsConfiguration();
@@ -213,14 +212,14 @@ class IndexManager {
 
     // Generate embeddings if enabled (queue for background processing)
     if ($this->isVectorSearchEnabled() && !empty($searchable_text)) {
-      // Set embedding to NULL initially - will be updated via queue
+      // Set embedding to NULL initially - will be updated via queue.
       $values['embedding_vector'] = NULL;
-      
-      // Queue embedding generation
+
+      // Queue embedding generation.
       $this->queueEmbeddingGeneration($index, $item->getId(), $searchable_text);
     }
 
-    // Build and execute INSERT query
+    // Build and execute INSERT query.
     $this->executeIndexQuery($table_name, $values, $searchable_text);
   }
 
@@ -235,28 +234,29 @@ class IndexManager {
     foreach ($values as $field_id => $value) {
       $quoted_column = $this->connector->quoteColumnName($field_id);
       $columns[] = $quoted_column;
-      
+
       if ($field_id === 'search_vector' && is_string($value) && strpos($value, 'to_tsvector') === 0) {
-        // Raw SQL expression for tsvector
+        // Raw SQL expression for tsvector.
         $placeholders[] = $value;
-      } else {
+      }
+      else {
         $placeholder = ":{$field_id}";
         $placeholders[] = $placeholder;
         $params[$placeholder] = $value;
       }
     }
 
-    // Add searchable text parameter if needed
+    // Add searchable text parameter if needed.
     if (!empty($searchable_text)) {
       $params[':searchable_text'] = $searchable_text;
     }
 
-    // Use UPSERT to handle updates
+    // Use UPSERT to handle updates.
     $insert_sql = "INSERT INTO {$table_name} (" . implode(', ', $columns) . ") 
                   VALUES (" . implode(', ', $placeholders) . ")
-                  ON CONFLICT (search_api_id) DO UPDATE SET " . 
+                  ON CONFLICT (search_api_id) DO UPDATE SET " .
                   $this->buildUpdateClause($columns, $placeholders, $values);
-    
+
     $this->connector->executeQuery($insert_sql, $params);
   }
 
@@ -265,17 +265,17 @@ class IndexManager {
    */
   protected function buildUpdateClause(array $columns, array $placeholders, array $values) {
     $update_parts = [];
-    
+
     for ($i = 0; $i < count($columns); $i++) {
       $column = $columns[$i];
       $placeholder = $placeholders[$i];
-      
-      // Skip the ID column in updates
-      if (strpos($column, 'search_api_id') === false) {
+
+      // Skip the ID column in updates.
+      if (strpos($column, 'search_api_id') === FALSE) {
         $update_parts[] = "{$column} = {$placeholder}";
       }
     }
-    
+
     return implode(', ', $update_parts);
   }
 
@@ -292,7 +292,7 @@ class IndexManager {
       return;
     }
 
-    // Validate and sanitize item IDs
+    // Validate and sanitize item IDs.
     $valid_item_ids = [];
     foreach ($item_ids as $id) {
       if (is_string($id) && !empty(trim($id))) {
@@ -306,31 +306,33 @@ class IndexManager {
     }
 
     try {
-      // Process in batches to avoid parameter limits
-      $batch_size = 100; // PostgreSQL can handle many parameters, but let's be safe
+      // Process in batches to avoid parameter limits.
+      // PostgreSQL can handle many parameters, but let's be safe.
+      $batch_size = 100;
       $batches = array_chunk($valid_item_ids, $batch_size);
-      
+
       $total_deleted = 0;
-      
+
       foreach ($batches as $batch) {
         $deleted_count = $this->deleteBatch($table_name, $batch);
         $total_deleted += $deleted_count;
       }
-      
+
       if ($total_deleted > 0) {
         $this->logger->info('Successfully deleted @count items from @table', [
           '@count' => $total_deleted,
           '@table' => $table_name,
         ]);
       }
-      
-    } catch (\Exception $e) {
+
+    }
+    catch (\Exception $e) {
       $this->logger->error('Failed to delete items from @table: @error', [
         '@table' => $table_name,
         '@error' => $e->getMessage(),
       ]);
-      
-      // Try graceful fallback: delete items one by one
+
+      // Try graceful fallback: delete items one by one.
       $this->deleteItemsIndividually($table_name, $valid_item_ids);
     }
   }
@@ -351,12 +353,12 @@ class IndexManager {
       return 0;
     }
 
-    // Create safe parameter names and map them to values
+    // Create safe parameter names and map them to values.
     $placeholders = [];
     $params = [];
-    
+
     foreach ($item_ids as $index => $id) {
-      // Create a safe parameter name using only index
+      // Create a safe parameter name using only index.
       $param_name = ":item_id_{$index}";
       $placeholders[] = $param_name;
       $params[$param_name] = $id;
@@ -364,10 +366,10 @@ class IndexManager {
 
     $id_field = $this->connector->quoteColumnName('search_api_id');
     $sql = "DELETE FROM {$table_name} WHERE {$id_field} IN (" . implode(', ', $placeholders) . ")";
-    
+
     $statement = $this->connector->executeQuery($sql, $params);
-    
-    // Return the number of affected rows
+
+    // Return the number of affected rows.
     return $statement->rowCount();
   }
 
@@ -382,20 +384,21 @@ class IndexManager {
   protected function deleteItemsIndividually($table_name, array $item_ids) {
     $id_field = $this->connector->quoteColumnName('search_api_id');
     $sql = "DELETE FROM {$table_name} WHERE {$id_field} = :item_id";
-    
+
     $deleted_count = 0;
     $failed_count = 0;
-    
+
     foreach ($item_ids as $id) {
       try {
         $params = [':item_id' => $id];
         $statement = $this->connector->executeQuery($sql, $params);
-        
+
         if ($statement->rowCount() > 0) {
           $deleted_count++;
         }
-        
-      } catch (\Exception $e) {
+
+      }
+      catch (\Exception $e) {
         $failed_count++;
         $this->logger->warning('Failed to delete individual item @id: @error', [
           '@id' => $id,
@@ -403,7 +406,7 @@ class IndexManager {
         ]);
       }
     }
-    
+
     if ($deleted_count > 0 || $failed_count > 0) {
       $this->logger->info('Individual deletion completed: @deleted deleted, @failed failed', [
         '@deleted' => $deleted_count,
@@ -427,16 +430,17 @@ class IndexManager {
     try {
       $id_field = $this->connector->quoteColumnName('search_api_id');
       $sql = "SELECT 1 FROM {$table_name} WHERE {$id_field} = :item_id LIMIT 1";
-      
+
       $statement = $this->connector->executeQuery($sql, [':item_id' => $item_id]);
-      return $statement->fetchColumn() !== false;
-      
-    } catch (\Exception $e) {
+      return $statement->fetchColumn() !== FALSE;
+
+    }
+    catch (\Exception $e) {
       $this->logger->warning('Failed to check if item exists @id: @error', [
         '@id' => $item_id,
         '@error' => $e->getMessage(),
       ]);
-      return false;
+      return FALSE;
     }
   }
 
@@ -453,7 +457,7 @@ class IndexManager {
       return;
     }
 
-    // First, check which items actually exist
+    // First, check which items actually exist.
     $existing_items = [];
     foreach ($item_ids as $id) {
       if ($this->itemExists($table_name, $id)) {
@@ -463,7 +467,8 @@ class IndexManager {
 
     if (!empty($existing_items)) {
       $this->deleteItems($table_name, $existing_items);
-    } else {
+    }
+    else {
       $this->logger->debug('No items found to delete from @table', [
         '@table' => $table_name,
       ]);
@@ -507,23 +512,24 @@ class IndexManager {
     $fields = $this->fieldMapper->getFieldDefinitions($index);
 
     $sql = "CREATE TABLE {$table_name} (\n";
-    
-    // Add system fields
+
+    // Add system fields.
     $id_field = $this->connector->quoteColumnName('search_api_id');
     $datasource_field = $this->connector->quoteColumnName('search_api_datasource');
     $language_field = $this->connector->quoteColumnName('search_api_language');
-    
+
     $sql .= "  {$id_field} VARCHAR(255) PRIMARY KEY,\n";
     $sql .= "  {$datasource_field} VARCHAR(255) NOT NULL,\n";
     $sql .= "  {$language_field} VARCHAR(12) NOT NULL DEFAULT '',\n";
 
     foreach ($fields as $field_id => $field_info) {
       $safe_field_id = $this->connector->quoteColumnName($field_id);
-      $safe_type = $field_info['type']; // FIXED
+      // FIXED.
+      $safe_type = $field_info['type'];
       $sql .= "  {$safe_field_id} {$safe_type},\n";
     }
 
-    // Add tsvector column for full-text search
+    // Add tsvector column for full-text search.
     $search_vector_field = $this->connector->quoteColumnName('search_vector');
     $sql .= "  {$search_vector_field} TSVECTOR\n";
     $sql .= ");";
@@ -541,26 +547,26 @@ class IndexManager {
    */
   protected function createFullTextIndexes($table_name, IndexInterface $index) {
     $unquoted_table_name = $this->getIndexTableNameUnquoted($index);
-    
-    // Create GIN index on tsvector column
+
+    // Create GIN index on tsvector column.
     $search_vector_field = $this->connector->quoteColumnName('search_vector');
     $fts_index_name = $this->connector->quoteIndexName($unquoted_table_name . '_fts_idx');
-    
+
     $sql = "CREATE INDEX {$fts_index_name} ON {$table_name} USING gin({$search_vector_field})";
     $this->connector->executeQuery($sql);
 
-    // Create trigram indexes for fuzzy search on searchable fields
+    // Create trigram indexes for fuzzy search on searchable fields.
     $searchable_fields = $this->fieldMapper->getSearchableFields($index);
     foreach ($searchable_fields as $field_id) {
       $safe_field = $this->connector->quoteColumnName($field_id);
       $trigram_index = $this->connector->quoteIndexName($unquoted_table_name . '_' . $field_id . '_trgm_idx');
-      
+
       try {
         $sql = "CREATE INDEX {$trigram_index} ON {$table_name} USING gin({$safe_field} gin_trgm_ops)";
         $this->connector->executeQuery($sql);
       }
       catch (\Exception $e) {
-        // Trigram extension might not be available
+        // Trigram extension might not be available.
         \Drupal::logger('search_api_postgresql')->notice('Could not create trigram index: @message', [
           '@message' => $e->getMessage(),
         ]);
@@ -583,14 +589,14 @@ class IndexManager {
     foreach ($vector_fields as $field_id) {
       $safe_field = $this->connector->quoteColumnName($field_id);
       $index_name = $this->connector->quoteIndexName($unquoted_table_name . '_' . $field_id . '_vector_idx');
-      
-      // Create HNSW index for fast vector similarity search
+
+      // Create HNSW index for fast vector similarity search.
       try {
         $sql = "CREATE INDEX {$index_name} ON {$table_name} USING hnsw ({$safe_field} vector_cosine_ops)";
         $this->connector->executeQuery($sql);
       }
       catch (\Exception $e) {
-        // Fall back to IVFFlat if HNSW is not available
+        // Fall back to IVFFlat if HNSW is not available.
         try {
           $sql = "CREATE INDEX {$index_name} ON {$table_name} USING ivfflat ({$safe_field} vector_cosine_ops) WITH (lists = 100)";
           $this->connector->executeQuery($sql);
@@ -612,24 +618,24 @@ class IndexManager {
    */
   protected function createSupportingIndexes($table_name, IndexInterface $index) {
     $unquoted_table_name = $this->getIndexTableNameUnquoted($index);
-    
-    // Create indexes on facetable fields
+
+    // Create indexes on facetable fields.
     $facetable_fields = $this->fieldMapper->getFacetableFields($index);
     foreach ($facetable_fields as $field_id) {
       $safe_field = $this->connector->quoteColumnName($field_id);
       $index_name = $this->connector->quoteIndexName($unquoted_table_name . '_' . $field_id . '_idx');
-      
+
       $sql = "CREATE INDEX {$index_name} ON {$table_name} ({$safe_field})";
       $this->connector->executeQuery($sql);
     }
 
-    // Create indexes on system fields
+    // Create indexes on system fields.
     $datasource_field = $this->connector->quoteColumnName('search_api_datasource');
     $language_field = $this->connector->quoteColumnName('search_api_language');
-    
+
     $datasource_index = $this->connector->quoteIndexName($unquoted_table_name . '_datasource_idx');
     $language_index = $this->connector->quoteIndexName($unquoted_table_name . '_language_idx');
-    
+
     $this->connector->executeQuery("CREATE INDEX {$datasource_index} ON {$table_name} ({$datasource_field})");
     $this->connector->executeQuery("CREATE INDEX {$language_index} ON {$table_name} ({$language_field})");
   }
@@ -644,13 +650,13 @@ class IndexManager {
    */
   protected function dropFullTextIndexes($table_name, IndexInterface $index) {
     $unquoted_table_name = $this->getIndexTableNameUnquoted($index);
-    
-    // Drop GIN index
+
+    // Drop GIN index.
     $fts_index_name = $this->connector->quoteIndexName($unquoted_table_name . '_fts_idx');
     $sql = "DROP INDEX IF EXISTS {$fts_index_name}";
     $this->connector->executeQuery($sql);
 
-    // Drop trigram indexes
+    // Drop trigram indexes.
     $searchable_fields = $this->fieldMapper->getSearchableFields($index);
     foreach ($searchable_fields as $field_id) {
       $trigram_index = $this->connector->quoteIndexName($unquoted_table_name . '_' . $field_id . '_trgm_idx');
@@ -689,12 +695,12 @@ class IndexManager {
    */
   protected function getIndexTableName($index) {
     $index_id = is_string($index) ? $index : $index->id();
-    
-    // Validate index ID
+
+    // Validate index ID.
     if (!preg_match('/^[a-z][a-z0-9_]*$/', $index_id)) {
       throw new \InvalidArgumentException("Invalid index ID: {$index_id}");
     }
-    
+
     $table_name = ($this->config['index_prefix'] ?? 'search_api_') . $index_id;
     return $this->connector->quoteTableName($table_name);
   }
@@ -710,17 +716,17 @@ class IndexManager {
    */
   protected function getIndexTableNameUnquoted($index) {
     $index_id = is_string($index) ? $index : $index->id();
-    
-    // Validate index ID
+
+    // Validate index ID.
     if (!preg_match('/^[a-z][a-z0-9_]*$/', $index_id)) {
       throw new \InvalidArgumentException("Invalid index ID: {$index_id}");
     }
-    
+
     $table_name = ($this->config['index_prefix'] ?? 'search_api_') . $index_id;
-    
-    // Validate but don't quote
+
+    // Validate but don't quote.
     $this->connector->validateIdentifier($table_name, 'table name');
-    
+
     return $table_name;
   }
 
@@ -745,18 +751,18 @@ class IndexManager {
    */
   protected function validateFtsConfiguration() {
     $fts_config = $this->config['fts_configuration'] ?? 'english';
-    
-    // Allowed PostgreSQL text search configurations
+
+    // Allowed PostgreSQL text search configurations.
     $allowed_configs = [
       'simple', 'english', 'french', 'german', 'spanish', 'portuguese',
       'italian', 'dutch', 'russian', 'norwegian', 'swedish', 'danish',
-      'finnish', 'hungarian', 'romanian', 'turkish'
+      'finnish', 'hungarian', 'romanian', 'turkish',
     ];
-    
+
     if (!in_array($fts_config, $allowed_configs)) {
       throw new \InvalidArgumentException("Invalid FTS configuration: {$fts_config}");
     }
-    
+
     return $fts_config;
   }
 
@@ -767,7 +773,7 @@ class IndexManager {
    *   TRUE if vector search is enabled.
    */
   protected function isVectorSearchEnabled() {
-    return !empty($this->config['ai_embeddings']['enabled']) || 
+    return !empty($this->config['ai_embeddings']['enabled']) ||
            !empty($this->config['vector_search']['enabled']);
   }
 
@@ -801,16 +807,17 @@ class IndexManager {
    */
   protected function buildUpdateSet(array $columns, array $values) {
     $updates = [];
-    
+
     foreach ($columns as $i => $column) {
-      // Skip primary key
+      // Skip primary key.
       if (strpos($column, 'search_api_id') !== FALSE) {
         continue;
       }
-      
+
       $updates[] = "{$column} = EXCLUDED.{$column}";
     }
-    
+
     return implode(', ', $updates);
   }
+
 }

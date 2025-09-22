@@ -119,10 +119,10 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
     $dimension = NULL,
     $max_retries = 3,
     $retry_delay = 1000,
-    EmbeddingCacheManager $cache_manager = NULL,
+    ?EmbeddingCacheManager $cache_manager = NULL,
     $organization_id = NULL,
     $timeout = 30,
-    $endpoint = 'https://api.openai.com/v1/embeddings'
+    $endpoint = 'https://api.openai.com/v1/embeddings',
   ) {
     $this->apiKey = $api_key;
     $this->model = $model;
@@ -133,14 +133,15 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
     $this->timeout = $timeout;
     $this->endpoint = $endpoint;
 
-    // Set dimension based on model or custom value
+    // Set dimension based on model or custom value.
     if ($dimension !== NULL) {
       $this->dimension = $dimension;
-    } else {
+    }
+    else {
       $this->dimension = self::$modelDimensions[$model] ?? 1536;
     }
 
-    // Set max tokens based on model
+    // Set max tokens based on model.
     $this->maxTokensPerRequest = $this->getMaxTokensForModel($model);
   }
 
@@ -148,27 +149,27 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
    * {@inheritdoc}
    */
   public function generateEmbedding($text) {
-    // Clean and prepare text
+    // Clean and prepare text.
     $text = $this->preprocessText($text);
-    
+
     if (empty($text)) {
       return NULL;
     }
 
-    // Try to get from cache first
+    // Try to get from cache first.
     if ($this->cacheManager) {
       $metadata = $this->getCacheMetadata();
       $cached_embedding = $this->cacheManager->getCachedEmbedding($text, $metadata);
-      
+
       if ($cached_embedding !== NULL) {
         return $cached_embedding;
       }
     }
 
-    // Generate embedding via API
+    // Generate embedding via API.
     $embedding = $this->generateEmbeddingFromApi($text);
 
-    // Cache the result if successful
+    // Cache the result if successful.
     if ($embedding && $this->cacheManager) {
       $metadata = $this->getCacheMetadata();
       $this->cacheManager->cacheEmbedding($text, $embedding, $metadata);
@@ -185,7 +186,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       return [];
     }
 
-    // Preprocess all texts
+    // Preprocess all texts.
     $processed_texts = [];
     $original_indices = [];
     foreach ($texts as $index => $text) {
@@ -204,29 +205,31 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
     $texts_to_generate = [];
     $indices_to_generate = [];
 
-    // Check cache for all texts
+    // Check cache for all texts.
     if ($this->cacheManager) {
       $metadata = $this->getCacheMetadata();
       $cached_embeddings = $this->cacheManager->getCachedEmbeddingsBatch($processed_texts, $metadata);
 
-      // Separate cached and uncached texts
+      // Separate cached and uncached texts.
       foreach ($processed_texts as $i => $text) {
         $original_index = $original_indices[$i];
-        
+
         if (isset($cached_embeddings[$i])) {
           $final_embeddings[$original_index] = $cached_embeddings[$i];
-        } else {
+        }
+        else {
           $texts_to_generate[] = $text;
           $indices_to_generate[] = $original_index;
         }
       }
-    } else {
-      // No cache, generate all embeddings
+    }
+    else {
+      // No cache, generate all embeddings.
       $texts_to_generate = $processed_texts;
       $indices_to_generate = $original_indices;
     }
 
-    // Generate embeddings for uncached texts in batches
+    // Generate embeddings for uncached texts in batches.
     if (!empty($texts_to_generate)) {
       $batches = $this->splitIntoBatches($texts_to_generate);
       $batch_start_index = 0;
@@ -234,13 +237,13 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       foreach ($batches as $batch) {
         $batch_embeddings = $this->generateBatchEmbeddingsFromApi($batch);
 
-        // Add batch embeddings to final result
+        // Add batch embeddings to final result.
         foreach ($batch_embeddings as $i => $embedding) {
           $original_index = $indices_to_generate[$batch_start_index + $i];
           $final_embeddings[$original_index] = $embedding;
         }
 
-        // Cache the batch embeddings
+        // Cache the batch embeddings.
         if ($this->cacheManager && !empty($batch_embeddings)) {
           $metadata = $this->getCacheMetadata();
           $this->cacheManager->cacheEmbeddingsBatch($batch, $batch_embeddings, $metadata);
@@ -282,7 +285,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       'model' => $this->model,
     ];
 
-    // Add dimensions parameter for models that support it
+    // Add dimensions parameter for models that support it.
     if (in_array($this->model, ['text-embedding-3-small', 'text-embedding-3-large'])) {
       $data['dimensions'] = $this->dimension;
     }
@@ -306,7 +309,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       'model' => $this->model,
     ];
 
-    // Add dimensions parameter for models that support it
+    // Add dimensions parameter for models that support it.
     if (in_array($this->model, ['text-embedding-3-small', 'text-embedding-3-large'])) {
       $data['dimensions'] = $this->dimension;
     }
@@ -332,7 +335,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       'Authorization: Bearer ' . $this->apiKey,
     ];
 
-    // Add organization header if provided
+    // Add organization header if provided.
     if ($this->organizationId) {
       $headers[] = 'OpenAI-Organization: ' . $this->organizationId;
     }
@@ -367,7 +370,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
       if ($http_code === 200) {
         $result = json_decode($response, TRUE);
-        
+
         if (isset($result['error'])) {
           throw new SearchApiException('OpenAI API error: ' . $result['error']['message']);
         }
@@ -380,35 +383,39 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
             }
           }
           return $embeddings;
-        } else {
+        }
+        else {
           return $result['data'][0]['embedding'] ?? NULL;
         }
       }
 
-      // Handle rate limiting and temporary errors
+      // Handle rate limiting and temporary errors.
       if (in_array($http_code, [429, 500, 502, 503, 504]) && $attempt < $this->maxRetries) {
         $attempt++;
-        $delay = $this->retryDelay * pow(2, $attempt - 1); // Exponential backoff
-        
-        // Parse retry-after header if available for 429 responses
+        // Exponential backoff.
+        $delay = $this->retryDelay * pow(2, $attempt - 1);
+
+        // Parse retry-after header if available for 429 responses.
         if ($http_code === 429) {
           $retry_after = $this->parseRetryAfterHeader($response);
           if ($retry_after > 0) {
-            $delay = min($retry_after * 1000, $delay * 2); // Use smaller of retry-after or exponential backoff
+            // Use smaller of retry-after or exponential backoff.
+            $delay = min($retry_after * 1000, $delay * 2);
           }
         }
-        
+
         usleep($delay * 1000);
         continue;
       }
 
-      // Parse error response for better error messages
+      // Parse error response for better error messages.
       $error_message = 'HTTP ' . $http_code;
       if ($response) {
         $error_data = json_decode($response, TRUE);
         if (isset($error_data['error']['message'])) {
           $error_message .= ': ' . $error_data['error']['message'];
-        } else {
+        }
+        else {
           $error_message .= ' - ' . $response;
         }
       }
@@ -435,11 +442,12 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
     foreach ($texts as $text) {
       $estimated_tokens = $this->estimateTokenCount($text);
-      
-      // If adding this text would exceed limits, start a new batch
-      if (!empty($current_batch) && 
-          ($current_tokens + $estimated_tokens > $this->maxTokensPerRequest || 
-           count($current_batch) >= 2048)) { // OpenAI has a limit of 2048 inputs per batch
+
+      // If adding this text would exceed limits, start a new batch.
+      if (!empty($current_batch) &&
+          ($current_tokens + $estimated_tokens > $this->maxTokensPerRequest ||
+      // OpenAI has a limit of 2048 inputs per batch.
+           count($current_batch) >= 2048)) {
         $batches[] = $current_batch;
         $current_batch = [];
         $current_tokens = 0;
@@ -466,7 +474,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
    *   Estimated token count.
    */
   protected function estimateTokenCount($text) {
-    // Rough estimation: ~4 characters per token for English text
+    // Rough estimation: ~4 characters per token for English text.
     return ceil(strlen($text) / 4);
   }
 
@@ -495,17 +503,17 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
    *   The preprocessed text.
    */
   protected function preprocessText($text) {
-    // Remove excessive whitespace
+    // Remove excessive whitespace.
     $text = preg_replace('/\s+/', ' ', trim($text));
-    
-    // Remove null bytes and control characters
+
+    // Remove null bytes and control characters.
     $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
-    
-    // Limit text length based on model token limits
+
+    // Limit text length based on model token limits.
     $max_chars = $this->getMaxCharsForModel($this->model);
     if (strlen($text) > $max_chars) {
       $text = substr($text, 0, $max_chars);
-      // Try to break at word boundary
+      // Try to break at word boundary.
       $last_space = strrpos($text, ' ');
       if ($last_space !== FALSE && $last_space > $max_chars * 0.8) {
         $text = substr($text, 0, $last_space);
@@ -526,7 +534,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
    */
   protected function getMaxCharsForModel($model) {
     // Conservative character limits based on token limits
-    // OpenAI models generally have 8192 token limits
+    // OpenAI models generally have 8192 token limits.
     $token_limits = [
       'text-embedding-ada-002' => 8192,
       'text-embedding-3-small' => 8192,
@@ -534,7 +542,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
     ];
 
     $token_limit = $token_limits[$model] ?? 8192;
-    // Conservative estimate: 3 characters per token on average
+    // Conservative estimate: 3 characters per token on average.
     return $token_limit * 3;
   }
 
@@ -548,7 +556,8 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
    *   Maximum tokens per request.
    */
   protected function getMaxTokensForModel($model) {
-    return 8192; // Standard limit for OpenAI embedding models
+    // Standard limit for OpenAI embedding models.
+    return 8192;
   }
 
   /**
@@ -562,7 +571,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
    */
   protected function parseRetryAfterHeader($response) {
     // This is a simplified implementation
-    // In practice, you'd parse the actual HTTP headers
+    // In practice, you'd parse the actual HTTP headers.
     return 0;
   }
 
@@ -622,7 +631,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
     try {
       $test_text = 'test connection';
       $embedding = $this->generateEmbeddingFromApi($test_text);
-      
+
       if ($embedding && is_array($embedding) && count($embedding) === $this->dimension) {
         return [
           'success' => TRUE,
@@ -631,14 +640,15 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
           'model' => $this->model,
         ];
       }
-      
+
       return [
         'success' => FALSE,
         'message' => 'Invalid response from API',
         'dimension' => $embedding ? count($embedding) : 0,
       ];
-      
-    } catch (\Exception $e) {
+
+    }
+    catch (\Exception $e) {
       return [
         'success' => FALSE,
         'message' => 'Connection failed: ' . $e->getMessage(),
@@ -682,4 +692,5 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
   public static function getModelDimension($model) {
     return self::$modelDimensions[$model] ?? NULL;
   }
+
 }

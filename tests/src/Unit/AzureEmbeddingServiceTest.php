@@ -11,7 +11,6 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
-use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -73,7 +72,7 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $this->embeddingService = $this->getMockBuilder(AzureOpenAIEmbeddingService::class)
       ->setConstructorArgs([
         $this->config['endpoint'],
-        $this->config['api_key'], 
+        $this->config['api_key'],
         $this->config['deployment_name'],
         $this->config,
         $this->httpClient,
@@ -89,18 +88,18 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
    * @covers ::isAvailable
    */
   public function testServiceAvailability() {
-    // Test with valid configuration
+    // Test with valid configuration.
     $this->assertTrue($this->embeddingService->isAvailable());
 
-    // Test with missing endpoint
+    // Test with missing endpoint.
     $service_no_endpoint = new AzureOpenAIEmbeddingService('', $this->config['api_key'], $this->config['deployment_name']);
     $this->assertFalse($service_no_endpoint->isAvailable());
 
-    // Test with missing API key
+    // Test with missing API key.
     $service_no_key = new AzureOpenAIEmbeddingService($this->config['endpoint'], '', $this->config['deployment_name']);
     $this->assertFalse($service_no_key->isAvailable());
 
-    // Test with missing deployment name
+    // Test with missing deployment name.
     $service_no_deployment = new AzureOpenAIEmbeddingService($this->config['endpoint'], $this->config['api_key'], '');
     $this->assertFalse($service_no_deployment->isAvailable());
   }
@@ -112,7 +111,8 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
    */
   public function testSuccessfulSingleEmbeddingGeneration() {
     $text = 'This is a test document for embedding generation.';
-    $expected_embedding = array_fill(0, 1536, 0.1); // Mock 1536-dimensional embedding
+    // Mock 1536-dimensional embedding.
+    $expected_embedding = array_fill(0, 1536, 0.1);
 
     $mock_response = [
       'data' => [
@@ -159,7 +159,7 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $mock_response = [
       'data' => [
         ['object' => 'embedding', 'index' => 0, 'embedding' => $expected_embeddings[0]],
-        ['object' => 'embedding', 'index' => 1, 'embedding' => $expected_embeddings[1]], 
+        ['object' => 'embedding', 'index' => 1, 'embedding' => $expected_embeddings[1]],
         ['object' => 'embedding', 'index' => 2, 'embedding' => $expected_embeddings[2]],
       ],
       'model' => 'text-embedding-ada-002',
@@ -187,22 +187,23 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
    * @covers ::generateEmbeddings
    */
   public function testBatchSizeLimiting() {
-    // Create more texts than max batch size
+    // Create more texts than max batch size.
     $texts = array_fill(0, 20, 'Test document');
-    
+
     $mock_response = [
-      'data' => array_map(function($i) {
+      'data' => array_map(function ($i) {
         return [
           'object' => 'embedding',
           'index' => $i,
           'embedding' => array_fill(0, 1536, 0.1),
         ];
-      }, range(0, 15)), // Only first 16 (max batch size)
+        // Only first 16 (max batch size)
+      }, range(0, 15)),
       'model' => 'text-embedding-ada-002',
       'usage' => ['prompt_tokens' => 160, 'total_tokens' => 160],
     ];
 
-    // Should make multiple requests due to batch size limit
+    // Should make multiple requests due to batch size limit.
     $this->embeddingService->expects($this->exactly(2))
       ->method('makeHttpRequest')
       ->willReturn($mock_response);
@@ -282,33 +283,33 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
    * @covers ::preprocessText
    */
   public function testTextPreprocessing() {
-    // Use reflection to access protected method
+    // Use reflection to access protected method.
     $reflection = new \ReflectionClass($this->embeddingService);
     $method = $reflection->getMethod('preprocessText');
     $method->setAccessible(TRUE);
 
-    // Test whitespace normalization
+    // Test whitespace normalization.
     $input = "This  has   multiple    spaces\n\nand\tlines";
     $expected = "This has multiple spaces and lines";
     $result = $method->invokeArgs($this->embeddingService, [$input]);
     $this->assertEquals($expected, $result);
 
-    // Test length limiting
+    // Test length limiting.
     $long_text = str_repeat('a', 9000);
     $result = $method->invokeArgs($this->embeddingService, [$long_text]);
     $this->assertLessThanOrEqual(8000, strlen($result));
 
-    // Test HTML tag removal
+    // Test HTML tag removal.
     $html_text = '<p>This has <strong>HTML</strong> tags</p>';
     $expected = 'This has HTML tags';
     $result = $method->invokeArgs($this->embeddingService, [$html_text]);
     $this->assertEquals($expected, $result);
 
-    // Test empty text handling
+    // Test empty text handling.
     $result = $method->invokeArgs($this->embeddingService, ['']);
     $this->assertEquals('', $result);
 
-    // Test special character handling
+    // Test special character handling.
     $special_text = 'Text with émojis 🚀 and spëcial chars';
     $result = $method->invokeArgs($this->embeddingService, [$special_text]);
     $this->assertStringContainsString('émojis', $result);
@@ -321,12 +322,12 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
    * @covers ::formatRequestPayload
    */
   public function testRequestPayloadFormatting() {
-    // Use reflection to access protected method
+    // Use reflection to access protected method.
     $reflection = new \ReflectionClass($this->embeddingService);
     $method = $reflection->getMethod('formatRequestPayload');
     $method->setAccessible(TRUE);
 
-    // Test single text
+    // Test single text.
     $texts = ['Test document'];
     $payload = $method->invokeArgs($this->embeddingService, [$texts]);
 
@@ -336,13 +337,13 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $this->assertEquals(['Test document'], $payload['input']);
     $this->assertEquals('text-embedding-ada-002', $payload['model']);
 
-    // Test multiple texts
+    // Test multiple texts.
     $texts = ['First document', 'Second document'];
     $payload = $method->invokeArgs($this->embeddingService, [$texts]);
-    
+
     $this->assertEquals(['First document', 'Second document'], $payload['input']);
 
-    // Test empty input handling
+    // Test empty input handling.
     $this->expectException(\InvalidArgumentException::class);
     $method->invokeArgs($this->embeddingService, [[]]);
   }
@@ -353,12 +354,12 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
    * @covers ::validateResponse
    */
   public function testResponseValidation() {
-    // Use reflection to access protected method
+    // Use reflection to access protected method.
     $reflection = new \ReflectionClass($this->embeddingService);
     $method = $reflection->getMethod('validateResponse');
     $method->setAccessible(TRUE);
 
-    // Test valid response
+    // Test valid response.
     $valid_response = [
       'data' => [
         ['object' => 'embedding', 'index' => 0, 'embedding' => array_fill(0, 1536, 0.1)],
@@ -368,9 +369,9 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
 
     $this->assertTrue($method->invokeArgs($this->embeddingService, [$valid_response]));
 
-    // Test missing data field
+    // Test missing data field.
     $invalid_response = ['model' => 'text-embedding-ada-002'];
-    
+
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Invalid response format');
     $method->invokeArgs($this->embeddingService, [$invalid_response]);
@@ -384,7 +385,7 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
   public function testRetryMechanismWithExponentialBackoff() {
     $text = 'Test text';
 
-    // Mock temporary failure followed by success
+    // Mock temporary failure followed by success.
     $this->embeddingService->expects($this->exactly(2))
       ->method('makeHttpRequest')
       ->will($this->onConsecutiveCalls(
@@ -422,10 +423,10 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
       ->method('makeHttpRequest')
       ->willReturn($mock_response);
 
-    // Generate embedding to trigger usage tracking
+    // Generate embedding to trigger usage tracking.
     $this->embeddingService->generateEmbedding('Test text');
 
-    // Get usage statistics
+    // Get usage statistics.
     $stats = $this->embeddingService->getUsageStatistics();
 
     $this->assertIsArray($stats);
@@ -433,7 +434,7 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $this->assertArrayHasKey('total_tokens', $stats);
     $this->assertArrayHasKey('total_embeddings', $stats);
     $this->assertArrayHasKey('average_tokens_per_request', $stats);
-    
+
     $this->assertEquals(1, $stats['total_requests']);
     $this->assertEquals(10, $stats['total_tokens']);
     $this->assertEquals(1, $stats['total_embeddings']);
@@ -445,7 +446,7 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
    * @covers ::__construct
    */
   public function testConfigurationValidation() {
-    // Test valid configuration
+    // Test valid configuration.
     $service = new AzureOpenAIEmbeddingService(
       'https://test.openai.azure.com/',
       'test-key',
@@ -453,10 +454,10 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     );
     $this->assertTrue($service->isAvailable());
 
-    // Test invalid endpoint format
+    // Test invalid endpoint format.
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Invalid endpoint format');
-    
+
     new AzureOpenAIEmbeddingService(
       'invalid-endpoint',
       'test-key',
@@ -470,18 +471,18 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
    * @covers ::validateEmbeddingDimensions
    */
   public function testEmbeddingDimensionValidation() {
-    // Use reflection to access protected method
+    // Use reflection to access protected method.
     $reflection = new \ReflectionClass($this->embeddingService);
     $method = $reflection->getMethod('validateEmbeddingDimensions');
     $method->setAccessible(TRUE);
 
-    // Test valid dimensions
+    // Test valid dimensions.
     $valid_embedding = array_fill(0, 1536, 0.1);
     $this->assertTrue($method->invokeArgs($this->embeddingService, [$valid_embedding]));
 
-    // Test invalid dimensions
+    // Test invalid dimensions.
     $invalid_embedding = array_fill(0, 100, 0.1);
-    
+
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Unexpected embedding dimensions');
     $method->invokeArgs($this->embeddingService, [$invalid_embedding]);
@@ -493,27 +494,27 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
    * @covers ::extractErrorMessage
    */
   public function testErrorMessageExtraction() {
-    // Use reflection to access protected method
+    // Use reflection to access protected method.
     $reflection = new \ReflectionClass($this->embeddingService);
     $method = $reflection->getMethod('extractErrorMessage');
     $method->setAccessible(TRUE);
 
-    // Test OpenAI error format
+    // Test OpenAI error format.
     $response_body = '{"error": {"code": "invalid_api_key", "message": "Invalid API key provided"}}';
     $error_message = $method->invokeArgs($this->embeddingService, [$response_body]);
     $this->assertEquals('Invalid API key provided', $error_message);
 
-    // Test generic error format
+    // Test generic error format.
     $response_body = '{"message": "Service temporarily unavailable"}';
     $error_message = $method->invokeArgs($this->embeddingService, [$response_body]);
     $this->assertEquals('Service temporarily unavailable', $error_message);
 
-    // Test invalid JSON
+    // Test invalid JSON.
     $response_body = 'Invalid JSON response';
     $error_message = $method->invokeArgs($this->embeddingService, [$response_body]);
     $this->assertEquals('Unknown error occurred', $error_message);
 
-    // Test empty response
+    // Test empty response.
     $error_message = $method->invokeArgs($this->embeddingService, ['']);
     $this->assertEquals('Unknown error occurred', $error_message);
   }
@@ -550,7 +551,7 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     // Mock malformed response (missing required fields)
     $malformed_response = [
       'model' => 'text-embedding-ada-002',
-      // Missing 'data' field
+      // Missing 'data' field.
     ];
 
     $this->embeddingService->expects($this->once())
@@ -568,8 +569,7 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
    */
   public function testConcurrentRequestHandling() {
     // This test would require actual threading/async support
-    // For now, we verify that the service can handle multiple sequential requests
-    
+    // For now, we verify that the service can handle multiple sequential requests.
     $texts = ['Text 1', 'Text 2', 'Text 3'];
     $mock_response = [
       'data' => [
@@ -592,4 +592,5 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
       $this->assertCount(1536, $result);
     }
   }
+
 }

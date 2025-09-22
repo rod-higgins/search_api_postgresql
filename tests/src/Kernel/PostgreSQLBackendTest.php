@@ -94,7 +94,7 @@ class PostgreSQLBackendTest extends KernelTestBase {
   public function testSupportedFeatures() {
     $backend = $this->server->getBackend();
     $features = $backend->getSupportedFeatures();
-    
+
     $expected_features = [
       'search_api_facets',
       'search_api_autocomplete',
@@ -114,10 +114,10 @@ class PostgreSQLBackendTest extends KernelTestBase {
    */
   public function testSupportedDataTypes() {
     $backend = $this->server->getBackend();
-    
+
     $supported_types = [
       'text',
-      'string', 
+      'string',
       'integer',
       'decimal',
       'date',
