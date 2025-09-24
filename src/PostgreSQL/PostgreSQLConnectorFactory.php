@@ -9,7 +9,6 @@ use Psr\Log\LoggerInterface;
  * Factory for creating PostgreSQL connectors.
  */
 class PostgreSQLConnectorFactory {
-
   /**
    * The logger.
    *

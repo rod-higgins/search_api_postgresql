@@ -10,7 +10,6 @@ use Psr\Log\LoggerInterface;
  * Circuit breaker pattern implementation for external service resilience.
  */
 class CircuitBreakerService {
-
   /**
    * Circuit breaker states.
    */

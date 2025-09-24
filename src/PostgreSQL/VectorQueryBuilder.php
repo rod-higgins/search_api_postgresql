@@ -8,7 +8,6 @@ use Drupal\search_api\Query\QueryInterface;
  * Enhanced QueryBuilder with vector search capabilities.
  */
 class VectorQueryBuilder extends QueryBuilder {
-
   /**
    * The embedding service.
    *
@@ -77,8 +76,8 @@ class VectorQueryBuilder extends QueryBuilder {
       // With search keys: use actual relevance calculation.
       $fts_config = $this->validateFtsConfiguration();
       $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') .
-                ", to_tsquery('{$fts_config}', :ts_query)) AS " .
-                $this->connector->quoteColumnName('search_api_relevance');
+        ", to_tsquery('{$fts_config}', :ts_query)) AS " .
+        $this->connector->quoteColumnName('search_api_relevance');
     }
     else {
       // Without search keys: provide default relevance value.
@@ -218,7 +217,7 @@ class VectorQueryBuilder extends QueryBuilder {
     if ($query->getKeys() && $this->embeddingService) {
       // With search keys and embedding service: use vector similarity score.
       $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS " .
-                $this->connector->quoteColumnName('search_api_relevance');
+        $this->connector->quoteColumnName('search_api_relevance');
     }
     else {
       // Without search keys or embedding service: provide default relevance value.
@@ -302,12 +301,12 @@ class VectorQueryBuilder extends QueryBuilder {
       $fields[] = "
         (
           {$text_weight} * ts_rank(" . $this->connector->quoteColumnName('search_vector') .
-          ", to_tsquery('{$fts_config}', :ts_query)) +
+        ", to_tsquery('{$fts_config}', :ts_query)) +
           {$vector_weight} * (1 - (content_embedding <=> :query_embedding))
         ) AS hybrid_score";
 
       $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') .
-                ", to_tsquery('{$fts_config}', :ts_query)) AS text_score";
+        ", to_tsquery('{$fts_config}', :ts_query)) AS text_score";
       $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS vector_score";
       $fields[] = "hybrid_score AS " . $this->connector->quoteColumnName('search_api_relevance');
     }
@@ -404,7 +403,7 @@ class VectorQueryBuilder extends QueryBuilder {
    */
   protected function isVectorSearchEnabled() {
     return !empty($this->config['vector_search']['enabled']) ||
-           !empty($this->config['ai_embeddings']['enabled']);
+       !empty($this->config['ai_embeddings']['enabled']);
   }
 
   /**

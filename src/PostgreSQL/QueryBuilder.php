@@ -11,7 +11,6 @@ use Drupal\search_api\Query\ConditionGroupInterface;
  * Builds PostgreSQL queries for Search API with SQL injection prevention.
  */
 class QueryBuilder {
-
   /**
    * The PostgreSQL connector.
    *
@@ -154,8 +153,8 @@ class QueryBuilder {
       // With search keys: use actual relevance calculation.
       $fts_config = $this->validateFtsConfiguration();
       $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') .
-                ", to_tsquery('{$fts_config}', :ts_query)) AS " .
-                $this->connector->quoteColumnName('search_api_relevance');
+        ", to_tsquery('{$fts_config}', :ts_query)) AS " .
+        $this->connector->quoteColumnName('search_api_relevance');
     }
     else {
       // Without search keys: provide default relevance value.
@@ -181,7 +180,7 @@ class QueryBuilder {
     if ($keys = $query->getKeys()) {
       $fts_config = $this->validateFtsConfiguration();
       $conditions[] = $this->connector->quoteColumnName('search_vector') .
-                     " @@ to_tsquery('{$fts_config}', :ts_query)";
+             " @@ to_tsquery('{$fts_config}', :ts_query)";
     }
 
     // Add other conditions.
@@ -495,7 +494,7 @@ class QueryBuilder {
     $terms = array_filter($terms);
 
     return implode(' & ', array_map(function ($term) {
-      return "'" . addslashes($term) . "'";
+        return "'" . addslashes($term) . "'";
     }, $terms));
   }
 

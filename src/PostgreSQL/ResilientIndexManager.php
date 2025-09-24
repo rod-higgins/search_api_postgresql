@@ -14,7 +14,6 @@ use Drupal\search_api_postgresql\Service\ResilientEmbeddingService;
  * Enhanced IndexManager with graceful degradation for embedding failures.
  */
 class ResilientIndexManager extends IndexManager {
-
   /**
    * Degradation state tracking.
    *
@@ -138,7 +137,6 @@ class ResilientIndexManager extends IndexManager {
               $this->recordEmbeddingFailure($item_id, 'No embedding generated');
             }
           }
-
         }
         catch (\Exception $e) {
           $this->recordEmbeddingFailure($item_id, $e->getMessage());
@@ -166,7 +164,6 @@ class ResilientIndexManager extends IndexManager {
       $this->evaluateDegradationState();
 
       return $indexed_items;
-
     }
     catch (\Exception $e) {
       $this->connector->rollback();
@@ -187,11 +184,11 @@ class ResilientIndexManager extends IndexManager {
     if (!$this->embeddingService instanceof ResilientEmbeddingService) {
       // Wrap in resilient service if not already.
       $this->embeddingService = new ResilientEmbeddingService(
-        $this->embeddingService,
-        \Drupal::service('search_api_postgresql.circuit_breaker'),
-        \Drupal::service('search_api_postgresql.cache_manager'),
-        \Drupal::logger('search_api_postgresql')
-      );
+            $this->embeddingService,
+            \Drupal::service('search_api_postgresql.circuit_breaker'),
+            \Drupal::service('search_api_postgresql.cache_manager'),
+            \Drupal::logger('search_api_postgresql')
+        );
     }
 
     try {
@@ -654,7 +651,6 @@ class ResilientIndexManager extends IndexManager {
         $this->connector->rollback();
         throw $e;
       }
-
     }
     catch (GracefulDegradationException $e) {
       // Log and continue with next batch.

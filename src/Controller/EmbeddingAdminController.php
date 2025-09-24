@@ -20,7 +20,6 @@ use Symfony\Component\HttpFoundation\JsonResponse;
  * Controller for Search API PostgreSQL administration pages.
  */
 class EmbeddingAdminController extends ControllerBase {
-
   /**
    * The entity type manager.
    *
@@ -89,12 +88,12 @@ class EmbeddingAdminController extends ControllerBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('entity_type.manager'),
-      $container->get('search_api_postgresql.analytics'),
-      $container->get('search_api_postgresql.configuration_validator'),
-      $container->get('search_api_postgresql.cache_manager'),
-      $container->get('search_api_postgresql.embedding_queue_manager')
-    );
+          $container->get('entity_type.manager'),
+          $container->get('search_api_postgresql.analytics'),
+          $container->get('search_api_postgresql.configuration_validator'),
+          $container->get('search_api_postgresql.cache_manager'),
+          $container->get('search_api_postgresql.embedding_queue_manager')
+      );
   }
 
   /**
@@ -416,7 +415,6 @@ class EmbeddingAdminController extends ControllerBase {
       $build['#attached']['library'][] = 'search_api_postgresql/analytics';
 
       return $build;
-
     }
     catch (\Exception $e) {
       // If anything fails, show an error message instead of crashing.
@@ -496,16 +494,16 @@ class EmbeddingAdminController extends ControllerBase {
       '#theme' => 'table',
       '#header' => [$this->t('Property'), $this->t('Value')],
       '#rows' => [
-        [$this->t('Server ID'), $server->id()],
-        [$this->t('Server Name'), $server->label()],
-        [$this->t('Backend'), $backend->getPluginDefinition()['label']],
-        [$this->t('Status'), $server->status() ? $this->t('Enabled') : $this->t('Disabled')],
-        [$this->t('Database Host'), $server_info['host'] ?? $this->t('N/A')],
-        [$this->t('Database Name'), $server_info['database'] ?? $this->t('N/A')],
-        [$this->t('PostgreSQL Version'), $server_info['pg_version'] ?? $this->t('Unknown')],
-        [$this->t('pgvector Extension'), $server_info['has_pgvector'] ? $this->t('Available') : $this->t('Not Available')],
-        [$this->t('AI Embeddings'), $server_info['ai_enabled'] ? $this->t('Enabled') : $this->t('Disabled')],
-        [$this->t('Vector Search'), $server_info['vector_search'] ? $this->t('Enabled') : $this->t('Disabled')],
+      [$this->t('Server ID'), $server->id()],
+      [$this->t('Server Name'), $server->label()],
+      [$this->t('Backend'), $backend->getPluginDefinition()['label']],
+      [$this->t('Status'), $server->status() ? $this->t('Enabled') : $this->t('Disabled')],
+      [$this->t('Database Host'), $server_info['host'] ?? $this->t('N/A')],
+      [$this->t('Database Name'), $server_info['database'] ?? $this->t('N/A')],
+      [$this->t('PostgreSQL Version'), $server_info['pg_version'] ?? $this->t('Unknown')],
+      [$this->t('pgvector Extension'), $server_info['has_pgvector'] ? $this->t('Available') : $this->t('Not Available')],
+      [$this->t('AI Embeddings'), $server_info['ai_enabled'] ? $this->t('Enabled') : $this->t('Disabled')],
+      [$this->t('Vector Search'), $server_info['vector_search'] ? $this->t('Enabled') : $this->t('Disabled')],
       ],
     ];
 
@@ -560,14 +558,14 @@ class EmbeddingAdminController extends ControllerBase {
       '#theme' => 'table',
       '#header' => [$this->t('Metric'), $this->t('Value')],
       '#rows' => [
-        [$this->t('Search Queries'), number_format($server_metrics['search_queries'])],
-        [$this->t('Average Query Time'), $server_metrics['avg_query_time'] . ' ms'],
-        [$this->t('Embedding API Calls'), number_format($server_metrics['api_calls'])],
-        [$this->t('Cache Hit Rate'), round($server_metrics['cache_hit_rate'], 1) . '%'],
-        [$this->t('Vector Similarity Searches'), number_format($server_metrics['vector_searches'])],
-        [$this->t('Hybrid Searches'), number_format($server_metrics['hybrid_searches'])],
-        [$this->t('Total Embeddings Generated'), number_format($server_metrics['embeddings_generated'])],
-        [$this->t('API Cost (AUD)'), '$' . number_format($server_metrics['api_cost'], 4)],
+      [$this->t('Search Queries'), number_format($server_metrics['search_queries'])],
+      [$this->t('Average Query Time'), $server_metrics['avg_query_time'] . ' ms'],
+      [$this->t('Embedding API Calls'), number_format($server_metrics['api_calls'])],
+      [$this->t('Cache Hit Rate'), round($server_metrics['cache_hit_rate'], 1) . '%'],
+      [$this->t('Vector Similarity Searches'), number_format($server_metrics['vector_searches'])],
+      [$this->t('Hybrid Searches'), number_format($server_metrics['hybrid_searches'])],
+      [$this->t('Total Embeddings Generated'), number_format($server_metrics['embeddings_generated'])],
+      [$this->t('API Cost (AUD)'), '$' . number_format($server_metrics['api_cost'], 4)],
       ],
     ];
 
@@ -933,15 +931,15 @@ class EmbeddingAdminController extends ControllerBase {
       $build['results'][$server->id()] = [
         '#type' => 'details',
         '#title' => $this->t('Server: @server', ['@server' => $server->label()]),
-        // Fix: Use the correct key structure from runComprehensiveTests.
+      // Fix: Use the correct key structure from runComprehensiveTests.
         '#open' => !($test_results['overall']['success'] ?? TRUE),
       ];
 
       // Fix: Use the correct key structure.
       $overall_status = ($test_results['overall']['success'] ?? FALSE) ? 'success' : 'error';
       $status_text = ($test_results['overall']['success'] ?? FALSE) ?
-        $this->t('All tests passed') :
-        $this->t('Some tests failed');
+            $this->t('All tests passed') :
+            $this->t('Some tests failed');
 
       $build['results'][$server->id()]['status'] = [
         '#type' => 'html_tag',
@@ -1105,7 +1103,7 @@ class EmbeddingAdminController extends ControllerBase {
         $config = $backend->getConfiguration();
 
         $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) ||
-                      ($config['azure_embedding']['enabled'] ?? FALSE);
+                ($config['azure_embedding']['enabled'] ?? FALSE);
 
         if ($ai_enabled) {
           $ai_indexes++;
@@ -1193,7 +1191,7 @@ class EmbeddingAdminController extends ControllerBase {
 
       // Check if AI is enabled for this index.
       $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) ||
-                    ($config['azure_embedding']['enabled'] ?? FALSE);
+                ($config['azure_embedding']['enabled'] ?? FALSE);
 
       $status = $index->status() ? $this->t('Enabled') : $this->t('Disabled');
 
@@ -1217,7 +1215,6 @@ class EmbeddingAdminController extends ControllerBase {
           $items_with_embeddings = $ai_enabled ? $this->t('Not calculated') : $this->t('N/A');
           $coverage = $ai_enabled ? $this->t('Not calculated') : $this->t('N/A');
         }
-
       }
       catch (\Exception $e) {
         // Fallback for any errors.
@@ -1328,7 +1325,7 @@ class EmbeddingAdminController extends ControllerBase {
 
       // Check AI is enabled.
       $ai_enabled = ($config['ai_embeddings']['enabled'] ?? FALSE) ||
-                    ($config['azure_embedding']['enabled'] ?? FALSE);
+                ($config['azure_embedding']['enabled'] ?? FALSE);
 
       if (!$ai_enabled) {
         // Return default stats for non-AI indexes.

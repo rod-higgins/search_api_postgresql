@@ -14,21 +14,26 @@ use Psr\Log\LoggerInterface;
  * Service for handling backend migrations and compatibility checks.
  */
 class BackendMigrationService {
-
   use StringTranslationTrait;
 
   /**
    * The entity type manager.
+   *
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
   protected $entityTypeManager;
 
   /**
    * The messenger service.
+   *
+   * @var \Drupal\Core\Messenger\MessengerInterface
    */
   protected $messenger;
 
   /**
    * The logger.
+   *
+   * @var \Psr\Log\LoggerInterface
    */
   protected $logger;
 
@@ -36,6 +41,8 @@ class BackendMigrationService {
    * Backend compatibility matrix.
    *
    * Defines what features are lost/gained when switching backends.
+   *
+   * @var array
    */
   protected $compatibilityMatrix = [
     'postgresql' => [
@@ -225,7 +232,6 @@ class BackendMigrationService {
 
       // Clean up migration data.
       \Drupal::state()->delete($migration_key);
-
     }
     catch (\Exception $e) {
       $this->logger->error('Backend migration failed for server @server: @error', [
@@ -305,7 +311,6 @@ class BackendMigrationService {
         $sql = "ALTER TABLE {$table_name} DROP COLUMN IF EXISTS {$embedding_column}";
         $connection->query($sql);
       }
-
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to drop vector columns: @error', [
@@ -355,7 +360,6 @@ class BackendMigrationService {
           '@key' => $backup_key,
         ]));
       }
-
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to backup vector data: @error', [
@@ -504,7 +508,7 @@ class BackendMigrationService {
       if (!empty($vector_indexes)) {
         $issues[] = $this->t('The following indexes use vector fields that will be lost: @indexes', [
           '@indexes' => implode(', ', array_map(function ($index) {
-            return $index->label();
+              return $index->label();
           }, $vector_indexes)),
         ]);
       }

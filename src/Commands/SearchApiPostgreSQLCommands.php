@@ -15,7 +15,6 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Drush commands for Search API PostgreSQL.
  */
 class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInjectionInterface {
-
   /**
    * The entity type manager.
    *
@@ -75,21 +74,21 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
   public static function create(ContainerInterface $container) {
     // Use NULL if services don't exist (e.g., during uninstall)
     return new static(
-      $container->get('entity_type.manager'),
-      $container->has('search_api_postgresql.embedding_queue_manager') ? $container->get('search_api_postgresql.embedding_queue_manager') : NULL,
-      $container->has('search_api_postgresql.cache_manager') ? $container->get('search_api_postgresql.cache_manager') : NULL,
-      $container->has('search_api_postgresql.configuration_validator') ? $container->get('search_api_postgresql.configuration_validator') : NULL,
-      $container->has('logger.channel.search_api_postgresql') ? $container->get('logger.channel.search_api_postgresql') : NULL
-    );
+          $container->get('entity_type.manager'),
+          $container->has('search_api_postgresql.embedding_queue_manager') ? $container->get('search_api_postgresql.embedding_queue_manager') : NULL,
+          $container->has('search_api_postgresql.cache_manager') ? $container->get('search_api_postgresql.cache_manager') : NULL,
+          $container->has('search_api_postgresql.configuration_validator') ? $container->get('search_api_postgresql.configuration_validator') : NULL,
+          $container->has('logger.channel.search_api_postgresql') ? $container->get('logger.channel.search_api_postgresql') : NULL
+      );
   }
 
   /**
    * Tests AI service connectivity for a server.
    *
-   * @command search-api-postgresql:test-ai
    * @param string $server_id
    *   The server ID.
    *
+   * @command search-api-postgresql:test-ai
    * @aliases sap-test-ai
    * @usage search-api-postgresql:test-ai my_server
    *   Tests AI service for the specified server.
@@ -126,10 +125,12 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
   /**
    * Regenerates embeddings for an index.
    *
-   * @command search-api-postgresql:regenerate-embeddings
    * @param string $index_id
    *   The index ID.
+   * @param array $options
+   *   Command options.
    *
+   * @command search-api-postgresql:regenerate-embeddings
    * @option batch-size Number of items per batch
    * @option force Force regeneration of existing embeddings
    * @aliases sap-regen

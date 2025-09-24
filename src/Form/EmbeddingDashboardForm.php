@@ -14,7 +14,6 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Configuration form for the Search API PostgreSQL dashboard.
  */
 class EmbeddingDashboardForm extends ConfigFormBase {
-
   /**
    * The entity type manager.
    *
@@ -56,11 +55,11 @@ class EmbeddingDashboardForm extends ConfigFormBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('config.factory'),
-      $container->get('entity_type.manager'),
-      $container->get('cache.default'),
-      $container->get('search_api_postgresql.analytics')
-    );
+          $container->get('config.factory'),
+          $container->get('entity_type.manager'),
+          $container->get('cache.default'),
+          $container->get('search_api_postgresql.analytics')
+      );
   }
 
   /**
@@ -400,8 +399,9 @@ class EmbeddingDashboardForm extends ConfigFormBase {
     if ($form_state->getValue('auto_refresh')) {
       $interval = $form_state->getValue('refresh_interval');
       if ($interval < 10 || $interval > 600) {
-        $form_state->setErrorByName('refresh_interval',
-          $this->t('Refresh interval must be between 10 seconds and 10 minutes.')
+        $form_state->setErrorByName(
+            'refresh_interval',
+            $this->t('Refresh interval must be between 10 seconds and 10 minutes.')
         );
       }
     }
@@ -414,11 +414,12 @@ class EmbeddingDashboardForm extends ConfigFormBase {
 
       foreach ($order_lines as $card_id) {
         if (!in_array($card_id, $available_cards)) {
-          $form_state->setErrorByName('card_order',
-            $this->t('Invalid card ID "@card_id". Available cards: @available', [
-              '@card_id' => $card_id,
-              '@available' => implode(', ', $available_cards),
-            ])
+          $form_state->setErrorByName(
+              'card_order',
+              $this->t('Invalid card ID "@card_id". Available cards: @available', [
+                '@card_id' => $card_id,
+                '@available' => implode(', ', $available_cards),
+              ])
           );
           break;
         }
@@ -428,24 +429,27 @@ class EmbeddingDashboardForm extends ConfigFormBase {
     // Validate thresholds.
     $low_coverage = $form_state->getValue(['alert_thresholds', 'low_coverage_threshold']);
     if ($low_coverage < 0 || $low_coverage > 100) {
-      $form_state->setErrorByName('alert_thresholds][low_coverage_threshold',
-        $this->t('Coverage threshold must be between 0 and 100.')
-      );
+      $form_state->setErrorByName(
+            'alert_thresholds][low_coverage_threshold',
+            $this->t('Coverage threshold must be between 0 and 100.')
+        );
     }
 
     $high_cost = $form_state->getValue(['alert_thresholds', 'high_cost_threshold']);
     if ($high_cost < 0) {
-      $form_state->setErrorByName('alert_thresholds][high_cost_threshold',
-        $this->t('Cost threshold must be a positive number.')
-      );
+      $form_state->setErrorByName(
+            'alert_thresholds][high_cost_threshold',
+            $this->t('Cost threshold must be a positive number.')
+        );
     }
 
     // Validate retention period.
     $retention = $form_state->getValue('data_retention_days');
     if ($retention < 1 || $retention > 365) {
-      $form_state->setErrorByName('data_retention_days',
-        $this->t('Data retention must be between 1 and 365 days.')
-      );
+      $form_state->setErrorByName(
+            'data_retention_days',
+            $this->t('Data retention must be between 1 and 365 days.')
+        );
     }
   }
 
@@ -477,14 +481,22 @@ class EmbeddingDashboardForm extends ConfigFormBase {
 
     // Save notification settings.
     $config->set('notifications.enable_alerts', $form_state->getValue('enable_alerts'));
-    $config->set('notifications.alert_thresholds.low_coverage_threshold',
-      $form_state->getValue(['alert_thresholds', 'low_coverage_threshold']));
-    $config->set('notifications.alert_thresholds.high_queue_threshold',
-      $form_state->getValue(['alert_thresholds', 'high_queue_threshold']));
-    $config->set('notifications.alert_thresholds.high_cost_threshold',
-      $form_state->getValue(['alert_thresholds', 'high_cost_threshold']));
-    $config->set('notifications.alert_thresholds.server_down_alert',
-      $form_state->getValue(['alert_thresholds', 'server_down_alert']));
+    $config->set(
+          'notifications.alert_thresholds.low_coverage_threshold',
+          $form_state->getValue(['alert_thresholds', 'low_coverage_threshold'])
+      );
+    $config->set(
+          'notifications.alert_thresholds.high_queue_threshold',
+          $form_state->getValue(['alert_thresholds', 'high_queue_threshold'])
+      );
+    $config->set(
+          'notifications.alert_thresholds.high_cost_threshold',
+          $form_state->getValue(['alert_thresholds', 'high_cost_threshold'])
+      );
+    $config->set(
+          'notifications.alert_thresholds.server_down_alert',
+          $form_state->getValue(['alert_thresholds', 'server_down_alert'])
+      );
 
     // Save analytics settings.
     $config->set('analytics.enable_analytics', $form_state->getValue('enable_analytics'));

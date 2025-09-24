@@ -12,7 +12,6 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Form for managing embedding queue processing.
  */
 class QueueManagementForm extends FormBase {
-
   /**
    * The embedding queue manager.
    *
@@ -43,9 +42,9 @@ class QueueManagementForm extends FormBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('search_api_postgresql.embedding_queue_manager'),
-      $container->get('search_api_postgresql.analytics')
-    );
+          $container->get('search_api_postgresql.embedding_queue_manager'),
+          $container->get('search_api_postgresql.analytics')
+      );
   }
 
   /**
@@ -146,8 +145,8 @@ class QueueManagementForm extends FormBase {
       '#states' => [
         'visible' => [
           ':input[name="action"]' => [
-            ['value' => 'clear_failed'],
-            ['value' => 'clear_all'],
+        ['value' => 'clear_failed'],
+        ['value' => 'clear_all'],
           ],
         ],
       ],
@@ -275,8 +274,9 @@ class QueueManagementForm extends FormBase {
     if (in_array($action, ['clear_failed', 'clear_all'])) {
       $confirm = $form_state->getValue('confirm_destructive');
       if (!$confirm) {
-        $form_state->setErrorByName('confirm_destructive',
-          $this->t('You must confirm that you understand this action cannot be undone.')
+        $form_state->setErrorByName(
+            'confirm_destructive',
+            $this->t('You must confirm that you understand this action cannot be undone.')
         );
       }
     }
@@ -285,18 +285,20 @@ class QueueManagementForm extends FormBase {
     if ($action === 'process_now') {
       $batch_size = $form_state->getValue('batch_size');
       if ($batch_size < 1 || $batch_size > 100) {
-        $form_state->setErrorByName('batch_size',
-          $this->t('Batch size must be between 1 and 100.')
-        );
+        $form_state->setErrorByName(
+              'batch_size',
+              $this->t('Batch size must be between 1 and 100.')
+          );
       }
     }
 
     // Validate configuration values.
     $max_processing_time = $form_state->getValue('max_processing_time');
     if ($max_processing_time < 10 || $max_processing_time > 300) {
-      $form_state->setErrorByName('max_processing_time',
-        $this->t('Maximum processing time must be between 10 and 300 seconds.')
-      );
+      $form_state->setErrorByName(
+            'max_processing_time',
+            $this->t('Maximum processing time must be between 10 and 300 seconds.')
+        );
     }
   }
 

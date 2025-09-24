@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="DrupalSimple">
+  <description>Simplified Drupal coding standards</description>
+
+  <!-- Basic PSR12 rules -->
+  <rule ref="PSR12"/>
+
+  <!-- Basic Drupal formatting rules -->
+  <rule ref="Generic.Files.LineLength">
+    <properties>
+      <property name="lineLimit" value="80"/>
+      <property name="absoluteLineLimit" value="120"/>
+    </properties>
+  </rule>
+
+  <!-- Indentation -->
+  <rule ref="Generic.WhiteSpace.ScopeIndent">
+    <properties>
+      <property name="indent" value="2"/>
+    </properties>
+  </rule>
+
+  <!-- Comments -->
+  <rule ref="Drupal.Commenting.DocComment"/>
+  <rule ref="Drupal.Commenting.FunctionComment"/>
+
+  <!-- File patterns to check -->
+  <file>./src</file>
+  <file>./tests</file>
+
+  <!-- File extensions -->
+  <arg name="extensions" value="php"/>
+
+  <!-- Show progress -->
+  <arg value="p"/>
+</ruleset>

@@ -12,7 +12,6 @@ use GuzzleHttp\Exception\RequestException;
  * Service for generating text embeddings using Azure AI Services with caching.
  */
 class EmbeddingService {
-
   /**
    * The Azure AI configuration.
    *

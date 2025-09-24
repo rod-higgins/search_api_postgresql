@@ -8,7 +8,6 @@ use Psr\Log\LoggerInterface;
  * In-memory implementation of embedding cache for testing and development.
  */
 class MemoryEmbeddingCache implements EmbeddingCacheInterface {
-
   /**
    * The in-memory cache storage.
    *
@@ -120,11 +119,6 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
     $ttl = $ttl ?? $this->config['default_ttl'];
     $expires = $ttl > 0 ? time() + $ttl : 0;
 
-    // Check if we need to cleanup.
-    if (count($this->cache) >= $this->config['max_entries'] * $this->config['cleanup_threshold']) {
-      $this->performCleanup();
-    }
-
     $this->cache[$text_hash] = $embedding;
     $this->metadata[$text_hash] = [
       'created' => time(),
@@ -133,6 +127,11 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       'hit_count' => 0,
       'dimensions' => count($embedding),
     ];
+
+    // Check if we need to cleanup after adding the item.
+    if (count($this->cache) > $this->config['max_entries']) {
+      $this->performCleanup();
+    }
 
     $this->stats['sets']++;
 
@@ -372,9 +371,9 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       // Sort by last accessed time (ascending) and then by hit count (ascending)
       uasort($lru_candidates, function ($a, $b) {
         if ($a['last_accessed'] === $b['last_accessed']) {
-          return $a['hit_count'] <=> $b['hit_count'];
+            return $a['hit_count'] <=> $b['hit_count'];
         }
-        return $a['last_accessed'] <=> $b['last_accessed'];
+          return $a['last_accessed'] <=> $b['last_accessed'];
       });
 
       $hashes_to_remove = array_slice(array_keys($lru_candidates), 0, $excess);

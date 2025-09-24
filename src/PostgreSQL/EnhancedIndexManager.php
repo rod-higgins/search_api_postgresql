@@ -10,7 +10,6 @@ use Drupal\search_api\SearchApiException;
  * Enhanced IndexManager with queue-based embedding processing.
  */
 class EnhancedIndexManager extends IndexManager {
-
   /**
    * The embedding queue manager.
    *
@@ -178,7 +177,6 @@ class EnhancedIndexManager extends IndexManager {
       if ($this->queuedEmbeddingService) {
         $this->queuedEmbeddingService->clearEmbeddingCache($item_ids);
       }
-
     }
     catch (\Exception $e) {
       $this->logger->warning('Failed to cleanup embedding data: @error', [
@@ -214,16 +212,15 @@ class EnhancedIndexManager extends IndexManager {
         \Drupal::logger('search_api_postgresql')->debug('Queued embedding generation for item @item_id', [
           '@item_id' => $item_id,
         ]);
-
       }
       elseif ($this->queueManager) {
         // Fallback to direct queue manager.
         $this->queueManager->queueEmbeddingGeneration(
-          $this->serverId,
-          $index->id(),
-          $item_id,
-          $searchable_text
-              );
+              $this->serverId,
+              $index->id(),
+              $item_id,
+              $searchable_text
+                );
 
         $this->logger->debug('Queued embedding via queue manager for item @item_id', [
           '@item_id' => $item_id,
@@ -284,7 +281,6 @@ class EnhancedIndexManager extends IndexManager {
       if (!empty($embedding_tasks)) {
         $this->queueEmbeddingTasks($index, $embedding_tasks);
       }
-
     }
     catch (\Exception $e) {
       $this->connector->rollback();
@@ -433,20 +429,22 @@ class EnhancedIndexManager extends IndexManager {
 
     if ($use_batch) {
       $success = $this->queueManager->queueBatchEmbeddingGeneration(
-        $this->serverId,
-        $index->id(),
-        $embedding_tasks
-      );
+            $this->serverId,
+            $index->id(),
+            $embedding_tasks
+        );
     }
     else {
       $success = TRUE;
       foreach ($embedding_tasks as $item_id => $text_content) {
-        if (!$this->queueManager->queueEmbeddingGeneration(
-          $this->serverId,
-          $index->id(),
-          $item_id,
-          $text_content
-        )) {
+        if (
+              !$this->queueManager->queueEmbeddingGeneration(
+                  $this->serverId,
+                  $index->id(),
+                  $item_id,
+                  $text_content
+              )
+          ) {
           $success = FALSE;
           break;
         }
@@ -560,7 +558,6 @@ class EnhancedIndexManager extends IndexManager {
     ];
 
     try {
-
       // Get total items.
       $total_sql = "SELECT COUNT(*) as total FROM {$table_name}";
       $total_stmt = $this->connector->executeQuery($total_sql);
@@ -580,15 +577,14 @@ class EnhancedIndexManager extends IndexManager {
 
       // Calculate coverage.
       $stats['embedding_coverage'] = $stats['total_items'] > 0
-        ? ($stats['items_with_embeddings'] / $stats['total_items']) * 100
-        : 0;
+            ? ($stats['items_with_embeddings'] / $stats['total_items']) * 100
+            : 0;
 
       // Get queue stats if available.
       if ($this->queueManager) {
         $queue_stats = $this->queueManager->getQueueStats();
         $stats['queue_items_pending'] = $queue_stats['items_pending'] ?? 0;
       }
-
     }
     catch (\Exception $e) {
       $stats['error'] = $e->getMessage();

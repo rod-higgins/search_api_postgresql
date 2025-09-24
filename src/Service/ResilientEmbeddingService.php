@@ -13,7 +13,6 @@ use Psr\Log\LoggerInterface;
  * Resilient embedding service with graceful degradation capabilities.
  */
 class ResilientEmbeddingService implements EmbeddingServiceInterface {
-
   /**
    * The underlying embedding service.
    *
@@ -93,15 +92,15 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
     // Use circuit breaker for external API call.
     return $this->circuitBreaker->execute(
-      'embedding_generation',
-      function () use ($text) {
-        return $this->generateEmbeddingWithRetry($text);
-      },
-      function ($exception) use ($text) {
-        return $this->handleEmbeddingFailure($text, $exception);
-      },
-      ['operation' => 'single_embedding', 'text_length' => strlen($text)]
-    );
+          'embedding_generation',
+          function () use ($text) {
+              return $this->generateEmbeddingWithRetry($text);
+          },
+          function ($exception) use ($text) {
+              return $this->handleEmbeddingFailure($text, $exception);
+          },
+          ['operation' => 'single_embedding', 'text_length' => strlen($text)]
+      );
   }
 
   /**
@@ -198,7 +197,6 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
         }
 
         throw new \Exception('Embedding service returned empty result');
-
       }
       catch (\Exception $e) {
         $is_last_attempt = ($attempt === $max_retries);
@@ -220,8 +218,10 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
       }
     }
 
-    throw new EmbeddingServiceUnavailableException('Embedding service',
-      new \Exception('Max retries exceeded'));
+    throw new EmbeddingServiceUnavailableException(
+          'Embedding service',
+          new \Exception('Max retries exceeded')
+      );
   }
 
   /**
@@ -249,15 +249,15 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
       try {
         $batch_results = $this->circuitBreaker->execute(
-          'embedding_batch_generation',
-          function () use ($batch_texts) {
-            return $this->embeddingService->generateBatchEmbeddings($batch_texts);
-          },
-          function ($exception) use ($batch_texts, $batch_indices) {
-            return $this->handleBatchFailure($batch_texts, $batch_indices, $exception);
-          },
-          ['operation' => 'batch_embedding', 'batch_size' => count($batch_texts)]
-        );
+              'embedding_batch_generation',
+              function () use ($batch_texts) {
+                  return $this->embeddingService->generateBatchEmbeddings($batch_texts);
+              },
+              function ($exception) use ($batch_texts, $batch_indices) {
+                        return $this->handleBatchFailure($batch_texts, $batch_indices, $exception);
+              },
+              ['operation' => 'batch_embedding', 'batch_size' => count($batch_texts)]
+          );
 
         // Map results back to original indices.
         foreach ($batch_results as $batch_pos => $embedding) {
@@ -269,7 +269,6 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
             $this->cacheEmbedding($batch_texts[$batch_pos], $embedding);
           }
         }
-
       }
       catch (PartialBatchFailureException $e) {
         // Handle partial batch failure.
@@ -297,7 +296,6 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
           '@success' => count($successful),
           '@total' => count($batch_texts),
         ]);
-
       }
       catch (GracefulDegradationException $e) {
         // Entire batch failed, but we can continue.

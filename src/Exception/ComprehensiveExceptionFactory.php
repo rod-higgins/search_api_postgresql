@@ -6,7 +6,6 @@ namespace Drupal\search_api_postgresql\Exception;
  * Comprehensive exception factory with intelligent error classification.
  */
 class ComprehensiveExceptionFactory extends DegradationExceptionFactory {
-
   /**
    * Error pattern matching for intelligent classification.
    */
@@ -60,16 +59,16 @@ class ComprehensiveExceptionFactory extends DegradationExceptionFactory {
 
       case QueryPerformanceDegradedException::class:
         return new QueryPerformanceDegradedException(
-          $context['query_time'] ?? 0,
-          $context['threshold'] ?? 5000
-        );
+                $context['query_time'] ?? 0,
+                $context['threshold'] ?? 5000
+            );
 
       case MemoryExhaustedException::class:
         return new MemoryExhaustedException(
-          $context['memory_usage'] ?? 0,
-          $context['memory_limit'] ?? 0,
-          $original
-        );
+                $context['memory_usage'] ?? 0,
+                $context['memory_limit'] ?? 0,
+                $original
+            );
 
       default:
         return parent::createFromException($original, $context);

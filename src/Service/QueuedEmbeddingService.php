@@ -10,7 +10,6 @@ use Psr\Log\LoggerInterface;
  * Wrapper service that can process embeddings either synchronously or via queue.
  */
 class QueuedEmbeddingService implements EmbeddingServiceInterface {
-
   /**
    * The embedding queue manager.
    *
@@ -131,7 +130,6 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
       }
 
       return $result;
-
     } finally {
       // Always clean up the processing flag.
       unset(self::$processingTexts[$text_hash]);
@@ -195,12 +193,12 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
     }
 
     $queued = $this->queueManager->queueEmbeddingGeneration(
-      $context['server_id'],
-      $context['index_id'],
-      $context['item_id'],
-      $text,
-      $this->getQueuePriority($context)
-    );
+          $context['server_id'],
+          $context['index_id'],
+          $context['item_id'],
+          $text,
+          $this->getQueuePriority($context)
+      );
 
     if (!$queued) {
       throw new \Exception('Failed to queue embedding generation');
@@ -231,11 +229,11 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
     }
 
     $queued = $this->queueManager->queueBatchEmbeddingGeneration(
-      $context['server_id'],
-      $context['index_id'],
-      $context['items'],
-      $this->getQueuePriority($context)
-    );
+          $context['server_id'],
+          $context['index_id'],
+          $context['items'],
+          $this->getQueuePriority($context)
+      );
 
     if (!$queued) {
       throw new \Exception('Failed to queue batch embedding generation');

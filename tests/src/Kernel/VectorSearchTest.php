@@ -13,7 +13,6 @@ use Drupal\search_api_postgresql\Service\AzureOpenAIEmbeddingService;
  * @group search_api_postgresql
  */
 class VectorSearchTest extends KernelTestBase {
-
   /**
    * {@inheritdoc}
    */
@@ -187,10 +186,10 @@ class VectorSearchTest extends KernelTestBase {
    */
   public function testTextPreprocessing() {
     $service = new AzureOpenAIEmbeddingService(
-      'https://test.openai.azure.com/',
-      'test-key',
-      'test-deployment'
-    );
+          'https://test.openai.azure.com/',
+          'test-key',
+          'test-deployment'
+      );
 
     // Use reflection to access protected method.
     $reflection = new \ReflectionClass($service);

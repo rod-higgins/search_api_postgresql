@@ -8,7 +8,6 @@ use Drupal\search_api\SearchApiException;
  * Base exception for Search API PostgreSQL operations.
  */
 abstract class SearchApiPostgreSQLException extends SearchApiException {
-
   /**
    * The error severity level.
    *
@@ -105,18 +104,18 @@ class EmbeddingServiceException extends SearchApiPostgreSQLException {
 
   public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, $retryable = TRUE, array $context = []) {
     parent::__construct(
-      $message,
-      $code,
-      $previous,
-      'warning',
-      $retryable,
-      'skip_embeddings',
-      $context
-    );
+          $message,
+          $code,
+          $previous,
+          'warning',
+          $retryable,
+          'skip_embeddings',
+          $context
+      );
   }
 
   /**
-   *
+   * Gets the user-friendly message for the exception.
    */
   public function getUserMessage() {
     return $this->t('AI embeddings are temporarily unavailable. Search will continue using traditional text search.');
@@ -138,14 +137,14 @@ class VectorSearchException extends SearchApiPostgreSQLException {
 
   public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, array $context = []) {
     parent::__construct(
-      $message,
-      $code,
-      $previous,
-      'warning',
-      FALSE,
-      'fallback_to_text',
-      $context
-    );
+          $message,
+          $code,
+          $previous,
+          'warning',
+          FALSE,
+          'fallback_to_text',
+          $context
+      );
   }
 
   /**
@@ -171,14 +170,14 @@ class DatabaseConnectionException extends SearchApiPostgreSQLException {
 
   public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, $retryable = TRUE, array $context = []) {
     parent::__construct(
-      $message,
-      $code,
-      $previous,
-      'critical',
-      $retryable,
-      'cache_fallback',
-      $context
-    );
+          $message,
+          $code,
+          $previous,
+          'critical',
+          $retryable,
+          'cache_fallback',
+          $context
+      );
   }
 
   /**
@@ -201,7 +200,6 @@ class DatabaseConnectionException extends SearchApiPostgreSQLException {
  * Exception for batch operation failures.
  */
 class BatchOperationException extends SearchApiPostgreSQLException {
-
   /**
    * Partial results from the batch operation.
    *
@@ -221,14 +219,14 @@ class BatchOperationException extends SearchApiPostgreSQLException {
     $this->failedItems = $failed_items;
 
     parent::__construct(
-      $message,
-      $code,
-      $previous,
-      'warning',
-      TRUE,
-      'partial_success',
-      $context
-    );
+          $message,
+          $code,
+          $previous,
+          'warning',
+          TRUE,
+          'partial_success',
+          $context
+      );
   }
 
   /**
@@ -274,14 +272,14 @@ class ConfigurationException extends SearchApiPostgreSQLException {
 
   public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, array $context = []) {
     parent::__construct(
-      $message,
-      $code,
-      $previous,
-      'critical',
-      FALSE,
-      'disable_feature',
-      $context
-    );
+          $message,
+          $code,
+          $previous,
+          'critical',
+          FALSE,
+          'disable_feature',
+          $context
+      );
   }
 
   /**
@@ -304,7 +302,6 @@ class ConfigurationException extends SearchApiPostgreSQLException {
  * Exception for API rate limiting.
  */
 class RateLimitException extends SearchApiPostgreSQLException {
-
   /**
    * Retry after seconds.
    *
@@ -316,14 +313,14 @@ class RateLimitException extends SearchApiPostgreSQLException {
     $this->retryAfter = $retry_after;
 
     parent::__construct(
-      $message,
-      $code,
-      $previous,
-      'notice',
-      TRUE,
-      'delay_retry',
-      $context
-    );
+          $message,
+          $code,
+          $previous,
+          'notice',
+          TRUE,
+          'delay_retry',
+          $context
+      );
   }
 
   /**
@@ -356,14 +353,14 @@ class CacheException extends SearchApiPostgreSQLException {
 
   public function __construct($message = '', $code = 0, ?\Throwable $previous = NULL, array $context = []) {
     parent::__construct(
-      $message,
-      $code,
-      $previous,
-      'notice',
-      FALSE,
-      'bypass_cache',
-      $context
-    );
+          $message,
+          $code,
+          $previous,
+          'notice',
+          FALSE,
+          'bypass_cache',
+          $context
+      );
   }
 
   /**

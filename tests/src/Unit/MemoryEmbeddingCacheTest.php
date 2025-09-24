@@ -3,21 +3,17 @@
 namespace Drupal\Tests\search_api_postgresql\Unit\Cache;
 
 use Drupal\search_api_postgresql\Cache\MemoryEmbeddingCache;
-use Drupal\Tests\UnitTestCase;
 use Psr\Log\LoggerInterface;
+use PHPUnit\Framework\TestCase;
 
 /**
- * Tests the MemoryEmbeddingCache.
+ * Real implementation tests for the MemoryEmbeddingCache.
  *
  * @group search_api_postgresql
- * @coversDefaultClass \Drupal\search_api_postgresql\Cache\MemoryEmbeddingCache
  */
-class MemoryEmbeddingCacheTest extends UnitTestCase {
-
+class MemoryEmbeddingCacheTest extends TestCase {
   /**
-   * The mocked logger.
-   *
-   * @var \Psr\Log\LoggerInterface|\PHPUnit\Framework\MockObject\MockObject
+   * Simple logger implementation for testing.
    */
   protected $logger;
 
@@ -41,12 +37,75 @@ class MemoryEmbeddingCacheTest extends UnitTestCase {
   protected function setUp(): void {
     parent::setUp();
 
-    $this->logger = $this->createMock(LoggerInterface::class);
+    // Load the actual module files.
+    require_once __DIR__ . '/../../../../../src/Cache/EmbeddingCacheInterface.php';
+    require_once __DIR__ . '/../../../../../src/Cache/MemoryEmbeddingCache.php';
+
+    // Create a simple logger.
+    $this->logger = new class implements LoggerInterface {
+
+      /**
+       *
+       */
+      public function emergency($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function alert($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function critical($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function error($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function warning($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function notice($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function info($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function debug($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function log($level, $message, array $context = []) {
+      }
+
+    };
 
     $this->config = [
       'default_ttl' => 3600,
       'max_entries' => 100,
       'cleanup_threshold' => 0.9,
+    // Disable random cleanup for deterministic tests.
+      'cleanup_probability' => 0.0,
     ];
 
     $this->cache = new MemoryEmbeddingCache($this->logger, $this->config);

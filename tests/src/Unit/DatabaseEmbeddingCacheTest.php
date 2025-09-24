@@ -1,37 +1,24 @@
 <?php
 
-namespace Drupal\Tests\search_api_postgresql\Unit\Cache;
+namespace Drupal\Tests\search_api_postgresql\Unit;
 
-use Drupal\Core\Database\Query\UpdateInterface;
 use Drupal\search_api_postgresql\Cache\DatabaseEmbeddingCache;
-use Drupal\Tests\UnitTestCase;
-use Drupal\Core\Database\Connection;
-use Drupal\Core\Database\StatementInterface;
-use Drupal\Core\Database\Query\SelectInterface;
-use Drupal\Core\Database\Query\MergeInterface;
-use Drupal\Core\Database\Query\DeleteInterface;
-use Drupal\Core\Database\Schema;
 use Psr\Log\LoggerInterface;
+use PHPUnit\Framework\TestCase;
 
 /**
- * Tests the DatabaseEmbeddingCache.
+ * Real implementation tests for the DatabaseEmbeddingCache.
  *
  * @group search_api_postgresql
- * @coversDefaultClass \Drupal\search_api_postgresql\Cache\DatabaseEmbeddingCache
  */
-class DatabaseEmbeddingCacheTest extends UnitTestCase {
-
+class DatabaseEmbeddingCacheTest extends TestCase {
   /**
-   * The mocked database connection.
-   *
-   * @var \Drupal\Core\Database\Connection|\PHPUnit\Framework\MockObject\MockObject
+   * Real database connection implementation for testing.
    */
   protected $connection;
 
   /**
-   * The mocked logger.
-   *
-   * @var \Psr\Log\LoggerInterface|\PHPUnit\Framework\MockObject\MockObject
+   * Real logger implementation for testing.
    */
   protected $logger;
 
@@ -50,86 +37,493 @@ class DatabaseEmbeddingCacheTest extends UnitTestCase {
   protected $config;
 
   /**
+   * In-memory storage for database operations.
+   */
+  protected $storage = [];
+
+  /**
    * {@inheritdoc}
    */
   protected function setUp(): void {
     parent::setUp();
 
-    $this->connection = $this->createMock(Connection::class);
-    $this->logger = $this->createMock(LoggerInterface::class);
+    // Load actual cache classes.
+    require_once __DIR__ . '/../../../../../src/Cache/EmbeddingCacheInterface.php';
+    require_once __DIR__ . '/../../../../../src/Cache/DatabaseEmbeddingCache.php';
+
+    // Define PSR LoggerInterface if not available.
+    if (!interface_exists('Psr\Log\LoggerInterface')) {
+      eval('
+      namespace Psr\Log {
+        interface LoggerInterface {
+          public function emergency($message, array $context = []);
+          public function alert($message, array $context = []);
+          public function critical($message, array $context = []);
+          public function error($message, array $context = []);
+          public function warning($message, array $context = []);
+          public function notice($message, array $context = []);
+          public function info($message, array $context = []);
+          public function debug($message, array $context = []);
+          public function log($level, $message, array $context = []);
+        }
+      }
+      ');
+    }
+
+    // Create real logger implementation.
+    $this->logger = new class implements LoggerInterface {
+
+      /**
+       *
+       */
+      public function emergency($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function alert($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function critical($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function error($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function warning($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function notice($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function info($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function debug($message, array $context = []) {
+      }
+
+      /**
+       *
+       */
+      public function log($level, $message, array $context = []) {
+      }
+
+    };
+
+    // Create real database connection implementation for testing.
+    $storage = &$this->storage;
+    $this->connection = new class ($storage) {
+      private $storage;
+
+      public function __construct(&$storage) {
+        $this->storage = &$storage;
+      }
+
+      /**
+       *
+       */
+      public function select($table, $alias = NULL, array $options = []) {
+        return new class ($this->storage, $table) {
+          private $storage;
+          private $table;
+          private $conditions = [];
+          private $fields = [];
+          private $limit = NULL;
+
+          public function __construct(&$storage, $table) {
+            $this->storage = &$storage;
+            $this->table = $table;
+          }
+
+          /**
+           *
+           */
+          public function fields($table_alias, array $fields = []) {
+            $this->fields = $fields;
+            return $this;
+          }
+
+          /**
+           *
+           */
+          public function condition($field, $value = NULL, $operator = '=') {
+            $this->conditions[] = [$field, $value, $operator];
+            return $this;
+          }
+
+          /**
+           *
+           */
+          public function range($start = NULL, $length = NULL) {
+            $this->limit = $length;
+            return $this;
+          }
+
+          /**
+           *
+           */
+          public function addExpression($expression, $alias = NULL, $arguments = []) {
+            return $this;
+          }
+
+          /**
+           *
+           */
+          public function execute() {
+            return new class ($this->storage, $this->table, $this->conditions, $this->limit) {
+              private $storage;
+              private $table;
+              private $conditions;
+              private $limit;
+
+              public function __construct(&$storage, $table, $conditions, $limit) {
+                $this->storage = &$storage;
+                $this->table = $table;
+                $this->conditions = $conditions;
+                $this->limit = $limit;
+              }
+
+              /**
+               *
+               */
+              public function fetchAssoc() {
+                if (!isset($this->storage[$this->table])) {
+                  return FALSE;
+                }
+
+                foreach ($this->storage[$this->table] as $row) {
+                  $match = TRUE;
+                  foreach ($this->conditions as [$field, $value, $operator]) {
+                    if ($operator === '=' && $row[$field] !== $value) {
+                      $match = FALSE;
+                      break;
+                    }
+                  }
+                  if ($match) {
+                    return $row;
+                  }
+                }
+                return FALSE;
+              }
+
+              /**
+               *
+               */
+              public function fetchAllKeyed() {
+                $results = [];
+                if (!isset($this->storage[$this->table])) {
+                  return $results;
+                }
+
+                foreach ($this->storage[$this->table] as $row) {
+                  $match = TRUE;
+                  foreach ($this->conditions as [$field, $value, $operator]) {
+                    if ($operator === 'IN' && !in_array($row[$field], $value)) {
+                      $match = FALSE;
+                      break;
+                    }
+                  }
+                  if ($match) {
+                    $results[$row['hash']] = $row['embedding_data'];
+                  }
+                }
+                return $results;
+              }
+
+              /**
+               *
+               */
+              public function fetchField() {
+                if (!isset($this->storage[$this->table])) {
+                  return 0;
+                }
+
+                $count = 0;
+                foreach ($this->storage[$this->table] as $row) {
+                  $match = TRUE;
+                  foreach ($this->conditions as [$field, $value, $operator]) {
+                    if ($operator === '<' && $row[$field] >= $value) {
+                      $match = FALSE;
+                      break;
+                    }
+                  }
+                  if ($match) {
+                    $count++;
+                  }
+                }
+                return $count;
+              }
+
+            };
+          }
+
+          /**
+           *
+           */
+          public function countQuery() {
+            return $this;
+          }
+
+        };
+      }
+
+      /**
+       *
+       */
+      public function merge($table, array $options = []) {
+        return new class ($this->storage, $table) {
+          private $storage;
+          private $table;
+          private $key_field;
+          private $fields_data = [];
+
+          public function __construct(&$storage, $table) {
+            $this->storage = &$storage;
+            $this->table = $table;
+          }
+
+          /**
+           *
+           */
+          public function key(array $key) {
+            $this->key_field = array_keys($key)[0];
+            $this->fields_data = array_merge($this->fields_data, $key);
+            return $this;
+          }
+
+          /**
+           *
+           */
+          public function fields(array $fields) {
+            $this->fields_data = array_merge($this->fields_data, $fields);
+            return $this;
+          }
+
+          /**
+           *
+           */
+          public function expression($field, $expression) {
+            $this->fields_data[$field] = time();
+            return $this;
+          }
+
+          /**
+           *
+           */
+          public function execute() {
+            if (!isset($this->storage[$this->table])) {
+              $this->storage[$this->table] = [];
+            }
+
+            $this->storage[$this->table][] = $this->fields_data;
+            return 1;
+          }
+
+        };
+      }
+
+      /**
+       *
+       */
+      public function update($table, array $options = []) {
+        return new class ($this->storage, $table) {
+          private $storage;
+          private $table;
+          private $conditions = [];
+          private $fields_data = [];
+
+          public function __construct(&$storage, $table) {
+            $this->storage = &$storage;
+            $this->table = $table;
+          }
+
+          /**
+           *
+           */
+          public function fields(array $fields) {
+            $this->fields_data = $fields;
+            return $this;
+          }
+
+          /**
+           *
+           */
+          public function condition($field, $value = NULL, $operator = '=') {
+            $this->conditions[] = [$field, $value, $operator];
+            return $this;
+          }
+
+          /**
+           *
+           */
+          public function execute() {
+            if (!isset($this->storage[$this->table])) {
+              return 0;
+            }
+
+            $updated = 0;
+            foreach ($this->storage[$this->table] as &$row) {
+              $match = TRUE;
+              foreach ($this->conditions as [$field, $value, $operator]) {
+                if ($operator === '=' && $row[$field] !== $value) {
+                  $match = FALSE;
+                  break;
+                }
+                if ($operator === 'IN' && !in_array($row[$field], $value)) {
+                  $match = FALSE;
+                  break;
+                }
+              }
+              if ($match) {
+                $row = array_merge($row, $this->fields_data);
+                $updated++;
+              }
+            }
+            return $updated;
+          }
+
+        };
+      }
+
+      /**
+       *
+       */
+      public function delete($table, array $options = []) {
+        return new class ($this->storage, $table) {
+          private $storage;
+          private $table;
+          private $conditions = [];
+
+          public function __construct(&$storage, $table) {
+            $this->storage = &$storage;
+            $this->table = $table;
+          }
+
+          /**
+           *
+           */
+          public function condition($field, $value = NULL, $operator = '=') {
+            $this->conditions[] = [$field, $value, $operator];
+            return $this;
+          }
+
+          /**
+           *
+           */
+          public function execute() {
+            if (!isset($this->storage[$this->table])) {
+              return 0;
+            }
+
+            $deleted = 0;
+            if (empty($this->conditions)) {
+              $deleted = count($this->storage[$this->table]);
+              $this->storage[$this->table] = [];
+            }
+            else {
+              $this->storage[$this->table] = array_filter($this->storage[$this->table], function ($row) use (&$deleted) {
+                  $match = TRUE;
+                foreach ($this->conditions as [$field, $value, $operator]) {
+                  if ($operator === '=' && $row[$field] !== $value) {
+                    $match = FALSE;
+                    break;
+                  }
+                }
+                if ($match) {
+                                $deleted++;
+                }
+                                        return !$match;
+              });
+            }
+            return $deleted;
+          }
+
+        };
+      }
+
+      /**
+       *
+       */
+      public function startTransaction($name = '') {
+        return TRUE;
+      }
+
+      /**
+       *
+       */
+      public function schema() {
+        return new class {
+
+          /**
+           *
+           */
+          public function tableExists($table) {
+            return TRUE;
+          }
+
+          /**
+           *
+           */
+          public function createTable($table, $spec) {
+            return TRUE;
+          }
+
+        };
+      }
+
+    };
 
     $this->config = [
       'table_name' => 'test_embedding_cache',
       'default_ttl' => 3600,
       'max_entries' => 1000,
-      // Disable random cleanup for tests.
+    // Disable random cleanup for deterministic tests.
       'cleanup_probability' => 0.0,
       'enable_compression' => FALSE,
     ];
-
-    // Mock schema to avoid table creation during tests.
-    $schema = $this->createMock(Schema::class);
-    $schema->method('tableExists')->willReturn(TRUE);
-    $this->connection->method('schema')->willReturn($schema);
 
     $this->cache = new DatabaseEmbeddingCache($this->connection, $this->logger, $this->config);
   }
 
   /**
-   * Tests cache miss scenario.
-   *
-   * @covers ::get
+   * Tests cache miss scenario with real implementation.
    */
   public function testCacheMiss() {
     $hash = str_repeat('a', 64);
 
-    $select = $this->createMock(SelectInterface::class);
-    $select->method('fields')->willReturnSelf();
-    $select->method('condition')->willReturnSelf();
-    $select->method('range')->willReturnSelf();
-
-    $statement = $this->createMock(StatementInterface::class);
-    $statement->method('fetchAssoc')->willReturn(FALSE);
-
-    $select->method('execute')->willReturn($statement);
-    $this->connection->method('select')->willReturn($select);
-
+    // No data in storage - should return null.
     $result = $this->cache->get($hash);
     $this->assertNull($result);
   }
 
   /**
-   * Tests cache hit scenario.
-   *
-   * @covers ::get
+   * Tests cache hit scenario with real implementation.
    */
   public function testCacheHit() {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
-    $serialized_embedding = serialize($embedding);
 
-    $select = $this->createMock(SelectInterface::class);
-    $select->method('fields')->willReturnSelf();
-    $select->method('condition')->willReturnSelf();
-    $select->method('range')->willReturnSelf();
-
-    $statement = $this->createMock(StatementInterface::class);
-    $statement->method('fetchAssoc')->willReturn([
-      'embedding_data' => $serialized_embedding,
-      'created' => time() - 100,
-      'expires' => time() + 3600,
-    ]);
-
-    $select->method('execute')->willReturn($statement);
-    $this->connection->method('select')->willReturn($select);
-
-    // Mock update query for last_accessed.
-    $update = $this->createMock(UpdateInterface::class);
-    $update->method('fields')->willReturnSelf();
-    $update->method('condition')->willReturnSelf();
-    $update->method('execute')->willReturn(1);
-    $this->connection->method('update')->willReturn($update);
-
+    // First set the data, then retrieve it.
+    $this->assertTrue($this->cache->set($hash, $embedding));
     $result = $this->cache->get($hash);
     $this->assertEquals($embedding, $result);
   }

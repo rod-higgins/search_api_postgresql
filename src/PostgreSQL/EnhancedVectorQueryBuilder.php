@@ -14,7 +14,6 @@ use Drupal\search_api_postgresql\Service\CircuitBreakerService;
  * Enhanced QueryBuilder with graceful degradation for vector search.
  */
 class EnhancedVectorQueryBuilder extends QueryBuilder {
-
   /**
    * The embedding service.
    *
@@ -86,10 +85,10 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
     // Check circuit breaker status.
     if ($this->circuitBreaker && !$this->circuitBreaker->canProceed('vector_search')) {
       throw new VectorSearchDegradedException(
-        'Vector search circuit breaker is open',
-        'text_only',
-        'Circuit breaker protection is active due to recent failures.'
-      );
+            'Vector search circuit breaker is open',
+            'text_only',
+            'Circuit breaker protection is active due to recent failures.'
+        );
     }
 
     // Check if vector search is enabled and available.
@@ -128,10 +127,10 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
     $keys = $query->getKeys();
     if (!$keys || !$this->embeddingService) {
       throw new EmbeddingServiceUnavailableException(
-        'Embedding service unavailable for vector search',
-        'text_only',
-        'AI search is temporarily unavailable. Switching to text search.'
-      );
+            'Embedding service unavailable for vector search',
+            'text_only',
+            'AI search is temporarily unavailable. Switching to text search.'
+        );
     }
 
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
@@ -151,18 +150,18 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
       }
 
       throw new EmbeddingServiceUnavailableException(
-        'Failed to generate embedding: ' . $e->getMessage(),
-        'text_only',
-        'AI search encountered an error. Using traditional text search instead.'
-      );
+            'Failed to generate embedding: ' . $e->getMessage(),
+            'text_only',
+            'AI search encountered an error. Using traditional text search instead.'
+            );
     }
 
     if (!$query_embedding) {
       throw new EmbeddingServiceUnavailableException(
-        'Empty embedding returned',
-        'text_only',
-        'AI search returned no results. Trying text search instead.'
-      );
+            'Empty embedding returned',
+            'text_only',
+            'AI search returned no results. Trying text search instead.'
+        );
     }
 
     $index = $query->getIndex();

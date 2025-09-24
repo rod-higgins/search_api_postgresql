@@ -13,7 +13,6 @@ use Drupal\search_api\SearchApiException;
  * PostgreSQL database connector.
  */
 class PostgreSQLConnector {
-
   /**
    * The database connection.
    *
@@ -212,7 +211,6 @@ class PostgreSQLConnector {
         'host' => $this->config['host'] ?? '',
         'port' => $this->config['port'] ?? 5432,
       ];
-
     }
     catch (\Exception $e) {
       $this->logger->error('Connection test failed: @message', [
@@ -529,6 +527,7 @@ class PostgreSQLConnector {
 
   /**
    * Validates an identifier without quoting it.
+   *
    * Used for metadata queries where unquoted names are needed.
    *
    * @param string $identifier
@@ -639,7 +638,6 @@ class PostgreSQLConnector {
       }
 
       return $results;
-
     }
     catch (\PDOException $e) {
       if ($query instanceof RefinableCacheableDependencyInterface) {
@@ -804,11 +802,11 @@ class PostgreSQLConnector {
             $embedding_service = \Drupal::getContainer()->get('search_api_postgresql.azure_embedding');
             if (class_exists('Drupal\search_api_postgresql\PostgreSQL\AzureVectorQueryBuilder')) {
               return new AzureVectorQueryBuilder(
-                $this,
-                $field_mapper,
-                $backend_config,
-                $embedding_service
-              );
+                      $this,
+                      $field_mapper,
+                      $backend_config,
+                      $embedding_service
+                  );
             }
           }
           catch (\Exception $e) {
@@ -826,18 +824,18 @@ class PostgreSQLConnector {
             // Check if enhanced query builder is available.
             if (class_exists('Drupal\search_api_postgresql\PostgreSQL\EnhancedVectorQueryBuilder')) {
               return new EnhancedVectorQueryBuilder(
-                $this,
-                $field_mapper,
-                $backend_config,
-                $embedding_service
+                  $this,
+                  $field_mapper,
+                  $backend_config,
+                  $embedding_service
               );
             }
             elseif (class_exists('Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder')) {
               return new VectorQueryBuilder(
-                $this,
-                $field_mapper,
-                $backend_config,
-                $embedding_service
+                  $this,
+                  $field_mapper,
+                  $backend_config,
+                  $embedding_service
                           );
             }
           }
@@ -853,10 +851,10 @@ class PostgreSQLConnector {
     // Fall back to standard query builder.
     if (class_exists('Drupal\search_api_postgresql\PostgreSQL\QueryBuilder')) {
       return new QueryBuilder(
-        $this,
-        $field_mapper,
-        $backend_config
-      );
+            $this,
+            $field_mapper,
+            $backend_config
+        );
     }
 
     // Throw an exception if no query builder is available.

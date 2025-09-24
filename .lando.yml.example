@@ -1,0 +1,441 @@
+name: search
+recipe: drupal11
+
+config:
+  php: '8.3'
+  database: postgres:16
+  webroot: web
+
+services:
+  appserver:
+    build_as_root:
+      # Install pgloader
+      - apt-get update
+      - apt-get install -y pgloader
+      # Or use alternative installation method:
+      # - curl -L https://github.com/dimitri/pgloader/releases/download/v3.6.9/pgloader-bundle-3.6.9.linux-amd64.tar.gz | tar xz
+      # - mv pgloader-bundle-3.6.9/bin/pgloader /usr/local/bin/
+
+  database:
+    type: compose
+    services:
+      image: pgvector/pgvector:pg16
+      command: postgres -c 'config_file=/etc/postgresql/postgresql.conf'
+      environment:
+        POSTGRES_DB: drupal
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: ''
+        POSTGRES_HOST_AUTH_METHOD: trust
+      volumes:
+        - database_data:/var/lib/postgresql/data
+        - ./postgres.conf:/etc/postgresql/postgresql.conf:ro
+      ports:
+        - "5432"
+    run:
+      # Wait for PostgreSQL to be ready
+      - sleep 15
+      # Create extensions in order
+      - psql -U postgres -d drupal -c "CREATE EXTENSION IF NOT EXISTS vector;" || echo "vector extension failed"
+      - psql -U postgres -d drupal -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;" || echo "pg_trgm extension failed"
+      - psql -U postgres -d drupal -c "CREATE EXTENSION IF NOT EXISTS btree_gin;" || echo "btree_gin extension failed"
+      - psql -U postgres -d drupal -c "CREATE EXTENSION IF NOT EXISTS btree_gist;" || echo "btree_gist extension failed"
+      - psql -U postgres -d drupal -c "CREATE EXTENSION IF NOT EXISTS unaccent;" || echo "unaccent extension failed"
+      # Test vector functionality
+      - psql -U postgres -d drupal -c "SELECT 'pgvector test: ' || '[1,2,3]'::vector(3)::text;" || echo "pgvector test failed"
+
+  # Redis for caching
+  cache:
+    type: redis:7
+    config:
+      server: |
+        maxmemory 128mb
+        maxmemory-policy allkeys-lru
+        save 900 1
+        save 300 10
+        save 60 10000
+
+  # Mailhog for email testing
+  mailhog:
+    type: mailhog
+
+volumes:
+  database_data:
+
+tooling:
+  drush:
+    service: appserver
+    cmd: drush
+
+  composer:
+    service: appserver
+    cmd: composer
+    
+  # PostgreSQL administration tools
+  psql:
+    service: database
+    cmd: psql -U postgres -d drupal
+    
+  psql-admin:
+    service: database
+    cmd: psql -U postgres -d drupal
+    
+  # Search API tools
+  search-reindex:
+    service: appserver
+    cmd: drush search-api:reset-tracker && drush search-api:index
+    
+  search-clear:
+    service: appserver
+    cmd: drush search-api:clear
+    
+  search-status:
+    service: appserver
+    cmd: drush search-api:status
+
+  # === PostgreSQL Diagnostic Tools ===
+  
+  # Basic PostgreSQL info
+  pg-version:
+    service: database
+    cmd: psql -U postgres -d drupal -c "SELECT version();"
+    
+  pg-config:
+    service: database
+    cmd: |
+      echo "=== PostgreSQL Configuration ==="
+      psql -U postgres -d drupal -c "SELECT name, setting, unit, context FROM pg_settings WHERE name IN ('max_connections', 'shared_buffers', 'work_mem', 'maintenance_work_mem', 'effective_cache_size', 'random_page_cost', 'seq_page_cost') ORDER BY name;"
+      
+  pg-extensions-available:
+    service: database
+    cmd: psql -U postgres -d drupal -c "SELECT name, default_version, installed_version, comment FROM pg_available_extensions WHERE name LIKE '%vector%' OR name LIKE '%trgm%' OR name LIKE '%gin%' OR name LIKE '%gist%' ORDER BY name;"
+    
+  pg-extensions-installed:
+    service: database
+    cmd: psql -U postgres -d drupal -c "SELECT extname, extversion, extrelocatable, extnamespace::regnamespace AS schema FROM pg_extension ORDER BY extname;"
+    
+  # === pgvector Specific Tools ===
+  
+  # Check if pgvector files exist at system level
+  pgvector-files:
+    service: database
+    user: root
+    cmd: |
+      echo "=== Checking pgvector installation files ==="
+      echo "Looking for vector.so shared library:"
+      find /usr -name "vector.so" 2>/dev/null || echo "vector.so not found"
+      echo ""
+      echo "Looking for vector extension files:"
+      find /usr -name "vector*" -type f 2>/dev/null | head -10
+      echo ""
+      echo "PostgreSQL lib directory:"
+      ls -la /usr/lib/postgresql/*/lib/ 2>/dev/null | grep vector || echo "No vector files in PostgreSQL lib directories"
+      
+  # Test pgvector availability  
+  pgvector-available:
+    service: database
+    cmd: |
+      echo "=== pgvector Extension Availability ==="
+      psql -U postgres -d drupal -c "SELECT name, default_version, comment FROM pg_available_extensions WHERE name = 'vector';" 2>&1
+      
+  # Install pgvector extension
+  pgvector-install:
+    service: database
+    cmd: |
+      echo "=== Installing pgvector Extension ==="
+      psql -U postgres -d drupal -c "DROP EXTENSION IF EXISTS vector CASCADE;" 2>&1
+      psql -U postgres -d drupal -c "CREATE EXTENSION vector;" 2>&1
+      echo ""
+      echo "Verifying installation:"
+      psql -U postgres -d drupal -c "SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';" 2>&1
+      
+  # Comprehensive pgvector functionality test
+  pgvector-test:
+    service: database
+    cmd: |
+      echo "=== Comprehensive pgvector Test Suite ==="
+      echo ""
+      echo "1. Extension Status:"
+      psql -U postgres -d drupal -c "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN 'INSTALLED' ELSE 'NOT INSTALLED' END as vector_extension_status;" 2>&1
+      echo ""
+      echo "2. Vector Type Test:"
+      psql -U postgres -d drupal -c "SELECT '[1,2,3]'::vector as simple_vector;" 2>&1
+      echo ""
+      echo "3. Table Creation Test:"
+      psql -U postgres -d drupal -c "CREATE TEMP TABLE vector_test (id int, embedding vector(3)); INSERT INTO vector_test VALUES (1, '[1,2,3]'), (2, '[4,5,6]'); SELECT * FROM vector_test;" 2>&1
+      echo ""
+      echo "4. Distance Operations Test:"
+      psql -U postgres -d drupal -c "SELECT '[1,2,3]'::vector <-> '[4,5,6]'::vector as cosine_distance, '[1,2,3]'::vector <#> '[4,5,6]'::vector as negative_inner_product;" 2>&1
+      echo ""
+      echo "5. Large Vector Test (OpenAI embedding size):"
+      psql -U postgres -d drupal -c "CREATE TEMP TABLE large_vector_test (id int, embedding vector(1536)); INSERT INTO large_vector_test VALUES (1, array_fill(0.1, ARRAY[1536])::vector); SELECT 'Large vector test: ' || char_length(embedding::text) || ' characters' as result FROM large_vector_test;" 2>&1
+
+  # Test Search API specific schema
+  search-api-schema-test:
+    service: database
+    cmd: |
+      echo "=== Search API Schema Test ==="
+      echo ""
+      echo "Testing exact Search API table structure..."
+      psql -U postgres -d drupal -c "
+      DROP TABLE IF EXISTS search_api_test_table;
+      CREATE TABLE search_api_test_table (
+        search_api_id VARCHAR(255) PRIMARY KEY,
+        search_api_datasource VARCHAR(255) NOT NULL,
+        search_api_language VARCHAR(12) NOT NULL DEFAULT '',
+        embedding_vector VECTOR(1536),
+        search_vector TSVECTOR
+      );
+      
+      INSERT INTO search_api_test_table (search_api_id, search_api_datasource, search_api_language, embedding_vector, search_vector) 
+      VALUES (
+        'node/1', 
+        'entity:node', 
+        'en', 
+        array_fill(0.1, ARRAY[1536])::vector,
+        to_tsvector('english', 'test document content')
+      );
+      
+      SELECT 'SUCCESS: Search API table created and populated' as result, search_api_id, search_api_datasource FROM search_api_test_table;
+      
+      DROP TABLE search_api_test_table;
+      " 2>&1
+
+  # === Performance and Troubleshooting ===
+  
+  pg-performance:
+    service: database
+    cmd: |
+      echo "=== PostgreSQL Performance Check ==="
+      psql -U postgres -d drupal -c "
+      SELECT 
+        'Database Size' as metric, 
+        pg_size_pretty(pg_database_size('drupal')) as value
+      UNION ALL
+      SELECT 
+        'Active Connections',
+        count(*)::text
+      FROM pg_stat_activity 
+      WHERE state = 'active'
+      UNION ALL
+      SELECT 
+        'Cache Hit Ratio',
+        round(100.0 * sum(blks_hit) / (sum(blks_hit) + sum(blks_read)), 2)::text || '%'
+      FROM pg_stat_database 
+      WHERE datname = 'drupal';
+      "
+      
+  pg-search-tables:
+    service: database
+    cmd: |
+      echo "=== Search API Tables ==="
+      psql -U postgres -d drupal -c "
+      SELECT 
+        schemaname, 
+        tablename, 
+        pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size
+      FROM pg_tables 
+      WHERE tablename LIKE '%search%' 
+      ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+      "
+      
+  pg-vector-indexes:
+    service: database
+    cmd: |
+      echo "=== Vector Indexes ==="
+      psql -U postgres -d drupal -c "
+      SELECT 
+        schemaname,
+        tablename, 
+        indexname, 
+        indexdef
+      FROM pg_indexes 
+      WHERE indexdef LIKE '%vector%' OR indexdef LIKE '%embedding%'
+      ORDER BY tablename;
+      "
+
+  # === Troubleshooting Tools ===
+  
+  debug-pgvector:
+    service: database
+    user: root
+    cmd: |
+      echo "=== Complete pgvector Debug Information ==="
+      echo ""
+      echo "1. Container OS Info:"
+      cat /etc/os-release | head -3
+      echo ""
+      echo "2. PostgreSQL Process:"
+      ps aux | grep postgres | head -5
+      echo ""
+      echo "3. PostgreSQL Version and Compile Info:"
+      su postgres -c 'psql -d drupal -c "SELECT version();"'
+      echo ""
+      echo "4. Shared Library Path:"
+      su postgres -c 'psql -d drupal -c "SHOW dynamic_library_path;"'
+      echo ""
+      echo "5. Extension Directory Contents:"
+      find /usr/share/postgresql/*/extension/ -name "*vector*" 2>/dev/null || echo "No vector extension files found"
+      echo ""
+      echo "6. Available Extensions:"
+      su postgres -c 'psql -d drupal -c "SELECT name FROM pg_available_extensions WHERE name LIKE \"%vector%\";"'
+      echo ""
+      echo "7. Memory and Resource Usage:"
+      free -m | head -2
+      echo ""
+      echo "8. Disk Space:"
+      df -h | grep -E "(Filesystem|/var/lib/postgresql)" || df -h | head -2
+
+  # === Container and Image Info ===
+  
+  container-info:
+    service: database
+    user: root
+    cmd: |
+      echo "=== Container Information ==="
+      echo "Image details:"
+      cat /etc/image-info 2>/dev/null || echo "No image info file found"
+      echo ""
+      echo "PostgreSQL installation details:"
+      dpkg -l | grep postgres | head -10
+      echo ""
+      echo "pgvector package info:"
+      dpkg -l | grep vector || echo "No pgvector packages found"
+
+  # === Cache Management ===
+  
+  redis-cli:
+    service: cache
+    cmd: redis-cli
+    
+  cache-clear:
+    service: cache
+    cmd: redis-cli FLUSHALL
+
+  # === Legacy/Compatibility Commands ===
+  # (Maintaining backward compatibility with original tooling names)
+  
+  check-extensions:
+    service: database
+    cmd: psql -U postgres -d drupal -c "SELECT extname, extversion FROM pg_extension ORDER BY extname;"
+    
+  test-pgvector:
+    service: database
+    cmd: |
+      echo "Testing pgvector installation..."
+      psql -U postgres -d drupal -c "SELECT 'Extension check:' as test, extname, extversion FROM pg_extension WHERE extname = 'vector';"
+      echo ""
+      echo "Testing vector type creation..."
+      psql -U postgres -d drupal -c "CREATE TEMP TABLE test_vector (id int, vec vector(3)); INSERT INTO test_vector VALUES (1, '[1,2,3]'), (2, '[4,5,6]'); SELECT 'Vector test results:' as test, * FROM test_vector; DROP TABLE test_vector;" 2>&1
+      echo ""
+      echo "Testing vector operations..."
+      psql -U postgres -d drupal -c "SELECT 'Distance test:' as test, '[1,2,3]'::vector <-> '[4,5,6]'::vector as distance;" 2>&1
+    
+  test-search-table:
+    service: database
+    cmd: |
+      echo "Testing Search API table with vector column..."
+      psql -U postgres -d drupal -c "
+      CREATE TEMP TABLE search_api_test (
+        search_api_id VARCHAR(255) PRIMARY KEY,
+        search_api_datasource VARCHAR(255) NOT NULL,
+        search_api_language VARCHAR(12) NOT NULL DEFAULT '',
+        embedding_vector VECTOR(1536),
+        search_vector TSVECTOR
+      );
+      INSERT INTO search_api_test (search_api_id, search_api_datasource, search_api_language, embedding_vector) 
+      VALUES ('test1', 'node', 'en', array_fill(0.1, ARRAY[1536])::vector);
+      SELECT 'Table test successful - ID:', search_api_id FROM search_api_test;
+      DROP TABLE search_api_test;
+      " 2>&1
+
+  db-info:
+    service: database
+    cmd: |
+      echo "=== PostgreSQL Information ==="
+      psql -U postgres -d drupal -c "SELECT version();"
+      echo ""
+      echo "=== Available Extensions ==="
+      psql -U postgres -d drupal -c "SELECT name, default_version, comment FROM pg_available_extensions WHERE name IN ('vector', 'pg_trgm', 'btree_gin', 'btree_gist', 'unaccent') ORDER BY name;"
+      echo ""
+      echo "=== Installed Extensions ==="
+      psql -U postgres -d drupal -c "SELECT extname, extversion FROM pg_extension ORDER BY extname;"
+      echo ""
+      echo "=== Database Settings ==="
+      psql -U postgres -d drupal -c "SELECT name, setting FROM pg_settings WHERE name IN ('shared_buffers', 'work_mem', 'maintenance_work_mem', 'max_connections') ORDER BY name;"
+
+  analyze-performance:
+    service: database
+    cmd: psql -U postgres -d drupal -c "SELECT schemaname, tablename, attname, n_distinct, correlation FROM pg_stats WHERE tablename LIKE '%search%' ORDER BY tablename, attname;"
+    
+  check-indexes:
+    service: database
+    cmd: psql -U postgres -d drupal -c "SELECT schemaname, tablename, indexname, indexdef FROM pg_indexes WHERE tablename LIKE '%search%' ORDER BY tablename;"
+    
+  # Show setup help
+  setup-help:
+    service: appserver
+    cmd: |
+      echo "Search API PostgreSQL + pgvector Setup & Diagnostic Commands:"
+      echo ""
+      echo "=== SETUP COMMANDS ==="
+      echo "1. Install Drupal:"
+      echo "   lando composer create-project drupal/recommended-project:11.x tmp && cp -r tmp/. . && rm -rf tmp"
+      echo "   lando composer require drush/drush"
+      echo "   lando drush site:install --db-url=pgsql://postgres:@database/drupal -y"
+      echo ""
+      echo "2. Install Search API modules:"
+      echo "   lando composer require drupal/search_api_postgresql drupal/key drupal/admin_toolbar"
+      echo "   lando drush en search_api_postgresql search_api key admin_toolbar -y"
+      echo ""
+      echo "=== POSTGRESQL DIAGNOSTIC COMMANDS ==="
+      echo "Basic Info:"
+      echo "   lando pg-version             # PostgreSQL version"
+      echo "   lando pg-config              # Key PostgreSQL settings"
+      echo "   lando container-info         # Container and image details"
+      echo ""
+      echo "Extensions:"
+      echo "   lando pg-extensions-available    # Available extensions"
+      echo "   lando pg-extensions-installed    # Currently installed extensions"
+      echo ""
+      echo "=== PGVECTOR DIAGNOSTIC COMMANDS ==="
+      echo "Installation Check:"
+      echo "   lando pgvector-files         # Check system files"
+      echo "   lando pgvector-available     # Check if extension is available"
+      echo "   lando pgvector-install       # Install/reinstall the extension"
+      echo ""
+      echo "Functionality Tests:"
+      echo "   lando pgvector-test          # Comprehensive pgvector test suite"
+      echo "   lando search-api-schema-test # Test exact Search API table structure"
+      echo ""
+      echo "Troubleshooting:"
+      echo "   lando debug-pgvector         # Complete debug information"
+      echo ""
+      echo "=== PERFORMANCE & MONITORING ==="
+      echo "   lando pg-performance         # Database performance metrics"
+      echo "   lando pg-search-tables       # Search API table sizes"
+      echo "   lando pg-vector-indexes      # Vector index information"
+      echo ""
+      echo "=== SEARCH API TOOLS ==="
+      echo "   lando search-status          # Search API indexing status"
+      echo "   lando search-reindex         # Reindex all content"
+      echo "   lando search-clear           # Clear search indexes"
+      echo ""
+      echo "=== QUICK START DIAGNOSTIC ==="
+      echo "Run these in order to verify everything is working:"
+      echo "   1. lando pg-version"
+      echo "   2. lando pgvector-available"
+      echo "   3. lando pgvector-test"
+      echo "   4. lando search-api-schema-test"
+      echo ""
+      echo "Configure Search API:"
+      echo "   - Go to /admin/config/search/search-api"
+      echo "   - Add server with PostgreSQL backend"
+      echo "   - Connection: Host=database, Port=5432, Database=drupal, User=postgres"
+      echo "   - Enable AI features if you have API keys"
+
+events:
+  post-start:
+    - appserver: composer config --global process-timeout 2000
+    - appserver: echo "Environment ready! pgvector is available. Use 'lando setup-help' for instructions."
+  post-rebuild:
+    - appserver: echo "Rebuild complete. Run 'lando test-pgvector' to verify pgvector installation."

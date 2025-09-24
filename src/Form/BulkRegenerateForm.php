@@ -13,7 +13,6 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Form for bulk regeneration of embeddings.
  */
 class BulkRegenerateForm extends FormBase {
-
   /**
    * The entity type manager.
    *
@@ -60,10 +59,10 @@ class BulkRegenerateForm extends FormBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('entity_type.manager'),
-      $container->get('messenger'),
-      $container->get('search_api_postgresql.embedding_queue_manager')
-    );
+          $container->get('entity_type.manager'),
+          $container->get('messenger'),
+          $container->get('search_api_postgresql.embedding_queue_manager')
+      );
   }
 
   /**
@@ -361,9 +360,11 @@ class BulkRegenerateForm extends FormBase {
       }
 
       $config = $backend->getConfiguration();
-      if (!empty($config['ai_embeddings']['enabled']) ||
-          !empty($config['azure_embedding']['enabled']) ||
-          !empty($config['vector_search']['enabled'])) {
+      if (
+            !empty($config['ai_embeddings']['enabled']) ||
+            !empty($config['azure_embedding']['enabled']) ||
+            !empty($config['vector_search']['enabled'])
+        ) {
         $ai_servers[$server->id()] = $server;
       }
     }

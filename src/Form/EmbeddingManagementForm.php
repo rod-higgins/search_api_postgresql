@@ -16,7 +16,6 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Form for managing embeddings across all PostgreSQL servers and indexes.
  */
 class EmbeddingManagementForm extends FormBase {
-
   /**
    * The entity type manager.
    *
@@ -63,10 +62,10 @@ class EmbeddingManagementForm extends FormBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('entity_type.manager'),
-      $container->get('search_api_postgresql.embedding_queue_manager'),
-      $container->get('search_api_postgresql.analytics')
-    );
+          $container->get('entity_type.manager'),
+          $container->get('search_api_postgresql.embedding_queue_manager'),
+          $container->get('search_api_postgresql.analytics')
+      );
   }
 
   /**
@@ -270,8 +269,8 @@ class EmbeddingManagementForm extends FormBase {
         '#states' => [
           'visible' => [
             ':input[name="operation"]' => [
-              ['value' => 'regenerate_all'],
-              ['value' => 'regenerate_missing'],
+        ['value' => 'regenerate_all'],
+        ['value' => 'regenerate_missing'],
             ],
           ],
         ],
@@ -304,11 +303,11 @@ class EmbeddingManagementForm extends FormBase {
         '#theme' => 'table',
         '#header' => [$this->t('Metric'), $this->t('Value')],
         '#rows' => [
-          [$this->t('Total Items'), number_format($overall_stats['total_items'])],
-          [$this->t('Items with Embeddings'), number_format($overall_stats['items_with_embeddings'])],
-          [$this->t('Overall Coverage'), round($overall_stats['coverage'], 1) . '%'],
-          [$this->t('Queue Items Pending'), number_format($overall_stats['queue_pending'])],
-          [$this->t('Estimated Monthly Cost'), '$' . number_format($overall_stats['monthly_cost'], 2)],
+        [$this->t('Total Items'), number_format($overall_stats['total_items'])],
+        [$this->t('Items with Embeddings'), number_format($overall_stats['items_with_embeddings'])],
+        [$this->t('Overall Coverage'), round($overall_stats['coverage'], 1) . '%'],
+        [$this->t('Queue Items Pending'), number_format($overall_stats['queue_pending'])],
+        [$this->t('Estimated Monthly Cost'), '$' . number_format($overall_stats['monthly_cost'], 2)],
         ],
       ];
 
@@ -330,7 +329,6 @@ class EmbeddingManagementForm extends FormBase {
       ];
 
       return $form;
-
     }
     catch (\Exception $e) {
       // If anything fails, show an error message.
@@ -421,7 +419,6 @@ class EmbeddingManagementForm extends FormBase {
       }
 
       return $stats;
-
     }
     catch (\Exception $e) {
       // If anything fails, return default stats.
@@ -496,18 +493,20 @@ class EmbeddingManagementForm extends FormBase {
     // Special validation for destructive operations.
     if (in_array($operation, ['clear_embeddings', 'regenerate_all'])) {
       if (!$form_state->getValue('force_overwrite')) {
-        $form_state->setErrorByName('force_overwrite',
-          $this->t('You must confirm that you want to perform this destructive operation.')
-        );
+        $form_state->setErrorByName(
+              'force_overwrite',
+              $this->t('You must confirm that you want to perform this destructive operation.')
+          );
       }
     }
 
     // Validate batch size for large operations.
     $batch_size = $form_state->getValue('batch_size');
     if ($batch_size < 1 || $batch_size > $this->config->get('max_batch_size', 1000)) {
-      $form_state->setErrorByName('batch_size',
-        $this->t('Batch size must be between 1 and 1000.')
-      );
+      $form_state->setErrorByName(
+            'batch_size',
+            $this->t('Batch size must be between 1 and 1000.')
+        );
     }
 
     // Check if queue is enabled when requested.
@@ -515,9 +514,10 @@ class EmbeddingManagementForm extends FormBase {
     if ($use_queue) {
       $queue_stats = $this->queueManager->getQueueStats();
       if (!($queue_stats['config']['enabled'] ?? FALSE)) {
-        $form_state->setErrorByName('use_queue',
-          $this->t('Queue processing is not enabled. Enable it in the queue management settings.')
-        );
+        $form_state->setErrorByName(
+              'use_queue',
+              $this->t('Queue processing is not enabled. Enable it in the queue management settings.')
+          );
       }
     }
   }
@@ -559,27 +559,27 @@ class EmbeddingManagementForm extends FormBase {
     // Display results.
     if ($results['success']) {
       $this->messenger()->addStatus(
-        $this->t('Operation "@operation" completed successfully. @details', [
-          '@operation' => $operation,
-          '@details' => $results['message'],
-        ])
-      );
+            $this->t('Operation "@operation" completed successfully. @details', [
+              '@operation' => $operation,
+              '@details' => $results['message'],
+            ])
+        );
 
       if ($use_queue && $results['queued_items'] > 0) {
         $this->messenger()->addStatus(
-          $this->t('@count items have been queued for background processing.', [
-            '@count' => $results['queued_items'],
-          ])
-        );
+            $this->t('@count items have been queued for background processing.', [
+              '@count' => $results['queued_items'],
+            ])
+            );
       }
     }
     else {
       $this->messenger()->addError(
-        $this->t('Operation "@operation" failed: @error', [
-          '@operation' => $operation,
-          '@error' => $results['error'],
-        ])
-          );
+            $this->t('Operation "@operation" failed: @error', [
+              '@operation' => $operation,
+              '@error' => $results['error'],
+            ])
+            );
     }
 
     // Redirect to results page if available.
@@ -608,13 +608,13 @@ class EmbeddingManagementForm extends FormBase {
     $preview = $this->getOperationPreview($operation, $server_id, $index_id);
 
     $this->messenger()->addStatus(
-      $this->t('Preview: This operation would affect @items items across @servers servers and @indexes indexes. Estimated cost: $@cost', [
-        '@items' => number_format($preview['affected_items']),
-        '@servers' => $preview['affected_servers'],
-        '@indexes' => $preview['affected_indexes'],
-        '@cost' => number_format($preview['estimated_cost'], 4),
-      ])
-    );
+          $this->t('Preview: This operation would affect @items items across @servers servers and @indexes indexes. Estimated cost: $@cost', [
+            '@items' => number_format($preview['affected_items']),
+            '@servers' => $preview['affected_servers'],
+            '@indexes' => $preview['affected_indexes'],
+            '@cost' => number_format($preview['estimated_cost'], 4),
+          ])
+      );
 
     // Show detailed breakdown.
     if (!empty($preview['breakdown'])) {
@@ -627,10 +627,10 @@ class EmbeddingManagementForm extends FormBase {
       }
 
       $this->messenger()->addStatus(
-        $this->t('Breakdown: @breakdown', [
-          '@breakdown' => implode(', ', $breakdown_text),
-        ])
-      );
+            $this->t('Breakdown: @breakdown', [
+              '@breakdown' => implode(', ', $breakdown_text),
+            ])
+        );
     }
   }
 
@@ -835,13 +835,13 @@ class EmbeddingManagementForm extends FormBase {
 
       if ($options['use_queue']) {
         $success = $this->queueManager->queueIndexEmbeddingRegeneration(
-          $server->id(),
-          $index->id(),
-          $options['batch_size'],
-        // Start from beginning.
-          0,
-          $this->getPriorityValue($options['priority'])
-        );
+              $server->id(),
+              $index->id(),
+              $options['batch_size'],
+              // Start from beginning.
+              0,
+              $this->getPriorityValue($options['priority'])
+          );
 
         if ($success) {
           $total_queued++;
@@ -954,9 +954,9 @@ class EmbeddingManagementForm extends FormBase {
       catch (\Exception $e) {
         // Log error but continue with other indexes.
         $this->getLogger('search_api_postgresql')->error(
-          'Failed to clear embeddings for @index: @error',
-          ['@index' => $index->label(), '@error' => $e->getMessage()]
-              );
+              'Failed to clear embeddings for @index: @error',
+              ['@index' => $index->label(), '@error' => $e->getMessage()]
+                );
       }
     }
 
@@ -1048,7 +1048,6 @@ class EmbeddingManagementForm extends FormBase {
           'index_name' => $index->label(),
           'item_count' => $item_count,
         ];
-
       }
       catch (\Exception $e) {
         // Skip indexes with errors.

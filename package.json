@@ -1,0 +1,29 @@
+{
+  "name": "search-api-postgresql",
+  "version": "1.0.0",
+  "description": "Search API PostgreSQL module with end-to-end testing",
+  "scripts": {
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
+    "cypress:run-headed": "cypress run --headed",
+    "test:e2e": "cypress run --spec 'cypress/e2e/search-api-postgresql-complete.cy.js'",
+    "test:e2e-dev": "cypress open --e2e",
+    "test:all": "npm run test:phpunit && npm run test:e2e",
+    "test:phpunit": "./vendor/bin/phpunit --configuration phpunit.xml",
+    "test:integration": "php scripts/comprehensive-integration-test.php",
+    "test:syntax": "php scripts/test-runner.php",
+    "setup:ddev": "ddev start && ddev composer install && ddev drush site:install --yes",
+    "setup:test-data": "ddev drush en search_api_postgresql -y && ddev drush cr"
+  },
+  "devDependencies": {
+    "cypress": "^13.0.0"
+  },
+  "keywords": [
+    "drupal",
+    "search",
+    "postgresql",
+    "vector-search",
+    "ai"
+  ],
+  "license": "GPL-2.0-or-later"
+}

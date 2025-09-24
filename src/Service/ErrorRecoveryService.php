@@ -19,7 +19,6 @@ use Psr\Log\LoggerInterface;
  * Automated error recovery and healing strategies service.
  */
 class ErrorRecoveryService {
-
   /**
    * The database connection.
    *
@@ -664,10 +663,11 @@ class ErrorRecoveryService {
       'usage_bytes' => $memory_usage,
       'limit_bytes' => $memory_limit,
       'usage_percentage' => $usage_percentage,
-      'message' => sprintf('Memory usage: %.1f%% (%s / %s)',
-        $usage_percentage,
-        $this->formatBytes($memory_usage),
-        $this->formatBytes($memory_limit)
+      'message' => sprintf(
+          'Memory usage: %.1f%% (%s / %s)',
+          $usage_percentage,
+          $this->formatBytes($memory_usage),
+          $this->formatBytes($memory_limit)
       ),
     ];
   }
@@ -697,9 +697,10 @@ class ErrorRecoveryService {
         'free_bytes' => $disk_free,
         'total_bytes' => $disk_total,
         'usage_percentage' => $usage_percentage,
-        'message' => sprintf('Disk usage: %.1f%% (%s free)',
-          $usage_percentage,
-          $this->formatBytes($disk_free)
+        'message' => sprintf(
+            'Disk usage: %.1f%% (%s free)',
+            $usage_percentage,
+            $this->formatBytes($disk_free)
         ),
       ];
     }
@@ -961,7 +962,7 @@ class ErrorRecoveryService {
 
     $attempts = $this->recoveryAttempts[$recovery_id];
     $recent_attempts = array_filter($attempts, function ($timestamp) use ($time_window) {
-      return $timestamp > (time() - $time_window);
+        return $timestamp > (time() - $time_window);
     });
 
     return count($recent_attempts) >= $max_attempts;

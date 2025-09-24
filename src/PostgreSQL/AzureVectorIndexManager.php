@@ -9,7 +9,6 @@ use Drupal\search_api\Query\QueryInterface;
  * Enhanced IndexManager with Azure AI vector search capabilities.
  */
 class AzureVectorIndexManager extends IndexManager {
-
   /**
    * The Azure embedding service.
    *
@@ -34,9 +33,9 @@ class AzureVectorIndexManager extends IndexManager {
     // Add vector column for embeddings.
     $vector_dimension = $this->config['azure_embedding']['dimension'] ?? 1536;
     $sql = str_replace(
-      "search_vector TSVECTOR\n);",
-      "search_vector TSVECTOR,\n  content_embedding VECTOR({$vector_dimension})\n);"
-    );
+          "search_vector TSVECTOR\n);",
+          "search_vector TSVECTOR,\n  content_embedding VECTOR({$vector_dimension})\n);"
+      );
 
     return $sql;
   }
@@ -128,9 +127,9 @@ class AzureVectorIndexManager extends IndexManager {
     $columns = array_keys($values);
     $placeholders = array_map(function ($col) use ($values) {
       if ($col === 'search_vector') {
-        return $values[$col];
+            return $values[$col];
       }
-      return ":{$col}";
+        return ":{$col}";
     }, $columns);
 
     $insert_sql = "INSERT INTO {$table_name} (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
@@ -182,7 +181,6 @@ interface EmbeddingServiceInterface {
  * Azure OpenAI embedding service implementation.
  */
 class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
-
   /**
    * The Azure OpenAI endpoint.
    *
@@ -252,11 +250,11 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
     }
 
     $url = sprintf(
-      '%s/openai/deployments/%s/embeddings?api-version=%s',
-      $this->endpoint,
-      $this->deploymentName,
-      $this->apiVersion
-    );
+          '%s/openai/deployments/%s/embeddings?api-version=%s',
+          $this->endpoint,
+          $this->deploymentName,
+          $this->apiVersion
+      );
 
     $data = [
       'input' => $text,
@@ -341,7 +339,6 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
  * Azure Cognitive Services Text Analytics embedding service.
  */
 class AzureCognitiveServicesEmbeddingService implements EmbeddingServiceInterface {
-
   /**
    * The Azure Cognitive Services endpoint.
    *
@@ -384,21 +381,21 @@ class AzureCognitiveServicesEmbeddingService implements EmbeddingServiceInterfac
    */
   public function generateEmbedding($text) {
     $url = sprintf(
-      '%s/language/:analyze-text?api-version=%s',
-      $this->endpoint,
-      $this->apiVersion
-    );
+          '%s/language/:analyze-text?api-version=%s',
+          $this->endpoint,
+          $this->apiVersion
+      );
 
     $data = [
     // This would need to be updated when embedding API is available.
       'kind' => 'SentimentAnalysis',
       'analysisInput' => [
         'documents' => [
-          [
-            'id' => '1',
-            'text' => $text,
-            'language' => 'en',
-          ],
+      [
+        'id' => '1',
+        'text' => $text,
+        'language' => 'en',
+      ],
         ],
       ],
     ];
@@ -452,7 +449,6 @@ class AzureCognitiveServicesEmbeddingService implements EmbeddingServiceInterfac
  * Enhanced QueryBuilder with Azure AI vector search capabilities.
  */
 class AzureVectorQueryBuilder extends QueryBuilder {
-
   /**
    * The Azure embedding service.
    *

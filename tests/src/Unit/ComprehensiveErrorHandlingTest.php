@@ -24,7 +24,6 @@ use Psr\Log\LoggerInterface;
  * @coversDefaultClass \Drupal\search_api_postgresql\Exception\ComprehensiveExceptionFactory
  */
 class ComprehensiveErrorHandlingTest extends UnitTestCase {
-
   /**
    * The logger mock.
    *
@@ -456,11 +455,11 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
 
       // Messages should suggest alternatives or next steps.
       $this->assertTrue(
-        strpos($message, 'temporarily') !== FALSE ||
-        strpos($message, 'alternative') !== FALSE ||
-        strpos($message, 'continue') !== FALSE ||
-        strpos($message, 'available') !== FALSE
-      );
+            strpos($message, 'temporarily') !== FALSE ||
+            strpos($message, 'alternative') !== FALSE ||
+            strpos($message, 'continue') !== FALSE ||
+            strpos($message, 'available') !== FALSE
+        );
     }
   }
 
@@ -480,9 +479,9 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
 
     // Context should be preserved for debugging.
     $message_with_context = $this->messageService->generateMessage(
-      $classified_exception,
-      ['show_technical_details' => TRUE] + $context
-    );
+          $classified_exception,
+          ['show_technical_details' => TRUE] + $context
+      );
 
     $this->assertArrayHasKey('technical_details', $message_with_context);
     $this->assertArrayHasKey('context', $message_with_context['technical_details']);

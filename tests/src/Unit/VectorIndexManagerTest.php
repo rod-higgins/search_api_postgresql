@@ -23,7 +23,6 @@ use Psr\Log\LoggerInterface;
  * @coversDefaultClass \Drupal\search_api_postgresql\Service\VectorIndexManager
  */
 class VectorIndexManagerTest extends UnitTestCase {
-
   /**
    * The database connection mock.
    *
@@ -97,10 +96,10 @@ class VectorIndexManagerTest extends UnitTestCase {
     ]);
 
     $this->vectorIndexManager = new VectorIndexManager(
-      $this->connection,
-      $this->logger,
-      $this->config
-    );
+          $this->connection,
+          $this->logger,
+          $this->config
+      );
   }
 
   /**
@@ -255,11 +254,11 @@ class VectorIndexManagerTest extends UnitTestCase {
     $this->connection->method('select')->willReturn($select);
 
     $results = $this->vectorIndexManager->searchSimilarVectors(
-      $this->index,
-      $query_vector,
-      $limit,
-      $threshold
-    );
+          $this->index,
+          $query_vector,
+          $limit,
+          $threshold
+      );
 
     $this->assertCount(2, $results);
     $this->assertEquals('item_1', $results[0]['item_id']);
@@ -287,11 +286,11 @@ class VectorIndexManagerTest extends UnitTestCase {
       ->willReturn($update);
 
     $result = $this->vectorIndexManager->updateVector(
-      $this->index,
-      $item_id,
-      $new_embedding,
-      $new_content
-    );
+          $this->index,
+          $item_id,
+          $new_embedding,
+          $new_content
+      );
 
     $this->assertTrue($result);
   }
@@ -399,12 +398,12 @@ class VectorIndexManagerTest extends UnitTestCase {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchField')->willReturnOnConsecutiveCalls(
     // Total vectors.
-      10000,
-    // Corrupted vectors.
-      50,
-    // Orphaned vectors.
-      5
-    );
+          10000,
+          // Corrupted vectors.
+          50,
+          // Orphaned vectors.
+          5
+      );
 
     $select->method('execute')->willReturn($statement);
     $this->connection->method('select')->willReturn($select);
@@ -431,12 +430,12 @@ class VectorIndexManagerTest extends UnitTestCase {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchField')->willReturnOnConsecutiveCalls(
     // Total vectors.
-      10000,
-    // Corrupted vectors (20% - high corruption)
-      2000,
-    // Orphaned vectors.
-      500
-    );
+          10000,
+          // Corrupted vectors (20% - high corruption)
+          2000,
+          // Orphaned vectors.
+          500
+      );
 
     $select->method('execute')->willReturn($statement);
     $this->connection->method('select')->willReturn($select);
@@ -495,8 +494,8 @@ class VectorIndexManagerTest extends UnitTestCase {
     $insert->method('fields')->willReturnSelf();
     $insert->method('values')->willReturnSelf();
     $insert->method('execute')->willThrowException(
-      new \Exception('Fatal error: Allowed memory size exhausted')
-    );
+          new \Exception('Fatal error: Allowed memory size exhausted')
+      );
 
     $this->connection->method('insert')->willReturn($insert);
 
@@ -624,10 +623,10 @@ class VectorIndexManagerTest extends UnitTestCase {
     $insert->method('values')->willReturnSelf();
     $insert->method('execute')
       ->will($this->onConsecutiveCalls(
-        $this->throwException(new \Exception('Deadlock found when trying to get lock')),
-    // Success on retry.
-        1
-      ));
+          $this->throwException(new \Exception('Deadlock found when trying to get lock')),
+          // Success on retry.
+          1
+          ));
 
     $this->connection->expects($this->exactly(2))
       ->method('insert')
@@ -734,9 +733,9 @@ class VectorIndexManagerTest extends UnitTestCase {
     $this->connection->method('select')->willReturn($select);
 
     $optimal_threshold = $this->vectorIndexManager->calibrateSimilarityThreshold(
-      $this->index,
-      $sample_queries
-    );
+          $this->index,
+          $sample_queries
+      );
 
     $this->assertIsFloat($optimal_threshold);
     $this->assertGreaterThan(0, $optimal_threshold);

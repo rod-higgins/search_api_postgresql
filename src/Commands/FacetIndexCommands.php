@@ -35,7 +35,9 @@ class FacetIndexCommands extends DrushCommands {
       return 1;
     }
 
-    /** @var \Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend $backend */
+    /**
+* @var \Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend $backend
+*/
     $backend = $server->getBackend();
 
     $this->output()->writeln("Analyzing facet indexes for '{$index_id}'...");
@@ -77,7 +79,9 @@ class FacetIndexCommands extends DrushCommands {
       return 1;
     }
 
-    /** @var \Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend $backend */
+    /**
+* @var \Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend $backend
+*/
     $backend = $server->getBackend();
 
     $table_name = $backend->getIndexTableNameForManager($index);

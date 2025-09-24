@@ -8,7 +8,6 @@ use Drupal\search_api\SearchApiException;
  * Base exception for recoverable errors that allow graceful degradation.
  */
 abstract class GracefulDegradationException extends SearchApiException {
-
   /**
    * The fallback strategy to use.
    *
@@ -88,7 +87,6 @@ class EmbeddingServiceUnavailableException extends GracefulDegradationException 
  * Exception for temporary API failures that should retry.
  */
 class TemporaryApiException extends GracefulDegradationException {
-
   /**
    * Number of retry attempts.
    *
@@ -129,7 +127,6 @@ class TemporaryApiException extends GracefulDegradationException {
  * Exception for partial failures in batch operations.
  */
 class PartialBatchFailureException extends GracefulDegradationException {
-
   /**
    * Successful items.
    *
@@ -209,7 +206,6 @@ class PartialBatchFailureException extends GracefulDegradationException {
  * Exception for vector search failures that can fall back to text search.
  */
 class VectorSearchDegradedException extends GracefulDegradationException {
-
   /**
    * The degradation reason.
    *
@@ -251,7 +247,6 @@ class VectorSearchDegradedException extends GracefulDegradationException {
  * Exception for configuration issues that allow partial functionality.
  */
 class ConfigurationDegradedException extends GracefulDegradationException {
-
   /**
    * Available features despite configuration issues.
    *
@@ -291,7 +286,6 @@ class ConfigurationDegradedException extends GracefulDegradationException {
  * Exception for queue processing issues that don't affect immediate operations.
  */
 class QueueDegradedException extends GracefulDegradationException {
-
   /**
    * The queue operation that failed.
    *
@@ -355,7 +349,6 @@ class CacheDegradedException extends GracefulDegradationException {
  * Exception for rate limiting that suggests backoff strategies.
  */
 class RateLimitException extends GracefulDegradationException {
-
   /**
    * Retry after seconds.
    *
@@ -395,7 +388,6 @@ class RateLimitException extends GracefulDegradationException {
  * Exception for circuit breaker open state.
  */
 class CircuitBreakerException extends GracefulDegradationException {
-
   /**
    * The service name.
    *

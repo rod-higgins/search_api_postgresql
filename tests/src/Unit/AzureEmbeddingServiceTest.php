@@ -20,7 +20,6 @@ use Psr\Log\LoggerInterface;
  * @coversDefaultClass \Drupal\search_api_postgresql\Service\AzureOpenAIEmbeddingService
  */
 class AzureEmbeddingServiceTest extends UnitTestCase {
-
   /**
    * The HTTP client mock.
    *
@@ -116,11 +115,11 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
 
     $mock_response = [
       'data' => [
-        [
-          'object' => 'embedding',
-          'index' => 0,
-          'embedding' => $expected_embedding,
-        ],
+      [
+        'object' => 'embedding',
+        'index' => 0,
+        'embedding' => $expected_embedding,
+      ],
       ],
       'model' => 'text-embedding-ada-002',
       'usage' => [
@@ -158,9 +157,9 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
 
     $mock_response = [
       'data' => [
-        ['object' => 'embedding', 'index' => 0, 'embedding' => $expected_embeddings[0]],
-        ['object' => 'embedding', 'index' => 1, 'embedding' => $expected_embeddings[1]],
-        ['object' => 'embedding', 'index' => 2, 'embedding' => $expected_embeddings[2]],
+      ['object' => 'embedding', 'index' => 0, 'embedding' => $expected_embeddings[0]],
+      ['object' => 'embedding', 'index' => 1, 'embedding' => $expected_embeddings[1]],
+      ['object' => 'embedding', 'index' => 2, 'embedding' => $expected_embeddings[2]],
       ],
       'model' => 'text-embedding-ada-002',
       'usage' => [
@@ -192,12 +191,12 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
 
     $mock_response = [
       'data' => array_map(function ($i) {
-        return [
-          'object' => 'embedding',
-          'index' => $i,
-          'embedding' => array_fill(0, 1536, 0.1),
-        ];
-        // Only first 16 (max batch size)
+          return [
+            'object' => 'embedding',
+            'index' => $i,
+            'embedding' => array_fill(0, 1536, 0.1),
+          ];
+          // Only first 16 (max batch size)
       }, range(0, 15)),
       'model' => 'text-embedding-ada-002',
       'usage' => ['prompt_tokens' => 160, 'total_tokens' => 160],
@@ -224,10 +223,10 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $this->embeddingService->expects($this->once())
       ->method('makeHttpRequest')
       ->willThrowException(new RequestException(
-        'Unauthorized',
-        new Request('POST', 'test'),
-        new Response(401, [], '{"error": {"code": "invalid_api_key", "message": "Invalid API key"}}')
-      ));
+          'Unauthorized',
+          new Request('POST', 'test'),
+          new Response(401, [], '{"error": {"code": "invalid_api_key", "message": "Invalid API key"}}')
+          ));
 
     $this->expectException(ApiKeyExpiredException::class);
     $this->expectExceptionMessage('API key expired for service: Azure OpenAI');
@@ -246,10 +245,10 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $this->embeddingService->expects($this->once())
       ->method('makeHttpRequest')
       ->willThrowException(new RequestException(
-        'Too Many Requests',
-        new Request('POST', 'test'),
-        new Response(429, ['Retry-After' => '60'], '{"error": {"code": "rate_limit_exceeded"}}')
-      ));
+          'Too Many Requests',
+          new Request('POST', 'test'),
+          new Response(429, ['Retry-After' => '60'], '{"error": {"code": "rate_limit_exceeded"}}')
+          ));
 
     $this->expectException(RateLimitException::class);
 
@@ -267,10 +266,10 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $this->embeddingService->expects($this->once())
       ->method('makeHttpRequest')
       ->willThrowException(new RequestException(
-        'Service Unavailable',
-        new Request('POST', 'test'),
-        new Response(503)
-      ));
+          'Service Unavailable',
+          new Request('POST', 'test'),
+          new Response(503)
+          ));
 
     $this->expectException(EmbeddingServiceUnavailableException::class);
 
@@ -362,7 +361,7 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     // Test valid response.
     $valid_response = [
       'data' => [
-        ['object' => 'embedding', 'index' => 0, 'embedding' => array_fill(0, 1536, 0.1)],
+      ['object' => 'embedding', 'index' => 0, 'embedding' => array_fill(0, 1536, 0.1)],
       ],
       'model' => 'text-embedding-ada-002',
     ];
@@ -389,13 +388,13 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $this->embeddingService->expects($this->exactly(2))
       ->method('makeHttpRequest')
       ->will($this->onConsecutiveCalls(
-        $this->throwException(new RequestException(
-          'Service Unavailable',
-          new Request('POST', 'test'),
-          new Response(503)
-        )),
-        ['data' => [['object' => 'embedding', 'index' => 0, 'embedding' => array_fill(0, 1536, 0.1)]]]
-      ));
+          $this->throwException(new RequestException(
+              'Service Unavailable',
+              new Request('POST', 'test'),
+              new Response(503)
+          )),
+          ['data' => [['object' => 'embedding', 'index' => 0, 'embedding' => array_fill(0, 1536, 0.1)]]]
+          ));
 
     $result = $this->embeddingService->generateEmbedding($text);
 
@@ -411,7 +410,7 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
   public function testUsageStatisticsTracking() {
     $mock_response = [
       'data' => [
-        ['object' => 'embedding', 'index' => 0, 'embedding' => array_fill(0, 1536, 0.1)],
+      ['object' => 'embedding', 'index' => 0, 'embedding' => array_fill(0, 1536, 0.1)],
       ],
       'usage' => [
         'prompt_tokens' => 10,
@@ -448,10 +447,10 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
   public function testConfigurationValidation() {
     // Test valid configuration.
     $service = new AzureOpenAIEmbeddingService(
-      'https://test.openai.azure.com/',
-      'test-key',
-      'test-deployment'
-    );
+          'https://test.openai.azure.com/',
+          'test-key',
+          'test-deployment'
+      );
     $this->assertTrue($service->isAvailable());
 
     // Test invalid endpoint format.
@@ -459,10 +458,10 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $this->expectExceptionMessage('Invalid endpoint format');
 
     new AzureOpenAIEmbeddingService(
-      'invalid-endpoint',
-      'test-key',
-      'test-deployment'
-    );
+          'invalid-endpoint',
+          'test-key',
+          'test-deployment'
+      );
   }
 
   /**
@@ -530,9 +529,9 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $this->embeddingService->expects($this->once())
       ->method('makeHttpRequest')
       ->willThrowException(new RequestException(
-        'Connection timeout',
-        new Request('POST', 'test')
-      ));
+          'Connection timeout',
+          new Request('POST', 'test')
+          ));
 
     $this->expectException(EmbeddingServiceUnavailableException::class);
     $this->expectExceptionMessage('temporarily unavailable');
@@ -573,7 +572,7 @@ class AzureEmbeddingServiceTest extends UnitTestCase {
     $texts = ['Text 1', 'Text 2', 'Text 3'];
     $mock_response = [
       'data' => [
-        ['object' => 'embedding', 'index' => 0, 'embedding' => array_fill(0, 1536, 0.1)],
+      ['object' => 'embedding', 'index' => 0, 'embedding' => array_fill(0, 1536, 0.1)],
       ],
     ];
 

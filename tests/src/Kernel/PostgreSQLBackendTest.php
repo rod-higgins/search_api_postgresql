@@ -12,7 +12,6 @@ use Drupal\search_api\Entity\Server;
  * @group search_api_postgresql
  */
 class PostgreSQLBackendTest extends KernelTestBase {
-
   /**
    * {@inheritdoc}
    */

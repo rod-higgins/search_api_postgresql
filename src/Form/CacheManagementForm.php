@@ -14,7 +14,6 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Form for managing embedding cache.
  */
 class CacheManagementForm extends FormBase {
-
   /**
    * The config factory.
    *
@@ -54,10 +53,10 @@ class CacheManagementForm extends FormBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('config.factory'),
-      $container->get('search_api_postgresql.cache_manager'),
-      $container->get('search_api_postgresql.analytics')
-    );
+          $container->get('config.factory'),
+          $container->get('search_api_postgresql.cache_manager'),
+          $container->get('search_api_postgresql.analytics')
+      );
   }
 
   /**
@@ -181,11 +180,11 @@ class CacheManagementForm extends FormBase {
       '#type' => 'number',
       '#title' => $this->t('Default TTL (seconds)'),
       '#description' => $this->t('Default time-to-live for cached embeddings.'),
-    // 7 days
+      // 7 days
       '#default_value' => $config->get('default_ttl') ?? 604800,
-    // 1 hour
+      // 1 hour
       '#min' => 3600,
-    // 30 days
+      // 30 days
       '#max' => 2592000,
     ];
 
@@ -240,8 +239,9 @@ class CacheManagementForm extends FormBase {
     if ($action === 'clear_all') {
       $confirm = $form_state->getValue('confirm');
       if (!$confirm) {
-        $form_state->setErrorByName('confirm',
-          $this->t('You must confirm that you understand this action cannot be undone.')
+        $form_state->setErrorByName(
+            'confirm',
+            $this->t('You must confirm that you understand this action cannot be undone.')
         );
       }
     }
@@ -249,9 +249,10 @@ class CacheManagementForm extends FormBase {
     if ($action === 'clear_by_age') {
       $age_threshold = $form_state->getValue('age_threshold');
       if ($age_threshold < 1 || $age_threshold > 365) {
-        $form_state->setErrorByName('age_threshold',
-          $this->t('Age threshold must be between 1 and 365 days.')
-        );
+        $form_state->setErrorByName(
+              'age_threshold',
+              $this->t('Age threshold must be between 1 and 365 days.')
+          );
       }
     }
   }

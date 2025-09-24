@@ -12,7 +12,6 @@ use Psr\Log\LoggerInterface;
  * Manages embedding generation queues.
  */
 class EmbeddingQueueManager {
-
   /**
    * The queue factory.
    *
@@ -500,7 +499,6 @@ class EmbeddingQueueManager {
         $worker->processItem($item->data);
         $this->queue->deleteItem($item);
         $processed++;
-
       }
       catch (\Exception $e) {
         $this->queue->releaseItem($item);

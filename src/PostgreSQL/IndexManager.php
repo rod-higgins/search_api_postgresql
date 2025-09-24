@@ -10,7 +10,6 @@ use Drupal\search_api\SearchApiException;
  * Manages PostgreSQL index tables and operations with vector support and SQL injection prevention.
  */
 class IndexManager {
-
   /**
    * The PostgreSQL connector.
    *
@@ -183,7 +182,6 @@ class IndexManager {
               $searchable_text_parts[] = (string) $scalar_value;
             }
           }
-
         }
         catch (\Exception $e) {
           // Log error and set to NULL to prevent indexing failure.
@@ -255,7 +253,7 @@ class IndexManager {
     $insert_sql = "INSERT INTO {$table_name} (" . implode(', ', $columns) . ") 
                   VALUES (" . implode(', ', $placeholders) . ")
                   ON CONFLICT (search_api_id) DO UPDATE SET " .
-                  $this->buildUpdateClause($columns, $placeholders, $values);
+              $this->buildUpdateClause($columns, $placeholders, $values);
 
     $this->connector->executeQuery($insert_sql, $params);
   }
@@ -324,7 +322,6 @@ class IndexManager {
           '@table' => $table_name,
         ]);
       }
-
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to delete items from @table: @error', [
@@ -396,7 +393,6 @@ class IndexManager {
         if ($statement->rowCount() > 0) {
           $deleted_count++;
         }
-
       }
       catch (\Exception $e) {
         $failed_count++;
@@ -433,7 +429,6 @@ class IndexManager {
 
       $statement = $this->connector->executeQuery($sql, [':item_id' => $item_id]);
       return $statement->fetchColumn() !== FALSE;
-
     }
     catch (\Exception $e) {
       $this->logger->warning('Failed to check if item exists @id: @error', [
@@ -774,7 +769,7 @@ class IndexManager {
    */
   protected function isVectorSearchEnabled() {
     return !empty($this->config['ai_embeddings']['enabled']) ||
-           !empty($this->config['vector_search']['enabled']);
+       !empty($this->config['vector_search']['enabled']);
   }
 
   /**

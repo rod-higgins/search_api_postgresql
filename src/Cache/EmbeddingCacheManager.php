@@ -9,7 +9,6 @@ use Psr\Log\LoggerInterface;
  * Manages embedding cache operations and provides utility functions.
  */
 class EmbeddingCacheManager {
-
   /**
    * The embedding cache service.
    *

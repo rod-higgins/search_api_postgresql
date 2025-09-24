@@ -35,3 +35,6 @@ nodejs_version: "18"
 hooks:
   post-start:
     - exec: "echo 'DDEV environment started. Run ddev setup-database to initialize PostgreSQL extensions.'"
+    - exec: "mkdir -p /var/www/html/web/modules/contrib/search_api_postgresql"
+    - exec: "echo 'Module symlinks are configured via docker-compose.symlinks.yaml for development.'"
+    - exec-host: "echo 'To complete setup, run: ddev drush php:script scripts/local-setup.php'"

@@ -11,7 +11,6 @@ use Drupal\search_api\SearchApiException;
  * Maps Search API fields to PostgreSQL columns with vector support and data type validation.
  */
 class FieldMapper {
-
   /**
    * The backend configuration.
    *
@@ -21,6 +20,8 @@ class FieldMapper {
 
   /**
    * Updated type mapping that includes array support.
+   *
+   * @var array
    */
   protected $typeMapping = [
     'text' => 'TEXT',
@@ -114,11 +115,11 @@ class FieldMapper {
           ]);
         }
         else {
-          $pg_type = $this->mapSearchApiTypeToPostgreSQL($type);
+          $pg_type = $this->mapSearchApiTypeToPostgreSql($type);
         }
       }
       else {
-        $pg_type = $this->mapSearchApiTypeToPostgreSQL($type);
+        $pg_type = $this->mapSearchApiTypeToPostgreSql($type);
       }
 
       // Handle vector type with dimensions.
@@ -142,7 +143,7 @@ class FieldMapper {
     // Add automatic embedding fields if AI embeddings are enabled.
     if (!empty($this->config['ai_embeddings']['enabled'])) {
       $dimensions = $this->config['ai_embeddings']['azure']['dimension'] ??
-                  $this->config['ai_embeddings']['openai']['dimension'] ?? 1536;
+              $this->config['ai_embeddings']['openai']['dimension'] ?? 1536;
 
       $definitions['embedding_vector'] = [
         'type' => "VECTOR({$dimensions})",
@@ -181,9 +182,7 @@ class FieldMapper {
 
     // Handle multi-value fields that should use arrays.
     if ($field && $this->isFieldMultiValue($field)) {
-
       if (is_array($field_values)) {
-
         // Handle integer/entity_reference arrays.
         if (in_array($field_type, ['integer', 'entity_reference'])) {
           $integer_values = [];
@@ -291,7 +290,6 @@ class FieldMapper {
       }
 
       return FALSE;
-
     }
     catch (\Exception $e) {
       $this->logger->error('Error detecting multi-value status for @field: @error', [
@@ -333,7 +331,6 @@ class FieldMapper {
       }
 
       return FALSE;
-
     }
     catch (\Exception $e) {
       $this->logger->error('Error checking entity field cardinality: @error', ['@error' => $e->getMessage()]);
@@ -473,11 +470,12 @@ class FieldMapper {
 
     // Log warning for unhandled entity reference format.
     \Drupal::logger('search_api_postgresql')->warning(
-      'Could not extract entity ID from entity reference value: @value (@type)', [
-        '@value' => print_r($value, TRUE),
-        '@type' => is_object($value) ? get_class($value) : gettype($value),
-      ]
-    );
+          'Could not extract entity ID from entity reference value: @value (@type)',
+          [
+            '@value' => print_r($value, TRUE),
+            '@type' => is_object($value) ? get_class($value) : gettype($value),
+          ]
+      );
 
     return NULL;
   }
@@ -881,7 +879,7 @@ class FieldMapper {
    * @throws \Drupal\search_api\SearchApiException
    *   If mapping fails.
    */
-  public function mapSearchApiTypeToPostgreSQL($search_api_type) {
+  public function mapSearchApiTypeToPostgreSql($search_api_type) {
     if (!isset($this->typeMapping[$search_api_type])) {
       throw new SearchApiException("No PostgreSQL mapping found for Search API type: '{$search_api_type}'");
     }

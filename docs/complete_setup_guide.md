@@ -28,7 +28,7 @@ Admin → Configuration → Search → Search API → Add Server
 - Password Key: [Select your database password key]
 
 Azure AI Configuration:
-- Enable Azure AI Vector Search: ✓
+- Enable Azure AI Vector Search: Yes
 - Endpoint: https://your-resource.openai.azure.com/
 - API Key: [Select your API key]
 - Model: text-embedding-3-small
@@ -66,7 +66,7 @@ Processors:
 Admin → Structure → Views → Add View
 - View name: "Smart Search"
 - Show: "Intelligent Content Index" (your search index)
-- Create a page: ✓
+- Create a page: Yes
 - Page title: "Search Results"
 - Path: /search
 
@@ -74,7 +74,7 @@ Display Settings:
 - Format: Unformatted list
 - Show: Fields
 - Items per page: 10
-- Use pager: ✓
+- Use pager: Yes
 
 Fields to Display:
 - Title (linked to content)
@@ -86,7 +86,7 @@ Fields to Display:
 
 Filter Criteria:
 - "Search: Fulltext search" → Settings:
-  - Expose filter: ✓
+  - Expose filter: Yes
   - Label: "Search"
   - Required: No
   - Identifier: keys
@@ -101,19 +101,19 @@ Advanced → Exposed Form:
 - Exposed form style: Input required
 - Text on demand: "Enter search terms to find content"
 - Submit button text: "Search"
-- Reset button: ✓
+- Reset button: Yes
 ```
 
 ### 6. Enable Autocomplete
 ```
 Admin → Configuration → Search → Search API → [Your Index] → Autocomplete
-- Enable autocomplete: ✓
+- Enable autocomplete: Yes
 - Suggester plugins:
   ☑ Live results
   ☑ Terms from indexed fields
   
 Configuration:
-- Display label: ✓
+- Display label: Yes
 - Fields: Title, Body, Tags
 - Characters: 2
 - Results: 8

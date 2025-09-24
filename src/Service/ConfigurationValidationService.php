@@ -12,7 +12,6 @@ use Psr\Log\LoggerInterface;
  * Service for validating Search API PostgreSQL configurations.
  */
 class ConfigurationValidationService {
-
   /**
    * The entity type manager.
    *
@@ -452,7 +451,7 @@ class ConfigurationValidationService {
     // Get all PostgreSQL servers.
     $servers = $this->entityTypeManager->getStorage('search_api_server')->loadMultiple();
     $postgresql_servers = array_filter($servers, function ($server) {
-      return in_array($server->getBackend()->getPluginId(), ['postgresql']);
+        return in_array($server->getBackend()->getPluginId(), ['postgresql']);
     });
 
     if (empty($postgresql_servers)) {

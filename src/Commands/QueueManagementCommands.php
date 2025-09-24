@@ -244,13 +244,13 @@ class QueueManagementCommands extends DrushCommands {
     $priority = $priority_map[$priority_name] ?? 100;
 
     $success = $queue_manager->queueIndexEmbeddingRegeneration(
-      $server->id(),
-      $index_id,
-      $batch_size,
-    // Start from offset 0.
-      0,
-      $priority
-    );
+          $server->id(),
+          $index_id,
+          $batch_size,
+          // Start from offset 0.
+          0,
+          $priority
+      );
 
     if ($success) {
       $this->output()->writeln("<info>Queued embedding regeneration for index '{$index_id}'</info>");
@@ -358,13 +358,13 @@ class QueueManagementCommands extends DrushCommands {
     // Queue a test item.
     $test_text = "This is a test text for embedding generation via queue processing.";
     $success = $queue_manager->queueEmbeddingGeneration(
-      $server_id,
-      'test_index',
-      'test_item_' . time(),
-      $test_text,
-    // High priority for testing.
-      50
-    );
+          $server_id,
+          'test_index',
+          'test_item_' . time(),
+          $test_text,
+          // High priority for testing.
+          50
+      );
 
     if (!$success) {
       throw new \Exception('Failed to queue test item.');

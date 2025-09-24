@@ -6,7 +6,6 @@ namespace Drupal\search_api_postgresql\Exception;
  * Database connection failures.
  */
 class DatabaseConnectionException extends GracefulDegradationException {
-
   protected $connectionParams;
 
   public function __construct($connection_params, ?\Exception $previous = NULL) {
@@ -38,7 +37,6 @@ class TransactionFailedException extends GracefulDegradationException {
  * Query performance degradation.
  */
 class QueryPerformanceDegradedException extends GracefulDegradationException {
-
   protected $queryTime;
   protected $threshold;
 

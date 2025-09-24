@@ -8,7 +8,6 @@ use Drupal\Core\Form\FormStateInterface;
  * Trait for managing secure credentials in Search API PostgreSQL backends.
  */
 trait SecurityManagementTrait {
-
   /**
    * The key repository service.
    *

@@ -23,7 +23,6 @@ use Drupal\search_api\SearchApiException;
  * )
  */
 class PostgreSQLFulltext extends DataTypePluginBase {
-
   use PluginFormTrait;
 
   /**

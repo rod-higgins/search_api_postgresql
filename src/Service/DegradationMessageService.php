@@ -13,7 +13,6 @@ use Drupal\search_api_postgresql\Exception\GracefulDegradationException;
  * Service for managing user-facing degradation messages and notifications.
  */
 class DegradationMessageService {
-
   use StringTranslationTrait;
 
   /**
@@ -88,10 +87,10 @@ class DegradationMessageService {
 
     if ($message_info) {
       $this->messenger->addMessage(
-        $message_info['message'],
-        $message_info['type'],
-        $message_info['repeat']
-      );
+            $message_info['message'],
+            $message_info['type'],
+            $message_info['repeat']
+        );
     }
   }
 
@@ -268,10 +267,10 @@ class DegradationMessageService {
         'icon' => 'warning',
         'dismissible' => TRUE,
         'actions' => [
-          [
-            'text' => $this->t('Try again'),
-            'url' => 'javascript:location.reload()',
-          ],
+      [
+        'text' => $this->t('Try again'),
+        'url' => 'javascript:location.reload()',
+      ],
         ],
       ],
       'rate_limit_backoff' => [
@@ -289,10 +288,10 @@ class DegradationMessageService {
       // Add context-specific information.
       if (!empty($context['result_count'])) {
         $message['text'] .= ' ' . $this->formatPlural(
-          $context['result_count'],
-          '(1 result found)',
-          '(@count results found)'
-        );
+              $context['result_count'],
+              '(1 result found)',
+              '(@count results found)'
+          );
       }
 
       return $message;
@@ -424,7 +423,7 @@ class DegradationMessageService {
 
     $total_services = count($degradation_stats);
     $degraded_services = array_filter($degradation_stats, function ($stats) {
-      return $stats['is_degraded'] ?? FALSE;
+        return $stats['is_degraded'] ?? FALSE;
     });
 
     if (empty($degraded_services)) {
@@ -433,10 +432,10 @@ class DegradationMessageService {
 
     $degraded_count = count($degraded_services);
     $message = $this->formatPlural(
-      $degraded_count,
-      '1 search service is currently degraded',
-      '@count search services are currently degraded'
-    );
+          $degraded_count,
+          '1 search service is currently degraded',
+          '@count search services are currently degraded'
+      );
 
     $service_list = [];
     foreach ($degraded_services as $service_name => $stats) {
@@ -453,14 +452,14 @@ class DegradationMessageService {
       '#total_services' => $total_services,
       '#degraded_count' => $degraded_count,
       '#links' => [
-        [
-          'title' => $this->t('View detailed status'),
-          'url' => '/admin/config/search/search-api/postgresql/status',
-        ],
-        [
-          'title' => $this->t('Reset circuit breakers'),
-          'url' => '/admin/config/search/search-api/postgresql/reset-circuits',
-        ],
+      [
+        'title' => $this->t('View detailed status'),
+        'url' => '/admin/config/search/search-api/postgresql/status',
+      ],
+      [
+        'title' => $this->t('Reset circuit breakers'),
+        'url' => '/admin/config/search/search-api/postgresql/reset-circuits',
+      ],
       ],
       '#attached' => [
         'library' => ['search_api_postgresql/admin_degradation_summary'],

@@ -1,0 +1,185 @@
+# search_api_postgresql module development .gitignore
+
+# Ignore Composer dependencies (but preserve the module source)
+/vendor/
+
+# Ignore Drupal test harness web directory
+/web
+
+# Ignore drush contrib
+/drush/contrib/
+
+# DDEV test harness - keep configuration, ignore runtime files
+.ddev/.dbimageBuild/
+.ddev/traefik/
+.ddev/db_snapshots/
+.ddev/.webimageBuild/
+.ddev/homeadditions/
+.ddev/commands/host/
+.lando/
+.env
+
+# Keep documentation directory
+# docs/ directory is now included in version control
+
+# Ignore Composer lock file (let each environment manage its own)
+composer.lock
+
+# Keep test configuration but ignore temp files
+temp_config/
+
+# Generated configuration files (created by scripts/local-setup.php)
+postgresql_server_config.yml
+
+# IDE and OS specific files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+
+# Development and configuration scripts
+/scripts/test_*.php
+/scripts/configure_*.php
+/scripts/add_*.php
+/scripts/setup_*.php
+/scripts/debug_*.php
+/scripts/temp_*.php
+/scripts/*_test.php
+/scripts/*_debug.php
+/scripts/*_temp.php
+
+# Cypress testing outputs
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/
+cypress/logs/
+cypress/reports/
+cypress/coverage/
+cypress/fixtures/downloads/
+
+# Other testing framework outputs
+test-results/
+test-output/
+coverage/
+.nyc_output/
+junit.xml
+test-report.xml
+phpunit.xml
+.phpunit.result.cache
+
+# Jest/JavaScript testing
+jest-results/
+jest-coverage/
+__tests__/__snapshots__/
+
+# PHPUnit testing outputs
+.phpunit.cache/
+phpunit-results/
+phpunit-coverage/
+
+# Behat testing outputs
+behat-results/
+behat-screenshots/
+
+# Generic testing artifacts
+*.tap
+*.junit
+*.testresults
+tests-output/
+testing-logs/
+test-artifacts/
+
+# Ignore build artifacts (if applicable).
+/build/
+/dist/
+
+# Ignore Node.js dependencies
+node_modules/
+/web/themes/custom/*/node_modules/
+package-lock.json
+
+# Testing
+.phpunit.cache/
+.phpunit.result.cache
+
+# Ignore environment-specific files (e.g., Lando, DDEV).
+.lando/
+.ddev/
+.env
+
+# Ignore AI-related tools, platforms, and generated files
+# GitHub Copilot
+.copilot/
+copilot-*
+.github/copilot/
+
+# Amazon Q / CodeWhisperer
+.amazonq/
+.codewhisperer/
+codewhisperer-*
+.aws-codewhisperer/
+
+# Azure AI / Copilot
+.azure-ai/
+.azure-copilot/
+azure-ai-*
+azure-copilot-*
+
+# OpenAI Codex
+.openai/
+codex-*
+.codex/
+
+# Cursor AI
+.cursor/
+cursor-*
+
+# Tabnine
+.tabnine/
+tabnine-*
+
+# Replit AI
+.replit-ai/
+replit-ai-*
+
+# Sourcegraph Cody
+.sourcegraph/
+.cody/
+cody-*
+
+# Ignore Claude Code related files and directories
+.claude/
+CLAUDE.md
+
+# JetBrains AI Assistant
+.jetbrains-ai/
+ai-assistant-*
+
+# Other AI tools and generated files
+.ai/
+.assistant/
+ai-generated/
+*-ai-generated.*
+*.ai-backup
+*.ai-temp
+.aiconfig
+.ai-context
+.ai-session
+.ai-cache/
+.ai-logs/
+
+# AI conversation/session files
+conversation-*
+session-*.json
+chat-*.json
+ai-chat-*
+prompt-history.*
+ai-prompts/
+
+# AI model cache and temporary files
+.model-cache/
+.embedding-cache/
+.llm-cache/
+model-*.tmp
+embedding-*.cache

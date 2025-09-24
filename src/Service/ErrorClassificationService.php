@@ -17,7 +17,6 @@ use Drupal\search_api_postgresql\Exception\TemporaryApiException;
  * Intelligent error classification and context extraction service.
  */
 class ErrorClassificationService {
-
   /**
    * Severity level mappings.
    */

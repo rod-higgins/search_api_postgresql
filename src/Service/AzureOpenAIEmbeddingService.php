@@ -9,7 +9,6 @@ use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
  * Azure OpenAI embedding service implementation with caching.
  */
 class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
-
   /**
    * The Azure OpenAI endpoint.
    *
@@ -246,7 +245,6 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
         'endpoint' => $this->endpoint,
         'dimension' => $embedding ? count($embedding) : 0,
       ];
-
     }
     catch (\Exception $e) {
       return [
@@ -269,11 +267,11 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
    */
   protected function generateEmbeddingFromApi($text) {
     $url = sprintf(
-      '%s/openai/deployments/%s/embeddings?api-version=%s',
-      $this->endpoint,
-      $this->deploymentName,
-      $this->apiVersion
-    );
+          '%s/openai/deployments/%s/embeddings?api-version=%s',
+          $this->endpoint,
+          $this->deploymentName,
+          $this->apiVersion
+      );
 
     $data = [
       'input' => $text,
@@ -294,11 +292,11 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
    */
   protected function generateBatchEmbeddingsFromApi(array $texts) {
     $url = sprintf(
-      '%s/openai/deployments/%s/embeddings?api-version=%s',
-      $this->endpoint,
-      $this->deploymentName,
-      $this->apiVersion
-    );
+          '%s/openai/deployments/%s/embeddings?api-version=%s',
+          $this->endpoint,
+          $this->deploymentName,
+          $this->apiVersion
+      );
 
     $data = [
       'input' => $texts,

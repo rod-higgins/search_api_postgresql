@@ -20,7 +20,6 @@ class ApiKeyExpiredException extends GracefulDegradationException {
  * Insufficient permissions for operations.
  */
 class InsufficientPermissionsException extends GracefulDegradationException {
-
   protected $requiredPermission;
 
   public function __construct($required_permission, ?\Exception $previous = NULL) {

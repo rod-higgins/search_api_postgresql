@@ -9,7 +9,6 @@ use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
  * OpenAI embedding service implementation with caching and retry logic.
  */
 class OpenAIEmbeddingService implements EmbeddingServiceInterface {
-
   /**
    * The OpenAI API endpoint.
    *
@@ -444,10 +443,12 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       $estimated_tokens = $this->estimateTokenCount($text);
 
       // If adding this text would exceed limits, start a new batch.
-      if (!empty($current_batch) &&
-          ($current_tokens + $estimated_tokens > $this->maxTokensPerRequest ||
-      // OpenAI has a limit of 2048 inputs per batch.
-           count($current_batch) >= 2048)) {
+      if (
+            !empty($current_batch) &&
+            ($current_tokens + $estimated_tokens > $this->maxTokensPerRequest ||
+            // OpenAI has a limit of 2048 inputs per batch.
+            count($current_batch) >= 2048)
+        ) {
         $batches[] = $current_batch;
         $current_batch = [];
         $current_tokens = 0;
@@ -646,7 +647,6 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
         'message' => 'Invalid response from API',
         'dimension' => $embedding ? count($embedding) : 0,
       ];
-
     }
     catch (\Exception $e) {
       return [

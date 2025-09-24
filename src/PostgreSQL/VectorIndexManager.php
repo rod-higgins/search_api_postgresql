@@ -9,7 +9,6 @@ use Drupal\search_api\Query\QueryInterface;
  * Enhanced IndexManager with vector search capabilities.
  */
 class VectorIndexManager extends IndexManager {
-
   /**
    * The embedding service.
    *
@@ -40,9 +39,9 @@ class VectorIndexManager extends IndexManager {
     // OpenAI default.
     $vector_dimension = $this->config['vector_dimension'] ?? 1536;
     $sql = str_replace(
-      "search_vector TSVECTOR\n);",
-      "search_vector TSVECTOR,\n  content_embedding VECTOR({$vector_dimension})\n);"
-    );
+          "search_vector TSVECTOR\n);",
+          "search_vector TSVECTOR,\n  content_embedding VECTOR({$vector_dimension})\n);"
+      );
 
     return $sql;
   }
@@ -108,9 +107,9 @@ class VectorIndexManager extends IndexManager {
       catch (\Exception $e) {
         // Log error but continue indexing without embedding.
         \Drupal::logger('search_api_postgresql')->warning(
-          'Failed to generate embedding for item @id: @error',
-          ['@id' => $item->getId(), '@error' => $e->getMessage()]
-              );
+              'Failed to generate embedding for item @id: @error',
+              ['@id' => $item->getId(), '@error' => $e->getMessage()]
+                );
       }
     }
 
@@ -134,7 +133,7 @@ class VectorIndexManager extends IndexManager {
     }
 
     $insert_sql = "INSERT INTO {$table_name} (" . implode(', ', array_keys($values)) .
-                  ") VALUES (" . implode(', ', $placeholders) . ")";
+              ") VALUES (" . implode(', ', $placeholders) . ")";
 
     $params = [];
     foreach ($values as $key => $value) {
@@ -157,7 +156,6 @@ class VectorIndexManager extends IndexManager {
  * Enhanced QueryBuilder with vector search capabilities.
  */
 class VectorQueryBuilder extends QueryBuilder {
-
   /**
    * The embedding service.
    *

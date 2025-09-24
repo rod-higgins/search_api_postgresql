@@ -94,7 +94,7 @@ autocomplete_cache:
 }
 
 .ui-autocomplete .semantic-suggestion::before {
-  content: "💡 ";
+  content: "* ";
 }
 ```
 

@@ -25,7 +25,6 @@ use Drupal\Core\Database\Connection;
  * @group search_api_postgresql
  */
 class ErrorRecoveryIntegrationTest extends KernelTestBase {
-
   /**
    * {@inheritdoc}
    */
@@ -338,10 +337,10 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
     // Simulate memory exhaustion during large batch processing.
     $exception = new MemoryExhaustedException(
     // 512MB current usage
-      512 * 1024 * 1024,
-    // 256MB limit
-      256 * 1024 * 1024
-    );
+          512 * 1024 * 1024,
+          // 256MB limit
+          256 * 1024 * 1024
+      );
 
     $context = [
       'operation' => 'batch_embedding_generation',
@@ -482,14 +481,14 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
       $classification = $this->classificationService->classifyError($scenario['exception']);
 
       $this->assertEquals(
-        $scenario['expected_notification_level'],
-        $classification['user_notification_level']
-      );
+            $scenario['expected_notification_level'],
+            $classification['user_notification_level']
+        );
 
       $this->assertEquals(
-        $scenario['should_escalate'],
-        $classification['escalation_required']
-      );
+            $scenario['should_escalate'],
+            $classification['escalation_required']
+        );
 
       // Test message generation adapts to notification level.
       $message = $this->messageService->generateMessage($scenario['exception']);
@@ -519,14 +518,14 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
 
     // Step 2: Exception classification and wrapping.
     $classified_exception = ComprehensiveExceptionFactory::createFromException(
-      $original_exception,
-      $operation_context
-    );
+          $original_exception,
+          $operation_context
+      );
 
     $this->assertInstanceOf(
-      TemporaryApiException::class,
-      $classified_exception
-    );
+          TemporaryApiException::class,
+          $classified_exception
+      );
 
     // Step 3: Error classification.
     $classification = $this->classificationService->classifyError($classified_exception, $operation_context);

@@ -8,7 +8,6 @@ use Drupal\Core\Config\ConfigFactoryInterface;
  * Configuration service for search_api_postgresql module.
  */
 class SearchApiPostgresqlConfig {
-
   /**
    * @var \Drupal\Core\Config\ImmutableConfig
    */

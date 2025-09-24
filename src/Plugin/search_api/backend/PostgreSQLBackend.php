@@ -30,7 +30,6 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * )
  */
 class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPluginInterface, PluginFormInterface {
-
   use SecurityManagementTrait;
   use PluginFormTrait;
 
@@ -702,7 +701,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     ];
 
     // Add PostgreSQL-specific data types with caching.
-    if ($this->isPostgreSQLSupportedCached()) {
+    if ($this->isPostgreSqlSupportedCached()) {
       $supported_types[] = 'postgresql_fulltext';
     }
 
@@ -780,7 +779,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       $this->logger->info('Forced array storage reindexing for @index', ['@index' => $index->id()]);
 
       return TRUE;
-
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to force array storage reindex: @error', ['@error' => $e->getMessage()]);
@@ -789,9 +787,9 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   }
 
   /**
-   * Cached version of isPostgreSQLSupported().
+   * Cached version of isPostgreSqlSupported().
    */
-  protected function isPostgreSQLSupportedCached() {
+  protected function isPostgreSqlSupportedCached() {
     $cache_key = 'search_api_postgresql:support:' . md5(serialize($this->configuration['connection']));
     $cache = \Drupal::cache()->get($cache_key);
 
@@ -845,7 +843,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   /**
    * Check if PostgreSQL full-text search is supported.
    */
-  protected function isPostgreSQLSupported() {
+  protected function isPostgreSqlSupported() {
     try {
       $this->ensureConnector();
       // Use the existing validation logic from PostgreSQLFulltext::validatePostgreSQLSupport()
@@ -978,6 +976,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
   /**
    * Helper method to get table name using IndexManager's logic.
+   *
    * This ensures consistency with IndexManager's table name construction.
    */
   protected function getIndexTableNameForManager(IndexInterface $index) {
@@ -1041,7 +1040,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
       // Update the index schema normally.
       $this->updateIndexSchema($index);
-
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to update index @index: @error', [
@@ -1417,7 +1415,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       }
 
       return $results;
-
     }
     catch (\Exception $e) {
       $this->logger->error('Search failed on @index: @error', [
@@ -1663,7 +1660,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       }
 
       return TRUE;
-
     }
     catch (\Exception $e) {
       $this->logger->error('Error validating facet config for @facet: @error', [
@@ -1856,7 +1852,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         if (!empty($facet_values)) {
           $facet_results[$facet_id] = $facet_values;
         }
-
       }
       catch (\Exception $e) {
         $this->logger->error('Error processing facet @facet: @error', [
@@ -2090,7 +2085,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       if (isset($fields[$field])) {
         $field_obj = $fields[$field];
         $is_array_field = $this->isFieldMultiValue($field_obj) &&
-                        in_array($field_obj->getType(), ['integer', 'entity_reference']);
+                in_array($field_obj->getType(), ['integer', 'entity_reference']);
       }
     }
 
@@ -2399,8 +2394,8 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     foreach ($condition_group->getConditions() as $condition) {
       if ($condition instanceof ConditionGroupInterface) {
         $nested_group = $conjunction === 'OR' ?
-          \Drupal::database()->orConditionGroup() :
-          \Drupal::database()->andConditionGroup();
+                \Drupal::database()->orConditionGroup() :
+                \Drupal::database()->andConditionGroup();
         $this->addFilteredConditionGroup($nested_group, $condition, $exclude_field);
         if (count($nested_group->getConditions()) > 0) {
           $drupal_group->condition($nested_group);
@@ -2486,7 +2481,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         // Cache for 1 hour.
         \Drupal::cache()->set($cache_key, time(), time() + 3600);
       }
-
     }
     catch (\Exception $e) {
       $this->logger->warning('Failed to queue facet index creation: @error', ['@error' => $e->getMessage()]);
@@ -2561,7 +2555,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         '@field' => $field_name,
         '@seconds' => round($elapsed, 2),
       ]);
-
     }
     catch (\Exception $e) {
       $elapsed = microtime(TRUE) - $start_time;
@@ -2624,8 +2617,10 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     }
 
     // For taxonomy/reference fields (common in document management)
-    if ($field_type === 'integer' && (strpos($field_name, 'taxonomy') !== FALSE ||
-                                    strpos($field_name, 'members') !== FALSE)) {
+    if (
+          $field_type === 'integer' && (strpos($field_name, 'taxonomy') !== FALSE ||
+                                strpos($field_name, 'members') !== FALSE)
+      ) {
       // B-tree works well for taxonomy IDs.
       return 'standard';
     }
@@ -2682,7 +2677,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
       \Drupal::cache()->set($cache_key, $stats, \Drupal::time()->getRequestTime() + 1800);
       return $stats;
-
     }
     catch (\Exception $e) {
       $default_stats = ['distinctness' => 0.5, 'total_rows' => 0, 'avg_length' => 0];
@@ -2787,7 +2781,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       }
 
       return $cleaned_count;
-
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to cleanup orphaned facet indexes for @index: @error', [
@@ -3070,8 +3063,10 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   protected function hasComplexMultiValueFields(array $facets_option, IndexInterface $index) {
     foreach ($facets_option as $facet_config) {
       $field = $index->getFields()[$facet_config['field']];
-      if ($this->isFieldMultiValue($field) &&
-          $this->detectMultiValueStorageFormat($field) !== 'single') {
+      if (
+            $this->isFieldMultiValue($field) &&
+            $this->detectMultiValueStorageFormat($field) !== 'single'
+        ) {
         return TRUE;
       }
     }
@@ -3153,7 +3148,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       \Drupal::logger('search_api_postgresql')->info('Converted @field from INTEGER to INTEGER[]', [
         '@field' => $field_id,
       ]);
-
     }
     catch (\Exception $e) {
       \Drupal::logger('search_api_postgresql')->error('Failed to convert @field: @error', [
@@ -3227,7 +3221,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     ];
 
     $is_supported = isset($supported_conversions[$current_type]) &&
-                  in_array($target_type, $supported_conversions[$current_type]);
+                in_array($target_type, $supported_conversions[$current_type]);
 
     $this->logger->info('needsColumnTypeConversion @current -> @target = @result', [
       '@current' => $current_type,
@@ -3269,7 +3263,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       }
 
       return NULL;
-
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to get column type for @table.@column: @error', [
@@ -3339,7 +3332,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     $this->connector->executeQuery('BEGIN');
 
     try {
-      $sql = $this->buildColumnConversionSQL($table_name, $column_name, $current_type, $target_type);
+      $sql = $this->buildColumnConversionSql($table_name, $column_name, $current_type, $target_type);
 
       if ($sql) {
         $this->connector->executeQuery($sql);
@@ -3354,7 +3347,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
           '@target' => $target_type,
         ]);
       }
-
     }
     catch (\Exception $e) {
       $this->connector->executeQuery('ROLLBACK');
@@ -3393,7 +3385,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   /**
    * Builds SQL for column type conversion with data transformation.
    */
-  protected function buildColumnConversionSQL($table_name, $column_name, $current_type, $target_type) {
+  protected function buildColumnConversionSql($table_name, $column_name, $current_type, $target_type) {
     // INTEGER -> INTEGER[] (single value to array)
     if ($current_type === 'INTEGER' && $target_type === 'INTEGER[]') {
       return "ALTER TABLE {$table_name} 
@@ -3515,10 +3507,10 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         $facet_values = [];
         while ($row = $stmt->fetch(\PDO::FETCH_ASSOC)) {
           $filter = $this->formatFacetFilter(
-            $row['value'],
-            (bool) ($row['is_missing'] ?? FALSE),
-            $field_type
-          );
+                $row['value'],
+                (bool) ($row['is_missing'] ?? FALSE),
+                $field_type
+            );
 
           $facet_values[] = [
             'filter' => $filter,
@@ -3529,7 +3521,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         if (!empty($facet_values)) {
           $facet_results[$facet_id] = $facet_values;
         }
-
       }
       catch (\Exception $e) {
         $this->logger->error('Error processing facet @facet: @error', [
@@ -3601,7 +3592,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    */
   protected function detectMultiValueStorageFormat($field) {
     $field_identifier = method_exists($field, 'getFieldIdentifier') ?
-      $field->getFieldIdentifier() : $field->getFieldId();
+        $field->getFieldIdentifier() : $field->getFieldId();
 
     // FORCE array storage for multi-value integer fields (entity references)
     if ($this->shouldUseArrayStorage($field)) {
@@ -3653,7 +3644,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       }
 
       return $this->analyzeValueFormat($samples);
-
     }
     catch (\Exception $e) {
       $this->logger->warning('Field format analysis failed for @field: @error', [
@@ -3680,8 +3670,10 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     $current_time = time();
 
     // Only run detection once per hour per table.
-    if (isset($last_detection_time[$cache_key]) &&
-        ($current_time - $last_detection_time[$cache_key]) < 3600) {
+    if (
+          isset($last_detection_time[$cache_key]) &&
+          ($current_time - $last_detection_time[$cache_key]) < 3600
+      ) {
       return;
     }
 
@@ -3752,7 +3744,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       }
 
       $last_detection_time[$cache_key] = $current_time;
-
     }
     catch (\Exception $e) {
       $this->logger->warning('Batch multi-value detection failed for @table: @error', [
@@ -3832,7 +3823,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       $pdo = $this->connector->connect();
 
       $field_identifier = method_exists($field, 'getFieldIdentifier') ?
-        $field->getFieldIdentifier() : $field->getFieldId();
+            $field->getFieldIdentifier() : $field->getFieldId();
 
       // SECURITY: Properly quote column name and validate table name.
       $column_name = $this->connector->quoteColumnName($this->getColumnName($field_identifier));
@@ -3882,7 +3873,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       if ($max_count >= 2) {
         return array_search($max_count, $separator_counts);
       }
-
     }
     catch (\Exception $e) {
       $this->logger->debug('Separator detection failed for @field: @error', [
@@ -4193,7 +4183,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
       $field = $fields[$field_name];
       $is_array_field = $this->isFieldMultiValue($field) &&
-                      in_array($field->getType(), ['integer', 'entity_reference']);
+                  in_array($field->getType(), ['integer', 'entity_reference']);
 
       $field_filter_group = $query->createConditionGroup('OR');
 
@@ -4612,7 +4602,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       if (isset($fields[$field])) {
         $field_obj = $fields[$field];
         $is_array_field = $this->isFieldMultiValue($field_obj) &&
-                        in_array($field_obj->getType(), ['integer', 'entity_reference']);
+                in_array($field_obj->getType(), ['integer', 'entity_reference']);
       }
     }
 
@@ -4982,7 +4972,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   /**
    * Prepares search keys for PostgreSQL (similar to search_api_db prepareKeys).
    */
-  protected function prepareKeysForPostgreSQL($keys) {
+  protected function prepareKeysForPostgreSql($keys) {
     try {
       error_log('STEP 1: Method called with keys: ' . print_r($keys, TRUE));
 
@@ -5021,8 +5011,8 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
           $is_empty = empty($value);
 
           error_log('STEP 9: is_conjunction=' . var_export($is_conjunction, TRUE) .
-                    ', is_negation=' . var_export($is_negation, TRUE) .
-                    ', is_empty=' . var_export($is_empty, TRUE));
+            ', is_negation=' . var_export($is_negation, TRUE) .
+            ', is_empty=' . var_export($is_empty, TRUE));
 
           if ($key !== '#conjunction' && $key !== '#negation' && !empty($value)) {
             $search_terms++;
@@ -5048,15 +5038,14 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
       error_log('STEP 16: About to return original keys: ' . print_r($keys, TRUE));
       return $keys;
-
     }
     catch (\Exception $e) {
-      error_log('EXCEPTION in prepareKeysForPostgreSQL: ' . $e->getMessage());
+      error_log('EXCEPTION in prepareKeysForPostgreSql: ' . $e->getMessage());
       error_log('Exception trace: ' . $e->getTraceAsString());
       return NULL;
     }
     catch (\Error $e) {
-      error_log('ERROR in prepareKeysForPostgreSQL: ' . $e->getMessage());
+      error_log('ERROR in prepareKeysForPostgreSql: ' . $e->getMessage());
       error_log('Error trace: ' . $e->getTraceAsString());
       return NULL;
     }
@@ -5102,10 +5091,11 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     $or_group = $select->orConditionGroup();
 
     foreach ($fields as $field_id => $field_info) {
-      if (isset($field_info['type']) &&
-          in_array($field_info['type'], ['text', 'string', 'postgresql_fulltext']) &&
-          $field_id !== 'search_api_id') {
-
+      if (
+            isset($field_info['type']) &&
+            in_array($field_info['type'], ['text', 'string', 'postgresql_fulltext']) &&
+            $field_id !== 'search_api_id'
+        ) {
         $or_group->where("to_tsvector(:config, COALESCE(t.{$field_id}, '')) @@ plainto_tsquery(:config, :text)", [
           ':config' => $fts_config,
           ':text' => $search_text,
@@ -5166,8 +5156,8 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       if ($condition instanceof ConditionGroupInterface) {
         $nested_conjunction = $condition->getConjunction();
         $nested_group = $nested_conjunction === 'OR' ?
-          \Drupal::database()->orConditionGroup() :
-          \Drupal::database()->andConditionGroup();
+                \Drupal::database()->orConditionGroup() :
+                \Drupal::database()->andConditionGroup();
         $this->addNestedConditionGroup($nested_group, $condition, $fields);
         $drupal_group->condition($nested_group);
       }
@@ -5279,8 +5269,8 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    *
    * @param \Drupal\search_api\Query\ConditionGroupInterface $condition_group
    *   The condition group.
-   * @param array $fields
-   *   Field information.
+   * @param array $params
+   *   Parameters array passed by reference.
    *
    * @return string|null
    *   SQL condition string or NULL.
@@ -5335,7 +5325,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       if (isset($fields[$field])) {
         $field_obj = $fields[$field];
         $is_array_field = $this->isFieldMultiValue($field_obj) &&
-                        in_array($field_obj->getType(), ['integer', 'entity_reference', 'text', 'string']);
+                in_array($field_obj->getType(), ['integer', 'entity_reference', 'text', 'string']);
       }
     }
 
@@ -5525,6 +5515,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
 
   /**
    * AJAX callback for testing database connection.
+   *
    * Updated for Drupal 11 with proper translation and improved user feedback.
    */
   public function testConnectionAjax(array &$form, FormStateInterface $form_state) {
@@ -5545,7 +5536,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
         $message = $this->t('Connection failed: @error', ['@error' => $result['error']]);
         $message_type = 'error';
       }
-
     }
     catch (\Exception $e) {
       $message = $this->t('Connection test failed: @error', ['@error' => $e->getMessage()]);
@@ -5608,7 +5598,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       $this->connector->executeQuery($create_sql);
 
       $this->logger->info('Created table @table with correct array types', ['@table' => $table_name]);
-
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to create table: @error', ['@error' => $e->getMessage()]);
@@ -5639,7 +5628,6 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
    */
   protected function indexItem(IndexInterface $index, ItemInterface $item) {
     try {
-
       $indexManager = $this->getIndexManager();
 
       // Get table name using the same logic as IndexManager.
@@ -5693,21 +5681,21 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
       // Use EnhancedIndexManager with shared fieldMapper.
       if ($ai_enabled && class_exists('\Drupal\search_api_postgresql\PostgreSQL\EnhancedIndexManager')) {
         $this->indexManager = new EnhancedIndexManager(
-          $this->connector,
-        // Use the shared instance.
-          $this->fieldMapper,
-          $this->configuration,
-          $embedding_service,
-          $this->getServerId()
-        );
+              $this->connector,
+              // Use the shared instance.
+              $this->fieldMapper,
+              $this->configuration,
+              $embedding_service,
+              $this->getServerId()
+          );
       }
       else {
         $this->indexManager = new IndexManager(
-          $this->connector,
-        // Use the shared instance.
-          $this->fieldMapper,
-          $this->configuration
-              );
+              $this->connector,
+              // Use the shared instance.
+              $this->fieldMapper,
+              $this->configuration
+                );
       }
 
       // Configure the IndexManager for array storage.
@@ -5752,9 +5740,11 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     }
 
     // Also check nested configuration structures.
-    if (!empty($this->configuration['ai_embeddings']['enabled']) ||
-        !empty($this->configuration['vector_search']['enabled']) ||
-        !empty($this->configuration['azure_embedding']['enabled'])) {
+    if (
+          !empty($this->configuration['ai_embeddings']['enabled']) ||
+          !empty($this->configuration['vector_search']['enabled']) ||
+          !empty($this->configuration['azure_embedding']['enabled'])
+      ) {
       $this->logger->debug('AI search enabled via nested configuration');
       return TRUE;
     }
@@ -5766,7 +5756,7 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
   /**
    * Builds traditional PostgreSQL full-text search using text fields.
    */
-  protected function buildPostgreSQLTextSearch($fields, $search_text, $fts_config = 'english') {
+  protected function buildPostgreSqlTextSearch($fields, $search_text, $fts_config = 'english') {
     $search_conditions = [];
     $params = [];
 
@@ -5777,10 +5767,11 @@ class PostgreSQLBackend extends BackendPluginBase implements ContainerFactoryPlu
     }
 
     foreach ($fields as $field_id => $field_info) {
-      if (isset($field_info['type']) &&
-        in_array($field_info['type'], ['text', 'string', 'postgresql_fulltext']) &&
-        $field_id !== 'search_api_id') {
-
+      if (
+            isset($field_info['type']) &&
+            in_array($field_info['type'], ['text', 'string', 'postgresql_fulltext']) &&
+            $field_id !== 'search_api_id'
+        ) {
         $safe_field = $this->connector->quoteColumnName($field_id);
         // Use parameterized queries instead of string interpolation.
         $search_conditions[] = "to_tsvector(?, COALESCE({$safe_field}, '')) @@ plainto_tsquery(?, ?)";

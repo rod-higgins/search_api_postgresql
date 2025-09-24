@@ -9,7 +9,6 @@ use Psr\Log\LoggerInterface;
  * Database-backed embedding cache implementation.
  */
 class DatabaseEmbeddingCache implements EmbeddingCacheInterface {
-
   /**
    * The database connection.
    *

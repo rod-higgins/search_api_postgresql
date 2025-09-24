@@ -10,7 +10,6 @@ use Psr\Log\LoggerInterface;
  * Enhanced service for generating user-friendly degradation messages.
  */
 class EnhancedDegradationMessageService {
-
   use StringTranslationTrait;
 
   /**

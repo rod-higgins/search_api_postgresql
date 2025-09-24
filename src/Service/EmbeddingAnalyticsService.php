@@ -11,7 +11,6 @@ use Psr\Log\LoggerInterface;
  * Service for tracking and analyzing embedding usage, costs, and performance.
  */
 class EmbeddingAnalyticsService {
-
   /**
    * The database connection.
    *
@@ -293,7 +292,6 @@ class EmbeddingAnalyticsService {
         'trend' => $trend,
         'by_operation' => $by_operation,
       ];
-
     }
     catch (\Exception $e) {
       // If any database operation fails, log error and return defaults.
@@ -453,7 +451,6 @@ class EmbeddingAnalyticsService {
       if ($total_operations > 0) {
         $metrics['error_rate'] = round(($error_count / $total_operations) * 100, 2);
       }
-
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to get server metrics for @server: @message', [
@@ -691,7 +688,6 @@ class EmbeddingAnalyticsService {
         '@start' => date('Y-m-d', $start_date),
         '@end' => date('Y-m-d', $end_date - 1),
       ]);
-
     }
     catch (\Exception $e) {
       $this->logger->error('Failed to aggregate daily stats: @message', [

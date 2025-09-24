@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.0/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         beStrictAboutTestsThatDoNotTestAnything="true"
+         beStrictAboutOutputDuringTests="true"
+         beStrictAboutChangesToGlobalState="true"
+         failOnRisky="true"
+         failOnWarning="true"
+         convertDeprecationsToExceptions="true">
+
+  <testsuites>
+    <testsuite name="functional">
+      <directory>tests/src/Functional</directory>
+    </testsuite>
+    <testsuite name="unit">
+      <directory>tests/src/Unit</directory>
+    </testsuite>
+    <testsuite name="kernel">
+      <directory>tests/src/Kernel</directory>
+    </testsuite>
+    <testsuite name="integration">
+      <directory>tests/src/Integration</directory>
+    </testsuite>
+  </testsuites>
+
+  <php>
+    <!-- Drupal testing environment variables -->
+    <env name="SIMPLETEST_BASE_URL" value="http://localhost:8080"/>
+    <env name="SIMPLETEST_DB" value="pgsql://drupal:drupal@localhost:5432/drupal_test"/>
+    <env name="BROWSERTEST_OUTPUT_DIRECTORY" value="sites/default/files/simpletest"/>
+    <env name="BROWSERTEST_OUTPUT_BASE_URL" value="http://localhost:8080"/>
+
+    <!-- Database configuration for testing -->
+    <env name="DB_HOST" value="localhost"/>
+    <env name="DB_PORT" value="5432"/>
+    <env name="DB_NAME" value="drupal_test"/>
+    <env name="DB_USER" value="drupal"/>
+    <env name="DB_PASS" value="drupal"/>
+
+    <!-- Test configuration -->
+    <env name="MINK_DRIVER_ARGS" value='["chrome", {"browserName": "chrome", "chromeOptions": {"args": ["--headless", "--no-sandbox", "--disable-dev-shm-usage"]}}, "http://localhost:9515"]'/>
+    <env name="MINK_DRIVER_ARGS_WEBDRIVER" value='["chrome", {"browserName": "chrome", "chromeOptions": {"args": ["--headless", "--no-sandbox", "--disable-dev-shm-usage"]}}, "http://localhost:9515"]'/>
+  </php>
+
+  <logging>
+    <testdoxHtml outputFile="tests/reports/testdox.html"/>
+    <testdoxText outputFile="tests/reports/testdox.txt"/>
+    <junit outputFile="tests/reports/junit.xml"/>
+  </logging>
+
+  <coverage>
+    <include>
+      <directory suffix=".php">src</directory>
+    </include>
+    <exclude>
+      <directory>tests</directory>
+      <directory>vendor</directory>
+    </exclude>
+    <report>
+      <html outputDirectory="tests/reports/coverage"/>
+      <text outputFile="tests/reports/coverage.txt"/>
+    </report>
+  </coverage>
+
+</phpunit>
