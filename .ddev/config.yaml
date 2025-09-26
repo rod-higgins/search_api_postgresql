@@ -34,7 +34,11 @@ nodejs_version: "18"
 # Hooks for automated setup
 hooks:
   post-start:
-    - exec: "echo 'DDEV environment started. Run ddev setup-database to initialize PostgreSQL extensions.'"
+    - exec: "echo 'DDEV environment started. PostgreSQL extensions will be initialized automatically.'"
     - exec: "mkdir -p /var/www/html/web/modules/contrib/search_api_postgresql"
     - exec: "echo 'Module symlinks are configured via docker-compose.symlinks.yaml for development.'"
-    - exec-host: "echo 'To complete setup, run: ddev drush php:script scripts/local-setup.php'"
+    - exec: "psql -d db -c 'CREATE EXTENSION IF NOT EXISTS vector;' || true"
+    - exec: "psql -d db -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm;' || true"
+    - exec: "psql -d db -c 'CREATE EXTENSION IF NOT EXISTS btree_gin;' || true"
+    - exec: "psql -d db -c 'CREATE EXTENSION IF NOT EXISTS unaccent;' || true"
+    - exec-host: "echo 'DDEV environment ready. PostgreSQL extensions installed.'"

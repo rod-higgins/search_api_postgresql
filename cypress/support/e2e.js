@@ -169,7 +169,7 @@ Cypress.on('uncaught:exception', (err, runnable) => {
   // Ignore common Drupal JS errors that don't affect testing
   if (err.message.includes('Script error') ||
       err.message.includes('Non-Error promise rejection captured')) {
-    return FALSE
+    return false
   }
-  return TRUE
+  return true
 })

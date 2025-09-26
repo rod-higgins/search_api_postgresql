@@ -56,7 +56,7 @@ Cypress.Commands.add('createTestContent', (contentData) => {
 })
 
 // Command to perform search
-Cypress.Commands.add('performSearch', (searchTerm, expectedResults = NULL) => {
+Cypress.Commands.add('performSearch', (searchTerm, expectedResults = null) => {
   cy.get('input[name="search"]').clear().type(searchTerm)
   cy.get('input[type="submit"]').click()
 

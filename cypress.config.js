@@ -2,11 +2,11 @@ const { defineConfig } = require('cypress')
 
 module.exports = defineConfig({
   e2e: {
-    baseUrl: 'http://localhost:8080',
+    baseUrl: 'https://search-api-postgresql.ddev.site',
     viewportWidth: 1280,
     viewportHeight: 720,
-    video: FALSE,
-    screenshotOnRunFailure: TRUE,
+    video: false,
+    screenshotOnRunFailure: true,
     defaultCommandTimeout: 10000,
     requestTimeout: 10000,
     responseTimeout: 10000,

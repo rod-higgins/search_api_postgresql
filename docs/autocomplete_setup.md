@@ -11,8 +11,8 @@ Admin → Configuration → Search and metadata → Search API
 ### 2. Configure Autocomplete Sources
 ```yaml
 Suggestion Sources:
-☑ Server search (uses your AI-powered backend)
-☑ Suggester: Search Index
+- Server search (uses your AI-powered backend)
+- Suggester: Search Index
 ```
 
 ### 3. Create Autocomplete-Enabled Views Block

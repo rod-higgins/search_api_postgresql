@@ -52,11 +52,11 @@ Fields to Index:
 - Content type
 
 Processors:
-☑ HTML filter
-☑ Ignore case  
-☑ Ignore characters
-☑ Stopwords
-☑ Content access (important!)
+- HTML filter
+- Ignore case
+- Ignore characters
+- Stopwords
+- Content access (important!)
 ```
 
 ## Views Configuration
@@ -109,8 +109,8 @@ Advanced → Exposed Form:
 Admin → Configuration → Search → Search API → [Your Index] → Autocomplete
 - Enable autocomplete: Yes
 - Suggester plugins:
-  ☑ Live results
-  ☑ Terms from indexed fields
+  - Live results
+  - Terms from indexed fields
   
 Configuration:
 - Display label: Yes

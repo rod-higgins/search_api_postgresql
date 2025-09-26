@@ -262,12 +262,29 @@ drush search-api:index --batch-size=1 index_id
 
 ### Code Standards
 
-Follow Drupal coding standards:
+Follow Drupal coding standards using the official Drupal and DrupalPractice standards:
 
 **PHP Standards:**
 - PSR-4 autoloading
-- Drupal coding standards
+- Drupal coding standards (installed via drupal/coder)
 - Comprehensive documentation
+
+**Code Quality Commands:**
+```bash
+# Check Drupal coding standards
+ddev exec "phpcs --standard=Drupal src/"
+ddev exec "phpcs --standard=DrupalPractice src/"
+
+# Auto-fix coding standards violations
+ddev exec "phpcbf --standard=Drupal src/"
+ddev exec "phpcbf --standard=DrupalPractice src/"
+
+# Check specific file
+ddev exec "phpcs --standard=Drupal src/Plugin/Backend/SearchApiPostgresqlBackend.php"
+
+# Check both standards together
+ddev exec "phpcs --standard=Drupal,DrupalPractice src/"
+```
 
 **JavaScript Standards:**
 - ES6+ syntax

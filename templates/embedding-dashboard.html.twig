@@ -46,7 +46,7 @@
             {% endif %}
             {% if stat.trend %}
               <div class="stat-card-trend trend-{{ stat.trend > 0 ? 'up' : (stat.trend < 0 ? 'down' : 'neutral') }}">
-                {{ stat.trend > 0 ? '↗' : (stat.trend < 0 ? '↘' : '→') }}
+                {{ stat.trend > 0 ? 'UP' : (stat.trend < 0 ? 'DOWN' : 'STABLE') }}
               </div>
             {% endif %}
           </div>
@@ -96,7 +96,7 @@
                     </td>
                     <td class="server-health">
                       <span class="health-indicator health-{{ server.health ? 'good' : 'error' }}">
-                        {{ server.health ? '✓' : '✗' }}
+                        {{ server.health ? 'OK' : 'FAIL' }}
                       </span>
                     </td>
                     <td class="server-indexes">{{ server.index_count }}</td>
@@ -193,7 +193,7 @@
           {% for check in health_checks %}
             <div class="health-check health-{{ check.status ? 'success' : 'error' }}">
               <div class="health-check-header">
-                <span class="health-check-icon">{{ check.status ? '✓' : '✗' }}</span>
+                <span class="health-check-icon">{{ check.status ? 'OK' : 'FAIL' }}</span>
                 <span class="health-check-name">{{ check.name }}</span>
               </div>
               <div class="health-check-message">{{ check.message }}</div>
