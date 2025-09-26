@@ -9,7 +9,8 @@ use Drupal\Tests\BrowserTestBase;
  *
  * @group search_api_postgresql
  */
-class QueueManagementFormTest extends BrowserTestBase {
+class QueueManagementFormTest extends BrowserTestBase
+{
   /**
    * {@inheritdoc}
    */
@@ -35,7 +36,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->adminUser = $this->drupalCreateUser([
@@ -50,7 +52,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Tests form display and structure.
    */
-  public function testFormDisplay() {
+  public function testFormDisplay()
+  {
     $this->drupalGet($this->getFormPath());
     $this->assertSession()->statusCodeEquals(200);
     $this->assertSession()->pageTextContains('QueueManagementForm');
@@ -59,7 +62,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Tests form submission with valid data.
    */
-  public function testFormSubmissionValid() {
+  public function testFormSubmissionValid()
+  {
     $this->drupalGet($this->getFormPath());
 
     $edit = $this->getValidFormData();
@@ -71,7 +75,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Tests form submission with invalid data.
    */
-  public function testFormSubmissionInvalid() {
+  public function testFormSubmissionInvalid()
+  {
     $this->drupalGet($this->getFormPath());
 
     $edit = $this->getInvalidFormData();
@@ -83,7 +88,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Tests form validation.
    */
-  public function testFormValidation() {
+  public function testFormValidation()
+  {
     $this->drupalGet($this->getFormPath());
 
     // Submit empty form.
@@ -96,7 +102,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Tests form field existence.
    */
-  public function testFormFields() {
+  public function testFormFields()
+  {
     $this->drupalGet($this->getFormPath());
 
     $fields = $this->getExpectedFields();
@@ -108,7 +115,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Tests form permissions.
    */
-  public function testFormPermissions() {
+  public function testFormPermissions()
+  {
     // Test as anonymous user.
     $this->drupalLogout();
     $this->drupalGet($this->getFormPath());
@@ -124,7 +132,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Tests AJAX functionality if present.
    */
-  public function testAjaxFunctionality() {
+  public function testAjaxFunctionality()
+  {
     $this->drupalGet($this->getFormPath());
 
     // Check for AJAX elements.
@@ -134,7 +143,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Tests form cancel operation.
    */
-  public function testFormCancel() {
+  public function testFormCancel()
+  {
     $this->drupalGet($this->getFormPath());
 
     if ($this->assertSession()->buttonExists('Cancel')) {
@@ -147,7 +157,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Tests form with existing configuration.
    */
-  public function testFormWithExistingConfig() {
+  public function testFormWithExistingConfig()
+  {
     // Set some configuration first.
     $config = $this->config('search_api_postgresql.settings');
     $config->set('test_setting', 'test_value');
@@ -160,7 +171,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Tests form help text.
    */
-  public function testFormHelpText() {
+  public function testFormHelpText()
+  {
     $this->drupalGet($this->getFormPath());
 
     // Check for help text elements.
@@ -170,7 +182,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Gets the form path.
    */
-  protected function getFormPath() {
+  protected function getFormPath()
+  {
     // Return appropriate path based on form name.
     return '/admin/config/search/search-api/postgresql/' . strtolower(str_replace('Form', '', 'QueueManagementForm'));
   }
@@ -178,7 +191,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Gets valid form data for submission.
    */
-  protected function getValidFormData() {
+  protected function getValidFormData()
+  {
     return [
       'field_1' => 'valid_value_1',
       'field_2' => 'valid_value_2',
@@ -188,7 +202,8 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Gets invalid form data for submission.
    */
-  protected function getInvalidFormData() {
+  protected function getInvalidFormData()
+  {
     return [
       'field_1' => '',
       'field_2' => 'invalid!@#',
@@ -198,11 +213,11 @@ class QueueManagementFormTest extends BrowserTestBase {
   /**
    * Gets expected form fields.
    */
-  protected function getExpectedFields() {
+  protected function getExpectedFields()
+  {
     return [
       'field_1',
       'field_2',
     ];
   }
-
 }

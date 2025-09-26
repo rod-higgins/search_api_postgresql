@@ -7,9 +7,11 @@ use Psr\Log\LoggerInterface;
 /**
  * In-memory implementation of embedding cache for testing and development.
  */
-class MemoryEmbeddingCache implements EmbeddingCacheInterface {
+class MemoryEmbeddingCache implements EmbeddingCacheInterface
+{
   /**
    * The in-memory cache storage.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -17,6 +19,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
 
   /**
    * Cache metadata.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -24,6 +27,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
 
   /**
    * The logger.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -31,6 +35,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
 
   /**
    * Cache configuration.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -38,6 +43,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
 
   /**
    * Cache statistics.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -50,13 +56,15 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
 
   /**
    * Constructs a MemoryEmbeddingCache.
+   * {@inheritdoc}
    *
    * @param \Psr\Log\LoggerInterface $logger
    *   The logger.
    * @param array $config
    *   Cache configuration.
    */
-  public function __construct(LoggerInterface $logger, array $config = []) {
+  public function __construct(LoggerInterface $logger, array $config = [])
+  {
     $this->logger = $logger;
     $this->config = $config + [
     // 1 hour for memory cache
@@ -70,9 +78,10 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
   /**
    * {@inheritdoc}
    */
-  public function get($text_hash) {
+  public function get($text_hash)
+  {
     if (empty($text_hash)) {
-      return NULL;
+      return null;
     }
 
     $this->validateHash($text_hash);
@@ -80,7 +89,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
     if (!isset($this->cache[$text_hash])) {
       $this->stats['misses']++;
       $this->logger->debug('Memory embedding cache miss for hash: @hash', ['@hash' => $text_hash]);
-      return NULL;
+      return null;
     }
 
     $metadata = $this->metadata[$text_hash] ?? [];
@@ -92,7 +101,7 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       unset($this->metadata[$text_hash]);
       $this->stats['misses']++;
       $this->logger->debug('Memory embedding cache expired for hash: @hash', ['@hash' => $text_hash]);
-      return NULL;
+      return null;
     }
 
     // Update access time and hit count.
@@ -108,9 +117,10 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
   /**
    * {@inheritdoc}
    */
-  public function set($text_hash, array $embedding, $ttl = NULL) {
+  public function set($text_hash, array $embedding, $ttl = null)
+  {
     if (empty($text_hash) || empty($embedding)) {
-      return FALSE;
+      return false;
     }
 
     $this->validateHash($text_hash);
@@ -140,15 +150,16 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       '@dim' => count($embedding),
     ]);
 
-    return TRUE;
+    return true;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function invalidate($text_hash) {
+  public function invalidate($text_hash)
+  {
     if (empty($text_hash)) {
-      return FALSE;
+      return false;
     }
 
     $this->validateHash($text_hash);
@@ -168,7 +179,8 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
   /**
    * {@inheritdoc}
    */
-  public function getMultiple(array $text_hashes) {
+  public function getMultiple(array $text_hashes)
+  {
     if (empty($text_hashes)) {
       return [];
     }
@@ -219,9 +231,10 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
   /**
    * {@inheritdoc}
    */
-  public function setMultiple(array $items, $ttl = NULL) {
+  public function setMultiple(array $items, $ttl = null)
+  {
     if (empty($items)) {
-      return TRUE;
+      return true;
     }
 
     $ttl = $ttl ?? $this->config['default_ttl'];
@@ -256,13 +269,14 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
 
     $this->logger->debug('Memory batch cached @count embeddings', ['@count' => count($items)]);
 
-    return TRUE;
+    return true;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function clear() {
+  public function clear()
+  {
     $count = count($this->cache);
 
     $this->cache = [];
@@ -272,20 +286,21 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
 
     $this->logger->info('Cleared memory embedding cache: @count entries', ['@count' => $count]);
 
-    return TRUE;
+    return true;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getStats() {
+  public function getStats()
+  {
     $current_time = time();
     $total_entries = count($this->cache);
     $expired_count = 0;
     $total_hits = 0;
     $total_dimensions = 0;
-    $oldest_created = NULL;
-    $newest_created = NULL;
+    $oldest_created = null;
+    $newest_created = null;
 
     foreach ($this->metadata as $metadata) {
       if (isset($metadata['expires']) && $metadata['expires'] > 0 && $current_time > $metadata['expires']) {
@@ -297,10 +312,10 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
 
       $created = $metadata['created'] ?? 0;
       if ($created > 0) {
-        if ($oldest_created === NULL || $created < $oldest_created) {
+        if ($oldest_created === null || $created < $oldest_created) {
           $oldest_created = $created;
         }
-        if ($newest_created === NULL || $created > $newest_created) {
+        if ($newest_created === null || $created > $newest_created) {
           $newest_created = $created;
         }
       }
@@ -315,12 +330,12 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       'expired_entries' => $expired_count,
       'total_memory_hits' => $total_hits,
       'average_dimensions' => $total_entries > 0 ? round($total_dimensions / $total_entries, 2) : 0,
-      'oldest_entry' => $oldest_created ? date('Y-m-d H:i:s', $oldest_created) : NULL,
-      'newest_entry' => $newest_created ? date('Y-m-d H:i:s', $newest_created) : NULL,
+      'oldest_entry' => $oldest_created ? date('Y-m-d H:i:s', $oldest_created) : null,
+      'newest_entry' => $newest_created ? date('Y-m-d H:i:s', $newest_created) : null,
       'hit_rate' => $this->stats['hits'] + $this->stats['misses'] > 0
         ? round($this->stats['hits'] / ($this->stats['hits'] + $this->stats['misses']) * 100, 2)
         : 0,
-      'memory_usage_mb' => round(memory_get_usage(TRUE) / 1024 / 1024, 2),
+      'memory_usage_mb' => round(memory_get_usage(true) / 1024 / 1024, 2),
       'max_entries' => $this->config['max_entries'],
     ];
   }
@@ -328,15 +343,17 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
   /**
    * {@inheritdoc}
    */
-  public function maintenance() {
+  public function maintenance()
+  {
     $this->performCleanup();
-    return TRUE;
+    return true;
   }
 
   /**
    * Performs cleanup of expired and excess entries.
    */
-  protected function performCleanup() {
+  protected function performCleanup()
+  {
     $current_time = time();
     $cleaned_expired = 0;
 
@@ -392,14 +409,17 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
 
   /**
    * Validates a text hash.
+   * {@inheritdoc}
    *
    * @param string $hash
    *   The hash to validate.
+   *   {@inheritdoc}.
    *
    * @throws \InvalidArgumentException
    *   If the hash is invalid.
    */
-  protected function validateHash($hash) {
+  protected function validateHash($hash)
+  {
     if (!is_string($hash) || strlen($hash) !== 64 || !ctype_xdigit($hash)) {
       throw new \InvalidArgumentException('Invalid hash format. Expected 64-character hexadecimal string.');
     }
@@ -407,14 +427,17 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
 
   /**
    * Validates an embedding vector.
+   * {@inheritdoc}
    *
    * @param array $embedding
    *   The embedding to validate.
+   *   {@inheritdoc}.
    *
    * @throws \InvalidArgumentException
    *   If the embedding is invalid.
    */
-  protected function validateEmbedding(array $embedding) {
+  protected function validateEmbedding(array $embedding)
+  {
     if (empty($embedding)) {
       throw new \InvalidArgumentException('Embedding cannot be empty.');
     }
@@ -434,5 +457,4 @@ class MemoryEmbeddingCache implements EmbeddingCacheInterface {
       }
     }
   }
-
 }

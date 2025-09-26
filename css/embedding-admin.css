@@ -586,23 +586,23 @@
   .overview-cards {
     grid-template-columns: 1fr;
   }
-  
+
   .embedding-stats-cards {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
-  
+
   .search-api-postgresql-header {
     padding: 1rem;
   }
-  
+
   .search-api-postgresql-header .page-title {
     font-size: 1.5rem;
   }
-  
+
   .stat-card-value {
     font-size: 1.8rem;
   }
-  
+
   .quick-actions {
     grid-template-columns: 1fr;
   }
@@ -612,16 +612,16 @@
   .stat-card {
     padding: 1rem;
   }
-  
+
   .stat-card-value {
     font-size: 1.5rem;
   }
-  
+
   .server-status-table,
   .index-status-table {
     font-size: 0.9rem;
   }
-  
+
   .server-status-table th,
   .index-status-table th,
   .server-status-table td,

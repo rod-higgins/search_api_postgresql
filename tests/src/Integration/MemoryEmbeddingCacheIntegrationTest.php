@@ -11,7 +11,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class MemoryEmbeddingCacheIntegrationTest extends TestCase {
+class MemoryEmbeddingCacheIntegrationTest extends TestCase
+{
   /**
    * The cache instance under test.
    *
@@ -29,7 +30,8 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Include the actual module files.
@@ -40,57 +42,66 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
     $this->logger = new class implements LoggerInterface {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function emergency($message, array $context = []) {
+      public function emergency($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function alert($message, array $context = []) {
+      public function alert($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function critical($message, array $context = []) {
+      public function critical($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function error($message, array $context = []) {
+      public function error($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function warning($message, array $context = []) {
+      public function warning($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function notice($message, array $context = []) {
+      public function notice($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function info($message, array $context = []) {
+      public function info($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function debug($message, array $context = []) {
+      public function debug($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function log($level, $message, array $context = []) {
+      public function log($level, $message, array $context = [])
+      {
       }
 
     };
@@ -110,7 +121,8 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
   /**
    * Test basic cache operations with real implementation.
    */
-  public function testBasicCacheOperations() {
+  public function testBasicCacheOperations()
+  {
     // Test cache miss.
     $result = $this->cache->get('nonexistent');
     $this->assertNull($result);
@@ -127,7 +139,8 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
   /**
    * Test cache expiration functionality.
    */
-  public function testCacheExpiration() {
+  public function testCacheExpiration()
+  {
     $hash = 'expiring_hash';
     $embedding = [1.0, 2.0, 3.0];
 
@@ -145,7 +158,8 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
   /**
    * Test cache invalidation.
    */
-  public function testCacheInvalidation() {
+  public function testCacheInvalidation()
+  {
     $hash = 'invalidation_test';
     $embedding = [5.0, 6.0, 7.0];
 
@@ -161,7 +175,8 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
   /**
    * Test multiple cache operations.
    */
-  public function testMultipleCacheOperations() {
+  public function testMultipleCacheOperations()
+  {
     $items = [
       'hash1' => [1.0, 2.0],
       'hash2' => [3.0, 4.0],
@@ -183,7 +198,8 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
   /**
    * Test cache clearing functionality.
    */
-  public function testCacheClear() {
+  public function testCacheClear()
+  {
     // Add multiple items.
     $this->cache->set('clear1', [1.0, 2.0]);
     $this->cache->set('clear2', [3.0, 4.0]);
@@ -203,7 +219,8 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
   /**
    * Test cache statistics tracking.
    */
-  public function testCacheStatistics() {
+  public function testCacheStatistics()
+  {
     // Perform operations to generate stats.
     $this->cache->set('stats1', [1.0]);
     $this->cache->set('stats2', [2.0]);
@@ -226,12 +243,13 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
   /**
    * Test cache size limits and eviction.
    */
-  public function testCacheSizeLimits() {
+  public function testCacheSizeLimits()
+  {
     // Create cache with small limit.
     $smallCache = new MemoryEmbeddingCache(
-          $this->logger,
-          ['max_entries' => 2]
-      );
+        $this->logger,
+        ['max_entries' => 2]
+    );
 
     // Fill to capacity.
     $this->assertTrue($smallCache->set('item1', [1.0]));
@@ -248,15 +266,16 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
     $this->assertNotNull($smallCache->get('item3'));
 
     // At least one of the earlier items should be evicted.
-    $item1Exists = $smallCache->get('item1') !== NULL;
-    $item2Exists = $smallCache->get('item2') !== NULL;
+    $item1Exists = $smallCache->get('item1') !== null;
+    $item2Exists = $smallCache->get('item2') !== null;
     $this->assertFalse($item1Exists && $item2Exists);
   }
 
   /**
    * Test hash validation.
    */
-  public function testHashValidation() {
+  public function testHashValidation()
+  {
     // Valid hash should work.
     $validHash = str_repeat('a', 64);
     $this->assertTrue($this->cache->set($validHash, [1.0]));
@@ -269,7 +288,8 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
   /**
    * Test embedding validation.
    */
-  public function testEmbeddingValidation() {
+  public function testEmbeddingValidation()
+  {
     $hash = str_repeat('b', 64);
 
     // Valid embedding should work.
@@ -283,7 +303,8 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
   /**
    * Test cache maintenance operations.
    */
-  public function testCacheMaintenance() {
+  public function testCacheMaintenance()
+  {
     // Add items with different TTLs.
     // Short TTL.
     $this->cache->set('maint1', [1.0], 1);
@@ -302,5 +323,4 @@ class MemoryEmbeddingCacheIntegrationTest extends TestCase {
     // Non-expired should remain.
     $this->assertNotNull($this->cache->get('maint2'));
   }
-
 }

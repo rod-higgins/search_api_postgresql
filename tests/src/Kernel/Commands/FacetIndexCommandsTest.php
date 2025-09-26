@@ -10,7 +10,8 @@ use Drupal\KernelTests\KernelTestBase;
  *
  * @group search_api_postgresql
  */
-class FacetIndexCommandsTest extends KernelTestBase {
+class FacetIndexCommandsTest extends KernelTestBase
+{
   /**
    * {@inheritdoc}
    */
@@ -29,7 +30,8 @@ class FacetIndexCommandsTest extends KernelTestBase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->installSchema('system', ['sequences']);
@@ -41,8 +43,7 @@ class FacetIndexCommandsTest extends KernelTestBase {
     try {
       // Create instance with container dependencies.
       $this->{lcfirst(FacetIndexCommands)} = $this->createInstance();
-    }
-    catch (\Error $e) {
+    } catch (\Error $e) {
       $this->markTestSkipped('Could not instantiate class: ' . $e->getMessage());
     }
   }
@@ -50,45 +51,49 @@ class FacetIndexCommandsTest extends KernelTestBase {
   /**
    * Creates an instance of the class under test.
    */
-  protected function createInstance() {
+  protected function createInstance()
+  {
     // Get dependencies from container.
     return new FacetIndexCommands(
-          $this->container->get('entity_type.manager'),
-          $this->container->get('config.factory'),
-          $this->container->get('logger.factory')->get('search_api_postgresql')
-      );
+        $this->container->get('entity_type.manager'),
+        $this->container->get('config.factory'),
+        $this->container->get('logger.factory')->get('search_api_postgresql')
+    );
   }
 
   /**
    * Tests class instantiation.
    */
-  public function testClassInstantiation() {
+  public function testClassInstantiation()
+  {
     if (!$this->{lcfirst(FacetIndexCommands)}) {
       $this->markTestSkipped('Class not instantiated');
     }
 
     $this->assertInstanceOf(
-          '\Drupal\search_api_postgresql\Commands\FacetIndexCommands',
-          $this->{lcfirst(FacetIndexCommands)}
-      );
+        '\Drupal\search_api_postgresql\Commands\FacetIndexCommands',
+        $this->{lcfirst(FacetIndexCommands)}
+    );
   }
 
   /**
    * Tests service integration.
    */
-  public function testServiceIntegration() {
+  public function testServiceIntegration()
+  {
     if (!$this->{lcfirst(FacetIndexCommands)}) {
       $this->markTestSkipped('Class not instantiated');
     }
 
     // Test that the class can interact with Drupal services.
-    $this->assertTrue(TRUE);
+    $this->assertTrue(true);
   }
 
   /**
    * Tests command execution.
    */
-  public function testCommandExecution() {
+  public function testCommandExecution()
+  {
     if (!$this->{lcfirst(FacetIndexCommands)}) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -98,7 +103,7 @@ class FacetIndexCommandsTest extends KernelTestBase {
 
     foreach ($methods as $method) {
       $docComment = $method->getDocComment();
-      if ($docComment && strpos($docComment, '@command') !== FALSE) {
+      if ($docComment && strpos($docComment, '@command') !== false) {
         // This is a command method.
         $this->assertTrue(method_exists($this->{lcfirst(FacetIndexCommands)}, $method->getName()));
       }
@@ -108,7 +113,8 @@ class FacetIndexCommandsTest extends KernelTestBase {
   /**
    * Tests queue worker processing.
    */
-  public function testQueueProcessing() {
+  public function testQueueProcessing()
+  {
     if (!$this->{lcfirst(FacetIndexCommands)}) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -122,11 +128,10 @@ class FacetIndexCommandsTest extends KernelTestBase {
 
       try {
         $this->{lcfirst(FacetIndexCommands)}->processItem($testItem);
-        $this->assertTrue(TRUE);
-      }
-      catch (\Exception $e) {
+        $this->assertTrue(true);
+      } catch (\Exception $e) {
         // Processing may fail without full context.
-        $this->assertTrue(TRUE);
+        $this->assertTrue(true);
       }
     }
   }
@@ -134,7 +139,8 @@ class FacetIndexCommandsTest extends KernelTestBase {
   /**
    * Tests configuration management.
    */
-  public function testConfigurationManagement() {
+  public function testConfigurationManagement()
+  {
     if (!$this->{lcfirst(FacetIndexCommands)}) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -146,7 +152,8 @@ class FacetIndexCommandsTest extends KernelTestBase {
   /**
    * Tests entity operations.
    */
-  public function testEntityOperations() {
+  public function testEntityOperations()
+  {
     if (!$this->{lcfirst(FacetIndexCommands)}) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -158,7 +165,8 @@ class FacetIndexCommandsTest extends KernelTestBase {
   /**
    * Tests logging integration.
    */
-  public function testLoggingIntegration() {
+  public function testLoggingIntegration()
+  {
     if (!$this->{lcfirst(FacetIndexCommands)}) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -170,7 +178,8 @@ class FacetIndexCommandsTest extends KernelTestBase {
   /**
    * Tests permission and access control.
    */
-  public function testPermissions() {
+  public function testPermissions()
+  {
     if (!$this->{lcfirst(FacetIndexCommands)}) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -181,9 +190,9 @@ class FacetIndexCommandsTest extends KernelTestBase {
 
     foreach ($methods as $method) {
       $docComment = $method->getDocComment();
-      if ($docComment && strpos($docComment, '@permission') !== FALSE) {
+      if ($docComment && strpos($docComment, '@permission') !== false) {
         // Extract and validate permission.
-        $this->assertTrue(TRUE);
+        $this->assertTrue(true);
       }
     }
   }
@@ -191,7 +200,8 @@ class FacetIndexCommandsTest extends KernelTestBase {
   /**
    * Tests error handling and recovery.
    */
-  public function testErrorHandling() {
+  public function testErrorHandling()
+  {
     if (!$this->{lcfirst(FacetIndexCommands)}) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -199,10 +209,9 @@ class FacetIndexCommandsTest extends KernelTestBase {
     // Test with invalid parameters.
     try {
       if (method_exists($this->{lcfirst(FacetIndexCommands)}, 'execute')) {
-        $this->{lcfirst(FacetIndexCommands)}->execute(NULL);
+        $this->{lcfirst(FacetIndexCommands)}->execute(null);
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       // Should handle errors gracefully.
       $this->assertInstanceOf('\Exception', $e);
     }
@@ -211,7 +220,8 @@ class FacetIndexCommandsTest extends KernelTestBase {
   /**
    * Tests batch processing capabilities.
    */
-  public function testBatchProcessing() {
+  public function testBatchProcessing()
+  {
     if (!$this->{lcfirst(FacetIndexCommands)}) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -224,12 +234,10 @@ class FacetIndexCommandsTest extends KernelTestBase {
 
       try {
         $this->{lcfirst(FacetIndexCommands)}->processBatch($batch);
-        $this->assertTrue(TRUE);
-      }
-      catch (\Exception $e) {
-        $this->assertTrue(TRUE);
+        $this->assertTrue(true);
+      } catch (\Exception $e) {
+        $this->assertTrue(true);
       }
     }
   }
-
 }

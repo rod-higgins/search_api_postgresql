@@ -12,10 +12,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Tests for the PostgreSQL connector.
  *
- * @group search_api_postgresql
+ * @group              search_api_postgresql
  * @coversDefaultClass \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector
  */
-class PostgreSQLConnectorUnitTest extends UnitTestCase {
+class PostgreSQLConnectorUnitTest extends UnitTestCase
+{
   /**
    * The PostgreSQL connector under test.
    *
@@ -47,7 +48,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->database = $this->createMock(Connection::class);
@@ -72,7 +74,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::__construct
    */
-  public function testConnectorInitialization() {
+  public function testConnectorInitialization()
+  {
     $this->assertInstanceOf(PostgreSQLConnector::class, $this->connector);
   }
 
@@ -81,7 +84,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::testConnection
    */
-  public function testTestConnection() {
+  public function testTestConnection()
+  {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchField')->willReturn('PostgreSQL 16.0');
 
@@ -96,7 +100,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::checkExtension
    */
-  public function testCheckExtension() {
+  public function testCheckExtension()
+  {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchField')->willReturn(1);
 
@@ -111,8 +116,9 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::installExtension
    */
-  public function testInstallExtension() {
-    $this->database->method('query')->willReturn(TRUE);
+  public function testInstallExtension()
+  {
+    $this->database->method('query')->willReturn(true);
 
     $result = $this->connector->installExtension('vector');
     $this->assertTrue($result);
@@ -123,7 +129,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::executeQuery
    */
-  public function testExecuteQuery() {
+  public function testExecuteQuery()
+  {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchAll')->willReturn([
       ['id' => 1, 'name' => 'test1'],
@@ -142,7 +149,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::executeQuery
    */
-  public function testExecuteQueryWithParameters() {
+  public function testExecuteQueryWithParameters()
+  {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchAll')->willReturn([
       ['id' => 1, 'name' => 'test1'],
@@ -160,8 +168,9 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::tableExists
    */
-  public function testTableExists() {
-    $this->schema->method('tableExists')->willReturn(TRUE);
+  public function testTableExists()
+  {
+    $this->schema->method('tableExists')->willReturn(true);
 
     $result = $this->connector->tableExists('test_table');
     $this->assertTrue($result);
@@ -172,7 +181,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::indexExists
    */
-  public function testIndexExists() {
+  public function testIndexExists()
+  {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchField')->willReturn(1);
 
@@ -187,7 +197,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::supportsVectorOperations
    */
-  public function testSupportsVectorOperations() {
+  public function testSupportsVectorOperations()
+  {
     // Mock pgvector extension check.
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchField')->willReturn(1);
@@ -202,7 +213,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::supportsFullTextSearch
    */
-  public function testSupportsFullTextSearch() {
+  public function testSupportsFullTextSearch()
+  {
     $result = $this->connector->supportsFullTextSearch();
     $this->assertTrue($result);
   }
@@ -212,7 +224,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::getDatabaseVersion
    */
-  public function testGetDatabaseVersion() {
+  public function testGetDatabaseVersion()
+  {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchField')->willReturn('PostgreSQL 16.0 on x86_64-pc-linux-gnu');
 
@@ -228,7 +241,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::getDatabaseConfiguration
    */
-  public function testGetDatabaseConfiguration() {
+  public function testGetDatabaseConfiguration()
+  {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchAllKeyed')->willReturn([
       'shared_buffers' => '128MB',
@@ -249,7 +263,8 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    *
    * @covers ::testConnection
    */
-  public function testConnectionFailure() {
+  public function testConnectionFailure()
+  {
     $this->database->method('query')->willThrowException(new \Exception('Connection failed'));
 
     $result = $this->connector->testConnection();
@@ -263,12 +278,12 @@ class PostgreSQLConnectorUnitTest extends UnitTestCase {
    * @covers ::commitTransaction
    * @covers ::rollbackTransaction
    */
-  public function testTransactionHandling() {
-    $this->database->method('startTransaction')->willReturn(TRUE);
+  public function testTransactionHandling()
+  {
+    $this->database->method('startTransaction')->willReturn(true);
 
     $this->assertTrue($this->connector->beginTransaction());
     $this->assertTrue($this->connector->commitTransaction());
     $this->assertTrue($this->connector->rollbackTransaction());
   }
-
 }

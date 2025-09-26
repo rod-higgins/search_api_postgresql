@@ -9,9 +9,11 @@ use Drupal\search_api\SearchApiException;
 /**
  * Manages PostgreSQL index tables and operations with vector support and SQL injection prevention.
  */
-class IndexManager {
+class IndexManager
+{
   /**
    * The PostgreSQL connector.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector
    */
@@ -19,6 +21,7 @@ class IndexManager {
 
   /**
    * The field mapper.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\PostgreSQL\FieldMapper
    */
@@ -26,6 +29,7 @@ class IndexManager {
 
   /**
    * The backend configuration.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -33,6 +37,7 @@ class IndexManager {
 
   /**
    * Constructs an IndexManager object.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector $connector
    *   The PostgreSQL connector.
@@ -41,7 +46,8 @@ class IndexManager {
    * @param array $config
    *   The backend configuration.
    */
-  public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config) {
+  public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config)
+  {
     $this->connector = $connector;
     $this->fieldMapper = $field_mapper;
     $this->config = $config;
@@ -50,14 +56,17 @@ class IndexManager {
 
   /**
    * Creates an index table.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
+   *   {@inheritdoc}.
    *
    * @throws \Drupal\search_api\SearchApiException
    *   If table creation fails.
    */
-  public function createIndex(IndexInterface $index) {
+  public function createIndex(IndexInterface $index)
+  {
     $table_name = $this->getIndexTableName($index);
 
     // Check if table already exists (using unquoted name for existence check)
@@ -68,7 +77,10 @@ class IndexManager {
 
     // Ensure vector extension is available if needed.
     if ($this->isVectorSearchEnabled() && !$this->checkVectorSupport()) {
-      throw new SearchApiException('Vector search is enabled but pgvector extension is not available. Please install and enable the pgvector extension.');
+      throw new SearchApiException(
+          'Vector search is enabled but pgvector extension is not available. ' .
+          'Please install and enable the pgvector extension.'
+      );
     }
 
     // Create main index table.
@@ -89,11 +101,13 @@ class IndexManager {
 
   /**
    * Updates an index table structure.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    */
-  public function updateIndex(IndexInterface $index) {
+  public function updateIndex(IndexInterface $index)
+  {
     $unquoted_table_name = $this->getIndexTableNameUnquoted($index);
 
     if (!$this->connector->tableExists($unquoted_table_name)) {
@@ -131,11 +145,13 @@ class IndexManager {
 
   /**
    * Drops an index table.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface|string $index
    *   The search index or index ID.
    */
-  public function dropIndex($index) {
+  public function dropIndex($index)
+  {
     $table_name = $this->getIndexTableName($index);
 
     // Drop the table (CASCADE will remove dependent objects)
@@ -146,8 +162,9 @@ class IndexManager {
   /**
    * Enhanced indexItem method that properly handles complex field types.
    */
-  public function indexItem($table_name, IndexInterface $index, ItemInterface $item) {
-    $fields = $item->getFields(TRUE);
+  public function indexItem($table_name, IndexInterface $index, ItemInterface $item)
+  {
+    $fields = $item->getFields(true);
 
     $values = [
       'search_api_id' => $item->getId(),
@@ -182,22 +199,23 @@ class IndexManager {
               $searchable_text_parts[] = (string) $scalar_value;
             }
           }
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
           // Log error and set to NULL to prevent indexing failure.
-          \Drupal::logger('search_api_postgresql')->error('Failed to process field @field_id (@field_type) for item @item_id: @message', [
-            '@field_id' => $field_id,
-            '@field_type' => $field_type,
-            '@item_id' => $item->getId(),
-            '@message' => $e->getMessage(),
-          ]);
+          \Drupal::logger('search_api_postgresql')->error(
+              'Failed to process field @field_id (@field_type) for item @item_id: @message',
+              [
+              '@field_id' => $field_id,
+              '@field_type' => $field_type,
+              '@item_id' => $item->getId(),
+              '@message' => $e->getMessage(),
+              ]
+          );
 
-          $values[$field_id] = NULL;
+          $values[$field_id] = null;
         }
-      }
-      else {
+      } else {
         // Set empty fields to NULL.
-        $values[$field_id] = NULL;
+        $values[$field_id] = null;
       }
     }
 
@@ -211,7 +229,7 @@ class IndexManager {
     // Generate embeddings if enabled (queue for background processing)
     if ($this->isVectorSearchEnabled() && !empty($searchable_text)) {
       // Set embedding to NULL initially - will be updated via queue.
-      $values['embedding_vector'] = NULL;
+      $values['embedding_vector'] = null;
 
       // Queue embedding generation.
       $this->queueEmbeddingGeneration($index, $item->getId(), $searchable_text);
@@ -224,7 +242,8 @@ class IndexManager {
   /**
    * Executes the index query with proper parameter binding.
    */
-  protected function executeIndexQuery($table_name, array $values, $searchable_text = '') {
+  protected function executeIndexQuery($table_name, array $values, $searchable_text = '')
+  {
     $columns = [];
     $placeholders = [];
     $params = [];
@@ -236,8 +255,7 @@ class IndexManager {
       if ($field_id === 'search_vector' && is_string($value) && strpos($value, 'to_tsvector') === 0) {
         // Raw SQL expression for tsvector.
         $placeholders[] = $value;
-      }
-      else {
+      } else {
         $placeholder = ":{$field_id}";
         $placeholders[] = $placeholder;
         $params[$placeholder] = $value;
@@ -261,7 +279,8 @@ class IndexManager {
   /**
    * Builds the UPDATE clause for UPSERT operations.
    */
-  protected function buildUpdateClause(array $columns, array $placeholders, array $values) {
+  protected function buildUpdateClause(array $columns, array $placeholders, array $values)
+  {
     $update_parts = [];
 
     for ($i = 0; $i < count($columns); $i++) {
@@ -269,7 +288,7 @@ class IndexManager {
       $placeholder = $placeholders[$i];
 
       // Skip the ID column in updates.
-      if (strpos($column, 'search_api_id') === FALSE) {
+      if (strpos($column, 'search_api_id') === false) {
         $update_parts[] = "{$column} = {$placeholder}";
       }
     }
@@ -279,13 +298,15 @@ class IndexManager {
 
   /**
    * Deletes items from the index.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param array $item_ids
    *   Array of item IDs to delete.
    */
-  public function deleteItems($table_name, array $item_ids) {
+  public function deleteItems($table_name, array $item_ids)
+  {
     if (empty($item_ids)) {
       return;
     }
@@ -322,8 +343,7 @@ class IndexManager {
           '@table' => $table_name,
         ]);
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to delete items from @table: @error', [
         '@table' => $table_name,
         '@error' => $e->getMessage(),
@@ -336,16 +356,19 @@ class IndexManager {
 
   /**
    * Deletes a batch of items.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param array $item_ids
    *   Array of item IDs to delete.
+   *   {@inheritdoc}.
    *
    * @return int
    *   Number of items deleted.
    */
-  protected function deleteBatch($table_name, array $item_ids) {
+  protected function deleteBatch($table_name, array $item_ids)
+  {
     if (empty($item_ids)) {
       return 0;
     }
@@ -372,13 +395,15 @@ class IndexManager {
 
   /**
    * Fallback method to delete items individually.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param array $item_ids
    *   Array of item IDs to delete.
    */
-  protected function deleteItemsIndividually($table_name, array $item_ids) {
+  protected function deleteItemsIndividually($table_name, array $item_ids)
+  {
     $id_field = $this->connector->quoteColumnName('search_api_id');
     $sql = "DELETE FROM {$table_name} WHERE {$id_field} = :item_id";
 
@@ -393,8 +418,7 @@ class IndexManager {
         if ($statement->rowCount() > 0) {
           $deleted_count++;
         }
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $failed_count++;
         $this->logger->warning('Failed to delete individual item @id: @error', [
           '@id' => $id,
@@ -413,41 +437,45 @@ class IndexManager {
 
   /**
    * Checks if an item exists in the index before attempting deletion.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param string $item_id
    *   The item ID to check.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if the item exists, FALSE otherwise.
+   *   true if the item exists, false otherwise.
    */
-  protected function itemExists($table_name, $item_id) {
+  protected function itemExists($table_name, $item_id)
+  {
     try {
       $id_field = $this->connector->quoteColumnName('search_api_id');
       $sql = "SELECT 1 FROM {$table_name} WHERE {$id_field} = :item_id LIMIT 1";
 
       $statement = $this->connector->executeQuery($sql, [':item_id' => $item_id]);
-      return $statement->fetchColumn() !== FALSE;
-    }
-    catch (\Exception $e) {
+      return $statement->fetchColumn() !== false;
+    } catch (\Exception $e) {
       $this->logger->warning('Failed to check if item exists @id: @error', [
         '@id' => $item_id,
         '@error' => $e->getMessage(),
       ]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Safe delete method that checks existence first.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param array $item_ids
    *   Array of item IDs to delete.
    */
-  public function safeDeleteItems($table_name, array $item_ids) {
+  public function safeDeleteItems($table_name, array $item_ids)
+  {
     if (empty($item_ids)) {
       return;
     }
@@ -462,8 +490,7 @@ class IndexManager {
 
     if (!empty($existing_items)) {
       $this->deleteItems($table_name, $existing_items);
-    }
-    else {
+    } else {
       $this->logger->debug('No items found to delete from @table', [
         '@table' => $table_name,
       ]);
@@ -472,21 +499,22 @@ class IndexManager {
 
   /**
    * Clears all items from an index.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    * @param string|null $datasource_id
    *   Optional datasource ID to clear.
    */
-  public function clearIndex(IndexInterface $index, $datasource_id = NULL) {
+  public function clearIndex(IndexInterface $index, $datasource_id = null)
+  {
     $table_name = $this->getIndexTableName($index);
 
     if ($datasource_id) {
       $datasource_field = $this->connector->quoteColumnName('search_api_datasource');
       $sql = "DELETE FROM {$table_name} WHERE {$datasource_field} = :datasource";
       $this->connector->executeQuery($sql, [':datasource' => $datasource_id]);
-    }
-    else {
+    } else {
       $sql = "TRUNCATE TABLE {$table_name}";
       $this->connector->executeQuery($sql);
     }
@@ -494,16 +522,19 @@ class IndexManager {
 
   /**
    * Builds the CREATE TABLE SQL statement.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The CREATE TABLE SQL.
    */
-  protected function buildCreateTableSql($table_name, IndexInterface $index) {
+  protected function buildCreateTableSql($table_name, IndexInterface $index)
+  {
     $fields = $this->fieldMapper->getFieldDefinitions($index);
 
     $sql = "CREATE TABLE {$table_name} (\n";
@@ -534,13 +565,15 @@ class IndexManager {
 
   /**
    * Creates full-text indexes.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    */
-  protected function createFullTextIndexes($table_name, IndexInterface $index) {
+  protected function createFullTextIndexes($table_name, IndexInterface $index)
+  {
     $unquoted_table_name = $this->getIndexTableNameUnquoted($index);
 
     // Create GIN index on tsvector column.
@@ -559,8 +592,7 @@ class IndexManager {
       try {
         $sql = "CREATE INDEX {$trigram_index} ON {$table_name} USING gin({$safe_field} gin_trgm_ops)";
         $this->connector->executeQuery($sql);
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         // Trigram extension might not be available.
         \Drupal::logger('search_api_postgresql')->notice('Could not create trigram index: @message', [
           '@message' => $e->getMessage(),
@@ -571,13 +603,15 @@ class IndexManager {
 
   /**
    * Creates vector indexes for similarity search.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    */
-  protected function createVectorIndexes($table_name, IndexInterface $index) {
+  protected function createVectorIndexes($table_name, IndexInterface $index)
+  {
     $vector_fields = $this->fieldMapper->getVectorSearchableFields($index);
     $unquoted_table_name = $this->getIndexTableNameUnquoted($index);
 
@@ -589,14 +623,13 @@ class IndexManager {
       try {
         $sql = "CREATE INDEX {$index_name} ON {$table_name} USING hnsw ({$safe_field} vector_cosine_ops)";
         $this->connector->executeQuery($sql);
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         // Fall back to IVFFlat if HNSW is not available.
         try {
-          $sql = "CREATE INDEX {$index_name} ON {$table_name} USING ivfflat ({$safe_field} vector_cosine_ops) WITH (lists = 100)";
+          $sql = "CREATE INDEX {$index_name} ON {$table_name} USING ivfflat " .
+                 "({$safe_field} vector_cosine_ops) WITH (lists = 100)";
           $this->connector->executeQuery($sql);
-        }
-        catch (\Exception $e2) {
+        } catch (\Exception $e2) {
           throw new SearchApiException("Failed to create vector index: " . $e2->getMessage());
         }
       }
@@ -605,13 +638,15 @@ class IndexManager {
 
   /**
    * Creates supporting indexes for faceting and filtering.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    */
-  protected function createSupportingIndexes($table_name, IndexInterface $index) {
+  protected function createSupportingIndexes($table_name, IndexInterface $index)
+  {
     $unquoted_table_name = $this->getIndexTableNameUnquoted($index);
 
     // Create indexes on facetable fields.
@@ -637,13 +672,15 @@ class IndexManager {
 
   /**
    * Drops full-text indexes.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    */
-  protected function dropFullTextIndexes($table_name, IndexInterface $index) {
+  protected function dropFullTextIndexes($table_name, IndexInterface $index)
+  {
     $unquoted_table_name = $this->getIndexTableNameUnquoted($index);
 
     // Drop GIN index.
@@ -662,13 +699,15 @@ class IndexManager {
 
   /**
    * Drops vector indexes.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    */
-  protected function dropVectorIndexes($table_name, IndexInterface $index) {
+  protected function dropVectorIndexes($table_name, IndexInterface $index)
+  {
     $vector_fields = $this->fieldMapper->getVectorSearchableFields($index);
     $unquoted_table_name = $this->getIndexTableNameUnquoted($index);
 
@@ -681,14 +720,17 @@ class IndexManager {
 
   /**
    * Gets the quoted table name for an index.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface|string $index
    *   The search index or index ID.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The quoted table name.
    */
-  protected function getIndexTableName($index) {
+  protected function getIndexTableName($index)
+  {
     $index_id = is_string($index) ? $index : $index->id();
 
     // Validate index ID.
@@ -702,14 +744,17 @@ class IndexManager {
 
   /**
    * Gets the unquoted table name for an index (for metadata queries).
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface|string $index
    *   The search index or index ID.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The unquoted table name.
    */
-  protected function getIndexTableNameUnquoted($index) {
+  protected function getIndexTableNameUnquoted($index)
+  {
     $index_id = is_string($index) ? $index : $index->id();
 
     // Validate index ID.
@@ -727,24 +772,29 @@ class IndexManager {
 
   /**
    * Gets the columns of a table.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (unquoted).
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of column names.
    */
-  protected function getTableColumns($table_name) {
+  protected function getTableColumns($table_name)
+  {
     return $this->connector->getTableColumns($table_name);
   }
 
   /**
    * Validates the FTS configuration.
+   * {@inheritdoc}
    *
    * @return string
    *   The validated FTS configuration.
    */
-  protected function validateFtsConfiguration() {
+  protected function validateFtsConfiguration()
+  {
     $fts_config = $this->config['fts_configuration'] ?? 'english';
 
     // Allowed PostgreSQL text search configurations.
@@ -763,49 +813,55 @@ class IndexManager {
 
   /**
    * Checks if vector search is enabled.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if vector search is enabled.
+   *   true if vector search is enabled.
    */
-  protected function isVectorSearchEnabled() {
+  protected function isVectorSearchEnabled()
+  {
     return !empty($this->config['ai_embeddings']['enabled']) ||
        !empty($this->config['vector_search']['enabled']);
   }
 
   /**
    * Checks if pgvector extension is available.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if pgvector is available.
+   *   true if pgvector is available.
    */
-  protected function checkVectorSupport() {
+  protected function checkVectorSupport()
+  {
     try {
       $sql = "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')";
       $stmt = $this->connector->executeQuery($sql);
       return (bool) $stmt->fetchColumn();
-    }
-    catch (\Exception $e) {
-      return FALSE;
+    } catch (\Exception $e) {
+      return false;
     }
   }
 
   /**
    * Builds the UPDATE SET clause for upsert operations.
+   * {@inheritdoc}
    *
    * @param array $columns
    *   Array of quoted column names.
    * @param array $values
    *   Array of values.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The UPDATE SET clause.
    */
-  protected function buildUpdateSet(array $columns, array $values) {
+  protected function buildUpdateSet(array $columns, array $values)
+  {
     $updates = [];
 
     foreach ($columns as $i => $column) {
       // Skip primary key.
-      if (strpos($column, 'search_api_id') !== FALSE) {
+      if (strpos($column, 'search_api_id') !== false) {
         continue;
       }
 
@@ -814,5 +870,4 @@ class IndexManager {
 
     return implode(', ', $updates);
   }
-
 }

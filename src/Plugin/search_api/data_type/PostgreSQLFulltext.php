@@ -9,24 +9,29 @@ use Drupal\search_api\SearchApiException;
 
 /**
  * Provides a PostgreSQL-specific full-text data type.
- *
+ * {@inheritdoc}
  * This data type is optimized for PostgreSQL's native full-text search
  * capabilities including tsvector indexing, text search configurations,
  * ranking, highlighting, and advanced query operations.
+ * {@inheritdoc}
  *
  * @SearchApiDataType(
  *   id = "postgresql_fulltext",
  *   label = @Translation("PostgreSQL Full-text"),
- *   description = @Translation("Full-text field optimized for PostgreSQL tsvector indexing with advanced search features"),
+ *   description = @Translation(
+ *     "Full-text field optimized for PostgreSQL tsvector indexing with advanced search features"
+ *   ),
  *   fallback_type = "text",
  *   prefix = "pt"
  * )
  */
-class PostgreSQLFulltext extends DataTypePluginBase {
+class PostgreSQLFulltext extends DataTypePluginBase
+{
   use PluginFormTrait;
 
   /**
    * Available PostgreSQL text search configurations.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -50,6 +55,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Stemming dictionaries for different languages.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -73,23 +79,24 @@ class PostgreSQLFulltext extends DataTypePluginBase {
   /**
    * {@inheritdoc}
    */
-  public function defaultConfiguration() {
+  public function defaultConfiguration()
+  {
     return [
       'text_search_config' => 'english',
-      'enable_stemming' => TRUE,
-      'enable_phrase_search' => TRUE,
-      'enable_fuzzy_search' => TRUE,
+      'enable_stemming' => true,
+      'enable_phrase_search' => true,
+      'enable_fuzzy_search' => true,
       'weight_title' => 'A',
       'weight_body' => 'B',
       'weight_keywords' => 'C',
       'weight_description' => 'D',
       'min_word_length' => 3,
       'max_word_length' => 40,
-      'enable_highlighting' => TRUE,
+      'enable_highlighting' => true,
       'highlight_max_words' => 35,
       'highlight_min_words' => 15,
       'highlight_max_fragments' => 5,
-      'enable_ranking' => TRUE,
+      'enable_ranking' => true,
       'ranking_normalization' => 1,
     ];
   }
@@ -97,11 +104,11 @@ class PostgreSQLFulltext extends DataTypePluginBase {
   /**
    * Ensures configuration is properly initialized.
    */
-  protected function ensureConfiguration() {
+  protected function ensureConfiguration()
+  {
     if (empty($this->configuration)) {
       $this->configuration = $this->defaultConfiguration();
-    }
-    else {
+    } else {
       // Merge with defaults to fill any missing keys.
       $this->configuration = $this->configuration + $this->defaultConfiguration();
     }
@@ -109,30 +116,36 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Gets a configuration value with fallback to default.
+   * {@inheritdoc}
    *
    * @param string $key
    *   The configuration key.
    * @param mixed $default
    *   Optional default value.
+   *   {@inheritdoc}.
    *
    * @return mixed
    *   The configuration value.
    */
-  protected function getConfigValue($key, $default = NULL) {
+  protected function getConfigValue($key, $default = null)
+  {
     $this->ensureConfiguration();
     return $this->configuration[$key] ?? $default;
   }
 
   /**
    * Processes text according to PostgreSQL fulltext requirements.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The input text.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The processed text.
    */
-  protected function processText($text) {
+  protected function processText($text)
+  {
     if (empty($text)) {
       return '';
     }
@@ -163,14 +176,17 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Filters text by word length.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The input text.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The filtered text.
    */
-  protected function filterWordsByLength($text) {
+  protected function filterWordsByLength($text)
+  {
     // Get configuration values safely.
     $min_length = $this->getConfigValue('min_word_length', 3);
     $max_length = $this->getConfigValue('max_word_length', 40);
@@ -191,7 +207,8 @@ class PostgreSQLFulltext extends DataTypePluginBase {
   /**
    * {@inheritdoc}
    */
-  public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
+  public function buildConfigurationForm(array $form, FormStateInterface $form_state)
+  {
     $form = parent::buildConfigurationForm($form, $form_state);
 
     $form['text_search_config'] = [
@@ -200,13 +217,13 @@ class PostgreSQLFulltext extends DataTypePluginBase {
       '#description' => $this->t('PostgreSQL text search configuration for language-specific processing.'),
       '#options' => static::$textSearchConfigurations,
       '#default_value' => $this->configuration['text_search_config'],
-      '#required' => TRUE,
+      '#required' => true,
     ];
 
     $form['stemming'] = [
       '#type' => 'details',
       '#title' => $this->t('Stemming and Language Processing'),
-      '#open' => FALSE,
+      '#open' => false,
     ];
 
     $form['stemming']['enable_stemming'] = [
@@ -237,7 +254,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     $form['search_features'] = [
       '#type' => 'details',
       '#title' => $this->t('Search Features'),
-      '#open' => TRUE,
+      '#open' => true,
     ];
 
     $form['search_features']['enable_phrase_search'] = [
@@ -258,7 +275,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
       '#type' => 'details',
       '#title' => $this->t('Field Weighting'),
       '#description' => $this->t('Assign different weights to different types of content for relevance scoring.'),
-      '#open' => FALSE,
+      '#open' => false,
     ];
 
     $weight_options = [
@@ -299,7 +316,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     $form['highlighting'] = [
       '#type' => 'details',
       '#title' => $this->t('Search Result Highlighting'),
-      '#open' => FALSE,
+      '#open' => false,
     ];
 
     $form['highlighting']['enable_highlighting'] = [
@@ -317,7 +334,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
       '#max' => 100,
       '#states' => [
         'visible' => [
-          ':input[name="data_type_config[highlighting][enable_highlighting]"]' => ['checked' => TRUE],
+          ':input[name="data_type_config[highlighting][enable_highlighting]"]' => ['checked' => true],
         ],
       ],
     ];
@@ -330,7 +347,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
       '#max' => 50,
       '#states' => [
         'visible' => [
-          ':input[name="data_type_config[highlighting][enable_highlighting]"]' => ['checked' => TRUE],
+          ':input[name="data_type_config[highlighting][enable_highlighting]"]' => ['checked' => true],
         ],
       ],
     ];
@@ -343,7 +360,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
       '#max' => 10,
       '#states' => [
         'visible' => [
-          ':input[name="data_type_config[highlighting][enable_highlighting]"]' => ['checked' => TRUE],
+          ':input[name="data_type_config[highlighting][enable_highlighting]"]' => ['checked' => true],
         ],
       ],
     ];
@@ -351,7 +368,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     $form['ranking'] = [
       '#type' => 'details',
       '#title' => $this->t('Relevance Ranking'),
-      '#open' => FALSE,
+      '#open' => false,
     ];
 
     $form['ranking']['enable_ranking'] = [
@@ -376,7 +393,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
       '#default_value' => $this->configuration['ranking_normalization'],
       '#states' => [
         'visible' => [
-          ':input[name="data_type_config[ranking][enable_ranking]"]' => ['checked' => TRUE],
+          ':input[name="data_type_config[ranking][enable_ranking]"]' => ['checked' => true],
         ],
       ],
     ];
@@ -387,7 +404,8 @@ class PostgreSQLFulltext extends DataTypePluginBase {
   /**
    * {@inheritdoc}
    */
-  public function setConfiguration(array $configuration) {
+  public function setConfiguration(array $configuration)
+  {
     // Merge with defaults to ensure all required keys exist.
     $this->configuration = $configuration + $this->defaultConfiguration();
   }
@@ -395,7 +413,8 @@ class PostgreSQLFulltext extends DataTypePluginBase {
   /**
    * {@inheritdoc}
    */
-  public function getValue($value) {
+  public function getValue($value)
+  {
     // Handle array input by joining values.
     if (is_array($value)) {
       $value = implode(' ', array_filter($value, 'is_scalar'));
@@ -415,11 +434,12 @@ class PostgreSQLFulltext extends DataTypePluginBase {
   /**
    * {@inheritdoc}
    */
-  public function prepareValue($value) {
+  public function prepareValue($value)
+  {
     $processed_value = $this->getValue($value);
 
     if (empty($processed_value)) {
-      return NULL;
+      return null;
     }
 
     // Validate processed text.
@@ -430,14 +450,17 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Validates processed text.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text to validate.
+   *   {@inheritdoc}.
    *
    * @throws \Drupal\search_api\SearchApiException
    *   If validation fails.
    */
-  protected function validateText($text) {
+  protected function validateText($text)
+  {
     // Check for maximum text length (PostgreSQL has limits)
     // 1MB limit.
     $max_length = 1000000;
@@ -453,16 +476,19 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Generates a tsvector SQL expression for the given text and configuration.
+   * {@inheritdoc}
    *
    * @param string $column_name
    *   The column name containing the text.
    * @param array $options
    *   Additional options for tsvector generation.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The SQL expression for generating tsvector.
    */
-  public function getTsVectorSql($column_name, array $options = []) {
+  public function getTsVectorSql($column_name, array $options = [])
+  {
     $config = $options['config'] ?? $this->configuration['text_search_config'];
     $weight = $options['weight'] ?? 'A';
 
@@ -479,16 +505,19 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Generates a tsquery SQL expression for search terms.
+   * {@inheritdoc}
    *
    * @param string $search_terms
    *   The search terms.
    * @param array $options
    *   Search options.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
    */
-  public function getTsQuerySql($search_terms, array $options = []) {
+  public function getTsQuerySql($search_terms, array $options = [])
+  {
     $config = $options['config'] ?? $this->configuration['text_search_config'];
     $enable_phrase = $options['phrase'] ?? $this->configuration['enable_phrase_search'];
     $enable_fuzzy = $options['fuzzy'] ?? $this->configuration['enable_fuzzy_search'];
@@ -500,7 +529,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     ]);
 
     if (empty($processed_terms)) {
-      return ['sql' => 'TRUE', 'params' => []];
+      return ['sql' => 'true', 'params' => []];
     }
 
     $sql = "to_tsquery('{$config}', :search_query)";
@@ -511,16 +540,19 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Processes search terms for tsquery.
+   * {@inheritdoc}
    *
    * @param string $terms
    *   The search terms.
    * @param array $options
    *   Processing options.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The processed query string.
    */
-  protected function processSearchTerms($terms, array $options = []) {
+  protected function processSearchTerms($terms, array $options = [])
+  {
     if (empty($terms)) {
       return '';
     }
@@ -559,14 +591,17 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Processes individual word terms.
+   * {@inheritdoc}
    *
    * @param string $terms
    *   The word terms.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The processed word query.
    */
-  protected function processWordTerms($terms) {
+  protected function processWordTerms($terms)
+  {
     if (empty($terms)) {
       return '';
     }
@@ -609,14 +644,17 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Escapes a search term for tsquery.
+   * {@inheritdoc}
    *
    * @param string $term
    *   The search term.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The escaped term.
    */
-  protected function escapeSearchTerm($term) {
+  protected function escapeSearchTerm($term)
+  {
     // Remove characters that have special meaning in tsquery.
     $term = preg_replace('/[&|!():*<>]/', '', $term);
 
@@ -630,6 +668,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Generates SQL for highlighting search results.
+   * {@inheritdoc}
    *
    * @param string $column_name
    *   The column to highlight.
@@ -637,11 +676,13 @@ class PostgreSQLFulltext extends DataTypePluginBase {
    *   The search query parameter name.
    * @param array $options
    *   Highlighting options.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The SQL expression for highlighting.
    */
-  public function getHighlightSql($column_name, $search_query, array $options = []) {
+  public function getHighlightSql($column_name, $search_query, array $options = [])
+  {
     if (!$this->configuration['enable_highlighting']) {
       return $column_name;
     }
@@ -658,6 +699,7 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Generates SQL for ranking search results.
+   * {@inheritdoc}
    *
    * @param string $tsvector_column
    *   The tsvector column name.
@@ -665,11 +707,13 @@ class PostgreSQLFulltext extends DataTypePluginBase {
    *   The tsquery parameter name.
    * @param array $options
    *   Ranking options.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The SQL expression for ranking.
    */
-  public function getRankingSql($tsvector_column, $tsquery_param, array $options = []) {
+  public function getRankingSql($tsvector_column, $tsquery_param, array $options = [])
+  {
     if (!$this->configuration['enable_ranking']) {
       return '1.0';
     }
@@ -681,34 +725,41 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Gets available text search configurations.
+   * {@inheritdoc}
    *
    * @return array
    *   Available configurations.
    */
-  public static function getTextSearchConfigurations() {
+  public static function getTextSearchConfigurations()
+  {
     return static::$textSearchConfigurations;
   }
 
   /**
    * Gets stemming dictionaries.
+   * {@inheritdoc}
    *
    * @return array
    *   Available stemming dictionaries.
    */
-  public static function getStemmingDictionaries() {
+  public static function getStemmingDictionaries()
+  {
     return static::$stemmingDictionaries;
   }
 
   /**
    * Creates a combined tsvector from multiple weighted fields.
+   * {@inheritdoc}
    *
    * @param array $field_definitions
    *   Array of field definitions with weights.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The combined tsvector SQL expression.
    */
-  public function getCombinedTsVectorSql(array $field_definitions) {
+  public function getCombinedTsVectorSql(array $field_definitions)
+  {
     $config = $this->configuration['text_search_config'];
     $expressions = [];
 
@@ -728,17 +779,20 @@ class PostgreSQLFulltext extends DataTypePluginBase {
 
   /**
    * Validates that required PostgreSQL extensions are available.
+   * {@inheritdoc}
    *
    * @param \PDO $connection
    *   The database connection.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of validation results.
    */
-  public function validatePostgreSQLSupport(\PDO $connection) {
+  public function validatePostgreSQLSupport(\PDO $connection)
+  {
     $results = [
-      'fulltext' => FALSE,
-      'trigram' => FALSE,
+      'fulltext' => false,
+      'trigram' => false,
       'configurations' => [],
       'errors' => [],
     ];
@@ -746,18 +800,16 @@ class PostgreSQLFulltext extends DataTypePluginBase {
     try {
       // Check for text search support.
       $stmt = $connection->query("SELECT to_tsvector('english', 'test')");
-      $results['fulltext'] = TRUE;
-    }
-    catch (\Exception $e) {
+      $results['fulltext'] = true;
+    } catch (\Exception $e) {
       $results['errors'][] = 'PostgreSQL full-text search not available: ' . $e->getMessage();
     }
 
     try {
       // Check for trigram extension (for fuzzy search)
       $stmt = $connection->query("SELECT similarity('test', 'text')");
-      $results['trigram'] = TRUE;
-    }
-    catch (\Exception $e) {
+      $results['trigram'] = true;
+    } catch (\Exception $e) {
       $results['errors'][] = 'PostgreSQL pg_trgm extension not available: ' . $e->getMessage();
     }
 
@@ -767,12 +819,10 @@ class PostgreSQLFulltext extends DataTypePluginBase {
       while ($row = $stmt->fetch(\PDO::FETCH_ASSOC)) {
         $results['configurations'][] = $row['cfgname'];
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $results['errors'][] = 'Could not retrieve text search configurations: ' . $e->getMessage();
     }
 
     return $results;
   }
-
 }

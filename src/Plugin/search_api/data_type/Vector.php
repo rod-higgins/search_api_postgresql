@@ -6,21 +6,26 @@ use Drupal\search_api\DataType\DataTypePluginBase;
 
 /**
  * Provides a vector data type for AI embeddings.
+ * {@inheritdoc}
  *
  * @SearchApiDataType(
  *   id = "vector",
  *   label = @Translation("Vector"),
- *   description = @Translation("Vector field for AI text embeddings and similarity search"),
+ *   description = @Translation(
+ *     "Vector field for AI text embeddings and similarity search"
+ *   ),
  *   fallback_type = "text",
  *   prefix = "v"
  * )
  */
-class Vector extends DataTypePluginBase {
+class Vector extends DataTypePluginBase
+{
 
   /**
    * {@inheritdoc}
    */
-  public function getValue($value) {
+  public function getValue($value)
+  {
     // Handle different input formats for vectors.
     if (is_array($value)) {
       // Ensure all values are floats.
@@ -42,22 +47,22 @@ class Vector extends DataTypePluginBase {
   /**
    * {@inheritdoc}
    */
-  public function prepareValue($value) {
+  public function prepareValue($value)
+  {
     $value = $this->getValue($value);
 
     // Validate that we have a non-empty numeric array.
     if (empty($value) || !is_array($value)) {
-      return NULL;
+      return null;
     }
 
     // Ensure all values are numeric.
     foreach ($value as $component) {
       if (!is_numeric($component)) {
-        return NULL;
+        return null;
       }
     }
 
     return $value;
   }
-
 }

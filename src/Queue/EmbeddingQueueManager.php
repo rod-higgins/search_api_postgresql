@@ -11,9 +11,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Manages embedding generation queues.
  */
-class EmbeddingQueueManager {
+class EmbeddingQueueManager
+{
   /**
    * The queue factory.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Queue\QueueFactory
    */
@@ -21,6 +23,7 @@ class EmbeddingQueueManager {
 
   /**
    * The embedding queue.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Queue\QueueInterface
    */
@@ -28,6 +31,7 @@ class EmbeddingQueueManager {
 
   /**
    * The logger.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -35,6 +39,7 @@ class EmbeddingQueueManager {
 
   /**
    * The config factory.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Config\ConfigFactoryInterface
    */
@@ -42,6 +47,7 @@ class EmbeddingQueueManager {
 
   /**
    * Queue configuration.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -49,6 +55,7 @@ class EmbeddingQueueManager {
 
   /**
    * Constructs an EmbeddingQueueManager.
+   * {@inheritdoc}
    *
    * @param \Drupal\Core\Queue\QueueFactory $queue_factory
    *   The queue factory.
@@ -57,7 +64,11 @@ class EmbeddingQueueManager {
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory.
    */
-  public function __construct(QueueFactory $queue_factory, LoggerInterface $logger, ConfigFactoryInterface $config_factory) {
+  public function __construct(
+      QueueFactory $queue_factory,
+      LoggerInterface $logger,
+      ConfigFactoryInterface $config_factory
+  ) {
     $this->queueFactory = $queue_factory;
     $this->logger = $logger;
     $this->configFactory = $config_factory;
@@ -70,6 +81,7 @@ class EmbeddingQueueManager {
 
   /**
    * Queues a single embedding generation task.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
@@ -81,11 +93,13 @@ class EmbeddingQueueManager {
    *   The text content to embed.
    * @param int $priority
    *   Task priority (lower numbers = higher priority).
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if successfully queued.
+   *   true if successfully queued.
    */
-  public function queueEmbeddingGeneration($server_id, $index_id, $item_id, $text_content, $priority = 100) {
+  public function queueEmbeddingGeneration($server_id, $index_id, $item_id, $text_content, $priority = 100)
+  {
     $data = [
       'operation' => 'generate_embedding',
       'server_id' => $server_id,
@@ -104,18 +118,18 @@ class EmbeddingQueueManager {
         '@index' => $index_id,
       ]);
 
-      return TRUE;
-    }
-    catch (\Exception $e) {
+      return true;
+    } catch (\Exception $e) {
       $this->logger->error('Failed to queue embedding generation: @message', [
         '@message' => $e->getMessage(),
       ]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Queues batch embedding generation.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
@@ -125,18 +139,20 @@ class EmbeddingQueueManager {
    *   Array of item_id => text_content pairs.
    * @param int $priority
    *   Task priority.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if successfully queued.
+   *   true if successfully queued.
    */
-  public function queueBatchEmbeddingGeneration($server_id, $index_id, array $items, $priority = 100) {
+  public function queueBatchEmbeddingGeneration($server_id, $index_id, array $items, $priority = 100)
+  {
     if (empty($items)) {
-      return TRUE;
+      return true;
     }
 
     // Split large batches if necessary.
     $batch_size = $this->config['batch_size'];
-    $batches = array_chunk($items, $batch_size, TRUE);
+    $batches = array_chunk($items, $batch_size, true);
 
     $queued_count = 0;
     foreach ($batches as $batch) {
@@ -152,12 +168,11 @@ class EmbeddingQueueManager {
       try {
         $this->queue->createItem($data);
         $queued_count += count($batch);
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $this->logger->error('Failed to queue batch embedding generation: @message', [
           '@message' => $e->getMessage(),
         ]);
-        return FALSE;
+        return false;
       }
     }
 
@@ -166,19 +181,22 @@ class EmbeddingQueueManager {
       '@batches' => count($batches),
     ]);
 
-    return TRUE;
+    return true;
   }
 
   /**
    * Gets recent queue activity.
+   * {@inheritdoc}
    *
    * @param int $limit
    *   Number of recent activities to retrieve.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of recent activity records.
    */
-  public function getRecentActivity($limit = 20) {
+  public function getRecentActivity($limit = 20)
+  {
     try {
       // Check if we have database connection.
       if (!$this->queue instanceof DatabaseQueue) {
@@ -203,8 +221,7 @@ class EmbeddingQueueManager {
       $results = $query->execute()->fetchAll(\PDO::FETCH_ASSOC);
 
       return $results ?: [];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->warning('Failed to get recent queue activity: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -216,6 +233,7 @@ class EmbeddingQueueManager {
 
   /**
    * Logs queue activity.
+   * {@inheritdoc}
    *
    * @param string $operation
    *   The operation type.
@@ -226,7 +244,8 @@ class EmbeddingQueueManager {
    * @param int $duration
    *   Operation duration in milliseconds.
    */
-  protected function logActivity($operation, $items_processed = 0, $status = 'success', $duration = 0) {
+  protected function logActivity($operation, $items_processed = 0, $status = 'success', $duration = 0)
+  {
     try {
       $database = \Drupal::database();
 
@@ -242,8 +261,7 @@ class EmbeddingQueueManager {
           'duration' => $duration,
         ])
         ->execute();
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->warning('Failed to log queue activity: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -253,7 +271,8 @@ class EmbeddingQueueManager {
   /**
    * Ensures the activity log table exists.
    */
-  protected function ensureActivityLogTable() {
+  protected function ensureActivityLogTable()
+  {
     $database = \Drupal::database();
     $schema = $database->schema();
 
@@ -263,37 +282,37 @@ class EmbeddingQueueManager {
         'fields' => [
           'id' => [
             'type' => 'serial',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
           ],
           'timestamp' => [
             'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
             'default' => 0,
           ],
           'operation' => [
             'type' => 'varchar',
             'length' => 255,
-            'not null' => TRUE,
+            'not null' => true,
             'default' => '',
           ],
           'items_processed' => [
             'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
             'default' => 0,
           ],
           'status' => [
             'type' => 'varchar',
             'length' => 50,
-            'not null' => TRUE,
+            'not null' => true,
             'default' => 'success',
           ],
           'duration' => [
             'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
             'default' => 0,
           ],
         ],
@@ -310,6 +329,7 @@ class EmbeddingQueueManager {
 
   /**
    * Queues index embedding regeneration.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
@@ -321,11 +341,13 @@ class EmbeddingQueueManager {
    *   The offset to start from.
    * @param int $priority
    *   Task priority.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if successfully queued.
+   *   true if successfully queued.
    */
-  public function queueIndexEmbeddingRegeneration($server_id, $index_id, $batch_size = 50, $offset = 0, $priority = 200) {
+  public function queueIndexEmbeddingRegeneration($server_id, $index_id, $batch_size = 50, $offset = 0, $priority = 200)
+  {
     $data = [
       'operation' => 'regenerate_index_embeddings',
       'server_id' => $server_id,
@@ -345,18 +367,18 @@ class EmbeddingQueueManager {
         '@offset' => $offset,
       ]);
 
-      return TRUE;
-    }
-    catch (\Exception $e) {
+      return true;
+    } catch (\Exception $e) {
       $this->logger->error('Failed to queue embedding regeneration: @message', [
         '@message' => $e->getMessage(),
       ]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Queues embedding generation for index items.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
@@ -364,13 +386,15 @@ class EmbeddingQueueManager {
    *   Array of search API items.
    * @param bool $use_batch
    *   Whether to use batch processing.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if successfully queued.
+   *   true if successfully queued.
    */
-  public function queueIndexItems(IndexInterface $index, array $items, $use_batch = TRUE) {
+  public function queueIndexItems(IndexInterface $index, array $items, $use_batch = true)
+  {
     if (empty($items)) {
-      return TRUE;
+      return true;
     }
 
     $server = $index->getServerInstance();
@@ -378,7 +402,7 @@ class EmbeddingQueueManager {
     $index_id = $index->id();
 
     if (!$this->isQueueEnabledForServer($server_id)) {
-      return FALSE;
+      return false;
     }
 
     // Extract text content from items.
@@ -391,17 +415,16 @@ class EmbeddingQueueManager {
     }
 
     if (empty($embedding_items)) {
-      return TRUE;
+      return true;
     }
 
     if ($use_batch && count($embedding_items) > 1) {
       return $this->queueBatchEmbeddingGeneration($server_id, $index_id, $embedding_items);
-    }
-    else {
-      $success = TRUE;
+    } else {
+      $success = true;
       foreach ($embedding_items as $item_id => $text_content) {
         if (!$this->queueEmbeddingGeneration($server_id, $index_id, $item_id, $text_content)) {
-          $success = FALSE;
+          $success = false;
         }
       }
       return $success;
@@ -410,11 +433,13 @@ class EmbeddingQueueManager {
 
   /**
    * Gets queue statistics.
+   * {@inheritdoc}
    *
    * @return array
    *   Queue statistics.
    */
-  public function getQueueStats() {
+  public function getQueueStats()
+  {
     try {
       $stats = [
         'queue_name' => 'search_api_postgresql_embedding',
@@ -454,8 +479,7 @@ class EmbeddingQueueManager {
       }
 
       return $stats;
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to get queue stats: @message', ['@message' => $e->getMessage()]);
       return ['error' => $e->getMessage()];
     }
@@ -463,18 +487,21 @@ class EmbeddingQueueManager {
 
   /**
    * Processes queue items manually.
+   * {@inheritdoc}
    *
    * @param int $max_items
    *   Maximum number of items to process.
    * @param int $time_limit
    *   Time limit in seconds.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Processing results.
    */
-  public function processQueue($max_items = 50, $time_limit = 60) {
+  public function processQueue($max_items = 50, $time_limit = 60)
+  {
     $start_time = time();
-    $start_microtime = microtime(TRUE);
+    $start_microtime = microtime(true);
     $processed = 0;
     $failed = 0;
     $errors = [];
@@ -499,8 +526,7 @@ class EmbeddingQueueManager {
         $worker->processItem($item->data);
         $this->queue->deleteItem($item);
         $processed++;
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $this->queue->releaseItem($item);
         $failed++;
         $errors[] = $e->getMessage();
@@ -512,7 +538,7 @@ class EmbeddingQueueManager {
     }
 
     // Convert to milliseconds.
-    $duration = round((microtime(TRUE) - $start_microtime) * 1000);
+    $duration = round((microtime(true) - $start_microtime) * 1000);
     $results = [
       'processed' => $processed,
       'failed' => $failed,
@@ -540,12 +566,14 @@ class EmbeddingQueueManager {
 
   /**
    * Clears failed items from the queue.
+   * {@inheritdoc}
    *
    * @return array
    *   Results with 'cleared' count.
    */
-  public function clearFailedItems() {
-    $start_microtime = microtime(TRUE);
+  public function clearFailedItems()
+  {
+    $start_microtime = microtime(true);
     $cleared = 0;
 
     try {
@@ -555,17 +583,16 @@ class EmbeddingQueueManager {
 
       // @todo Implement actual failed item clearing logic
       // This would require tracking failed items in the database.
-      $duration = round((microtime(TRUE) - $start_microtime) * 1000);
+      $duration = round((microtime(true) - $start_microtime) * 1000);
       $this->logActivity('clear_failed', $cleared, 'success', $duration);
 
       return ['cleared' => $cleared];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to clear failed items: @message', [
         '@message' => $e->getMessage(),
       ]);
 
-      $duration = round((microtime(TRUE) - $start_microtime) * 1000);
+      $duration = round((microtime(true) - $start_microtime) * 1000);
       $this->logActivity('clear_failed', 0, 'error', $duration);
 
       return ['cleared' => 0, 'error' => $e->getMessage()];
@@ -574,114 +601,118 @@ class EmbeddingQueueManager {
 
   /**
    * Clears all items from the queue.
+   * {@inheritdoc}
    *
    * @return array
    *   Results with success status.
    */
-  public function clearAllItems() {
-    $start_microtime = microtime(TRUE);
+  public function clearAllItems()
+  {
+    $start_microtime = microtime(true);
 
     try {
       $items_before = $this->queue->numberOfItems();
       $this->queue->deleteQueue();
 
-      $duration = round((microtime(TRUE) - $start_microtime) * 1000);
+      $duration = round((microtime(true) - $start_microtime) * 1000);
       $this->logActivity('clear_all', $items_before, 'success', $duration);
 
       $this->logger->info('Cleared all queue items: @count items removed', [
         '@count' => $items_before,
       ]);
 
-      return ['cleared' => $items_before, 'success' => TRUE];
-    }
-    catch (\Exception $e) {
+      return ['cleared' => $items_before, 'success' => true];
+    } catch (\Exception $e) {
       $this->logger->error('Failed to clear all items: @message', [
         '@message' => $e->getMessage(),
       ]);
 
-      $duration = round((microtime(TRUE) - $start_microtime) * 1000);
+      $duration = round((microtime(true) - $start_microtime) * 1000);
       $this->logActivity('clear_all', 0, 'error', $duration);
 
-      return ['cleared' => 0, 'success' => FALSE, 'error' => $e->getMessage()];
+      return ['cleared' => 0, 'success' => false, 'error' => $e->getMessage()];
     }
   }
 
   /**
    * Pauses queue processing.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if successful.
+   *   true if successful.
    */
-  public function pauseQueue() {
+  public function pauseQueue()
+  {
     try {
       $config = $this->configFactory->getEditable('search_api_postgresql.queue_settings');
-      $config->set('enabled', FALSE);
+      $config->set('enabled', false);
       $config->save();
 
       $this->logActivity('pause_queue', 0, 'success', 0);
 
-      return TRUE;
-    }
-    catch (\Exception $e) {
+      return true;
+    } catch (\Exception $e) {
       $this->logger->error('Failed to pause queue: @message', [
         '@message' => $e->getMessage(),
       ]);
 
       $this->logActivity('pause_queue', 0, 'error', 0);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Resumes queue processing.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if successful.
+   *   true if successful.
    */
-  public function resumeQueue() {
+  public function resumeQueue()
+  {
     try {
       $config = $this->configFactory->getEditable('search_api_postgresql.queue_settings');
-      $config->set('enabled', TRUE);
+      $config->set('enabled', true);
       $config->save();
 
       $this->logActivity('resume_queue', 0, 'success', 0);
 
-      return TRUE;
-    }
-    catch (\Exception $e) {
+      return true;
+    } catch (\Exception $e) {
       $this->logger->error('Failed to resume queue: @message', [
         '@message' => $e->getMessage(),
       ]);
 
       $this->logActivity('resume_queue', 0, 'error', 0);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Requeues failed items.
+   * {@inheritdoc}
    *
    * @return array
    *   Results with 'requeued' count.
    */
-  public function requeueFailedItems() {
-    $start_microtime = microtime(TRUE);
+  public function requeueFailedItems()
+  {
+    $start_microtime = microtime(true);
     $requeued = 0;
 
     try {
       // @todo Implement actual failed item requeuing logic
       // This would require tracking failed items in the database.
-      $duration = round((microtime(TRUE) - $start_microtime) * 1000);
+      $duration = round((microtime(true) - $start_microtime) * 1000);
       $this->logActivity('requeue_failed', $requeued, 'success', $duration);
 
       return ['requeued' => $requeued];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to requeue failed items: @message', [
         '@message' => $e->getMessage(),
       ]);
 
-      $duration = round((microtime(TRUE) - $start_microtime) * 1000);
+      $duration = round((microtime(true) - $start_microtime) * 1000);
       $this->logActivity('requeue_failed', 0, 'error', $duration);
 
       return ['requeued' => 0, 'error' => $e->getMessage()];
@@ -690,14 +721,17 @@ class EmbeddingQueueManager {
 
   /**
    * Updates queue configuration.
+   * {@inheritdoc}
    *
    * @param array $config
    *   Configuration array.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if successful.
+   *   true if successful.
    */
-  public function updateConfiguration(array $config) {
+  public function updateConfiguration(array $config)
+  {
     try {
       $config_object = $this->configFactory->getEditable('search_api_postgresql.queue_settings');
 
@@ -712,67 +746,72 @@ class EmbeddingQueueManager {
 
       $this->logActivity('update_config', 0, 'success', 0);
 
-      return TRUE;
-    }
-    catch (\Exception $e) {
+      return true;
+    } catch (\Exception $e) {
       $this->logger->error('Failed to update queue configuration: @message', [
         '@message' => $e->getMessage(),
       ]);
 
       $this->logActivity('update_config', 0, 'error', 0);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Clears the queue.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if successfully cleared.
+   *   true if successfully cleared.
    */
-  public function clearQueue() {
+  public function clearQueue()
+  {
     try {
       $count = $this->queue->numberOfItems();
       $this->queue->deleteQueue();
 
       $this->logger->info('Cleared embedding queue: @count items removed', ['@count' => $count]);
-      return TRUE;
-    }
-    catch (\Exception $e) {
+      return true;
+    } catch (\Exception $e) {
       $this->logger->error('Failed to clear queue: @message', ['@message' => $e->getMessage()]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Checks if queue processing is enabled for a server.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if queue processing is enabled.
+   *   true if queue processing is enabled.
    */
-  public function isQueueEnabledForServer($server_id) {
+  public function isQueueEnabledForServer($server_id)
+  {
     // Check global queue setting.
-    if (!($this->config['enabled'] ?? FALSE)) {
-      return FALSE;
+    if (!($this->config['enabled'] ?? false)) {
+      return false;
     }
 
     // Check server-specific setting.
     $server_config = $this->config['servers'][$server_id] ?? [];
-    return $server_config['enabled'] ?? $this->config['default_enabled'] ?? TRUE;
+    return $server_config['enabled'] ?? $this->config['default_enabled'] ?? true;
   }
 
   /**
    * Enables or disables queue processing for a server.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
    * @param bool $enabled
    *   Whether to enable queue processing.
    */
-  public function setQueueEnabledForServer($server_id, $enabled) {
+  public function setQueueEnabledForServer($server_id, $enabled)
+  {
     $config = $this->configFactory->getEditable('search_api_postgresql.queue_settings');
     $config->set("servers.{$server_id}.enabled", $enabled);
     $config->save();
@@ -784,19 +823,22 @@ class EmbeddingQueueManager {
 
   /**
    * Extracts text content from a search API item.
+   * {@inheritdoc}
    *
    * @param mixed $item
    *   The search API item.
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The extracted text content.
    */
-  protected function extractTextFromItem($item, IndexInterface $index) {
+  protected function extractTextFromItem($item, IndexInterface $index)
+  {
     $text_parts = [];
 
-    foreach ($item->getFields(TRUE) as $field_id => $field) {
+    foreach ($item->getFields(true) as $field_id => $field) {
       $field_type = $field->getType();
 
       // Only include text-based fields.
@@ -816,14 +858,16 @@ class EmbeddingQueueManager {
 
   /**
    * Gets default queue configuration.
+   * {@inheritdoc}
    *
    * @return array
    *   Default configuration.
    */
-  protected function getDefaultQueueConfig() {
+  protected function getDefaultQueueConfig()
+  {
     return [
-      'enabled' => FALSE,
-      'default_enabled' => TRUE,
+      'enabled' => false,
+      'default_enabled' => true,
       'batch_size' => 10,
       'max_processing_time' => 50,
       'priority_levels' => [
@@ -837,12 +881,13 @@ class EmbeddingQueueManager {
 
   /**
    * Gets the underlying queue instance.
+   * {@inheritdoc}
    *
    * @return \Drupal\Core\Queue\QueueInterface
    *   The queue instance.
    */
-  public function getQueue() {
+  public function getQueue()
+  {
     return $this->queue;
   }
-
 }

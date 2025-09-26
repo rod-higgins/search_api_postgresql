@@ -11,9 +11,11 @@ use GuzzleHttp\Exception\RequestException;
 /**
  * Service for generating text embeddings using Azure AI Services with caching.
  */
-class EmbeddingService {
+class EmbeddingService
+{
   /**
    * The Azure AI configuration.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -21,6 +23,7 @@ class EmbeddingService {
 
   /**
    * The API key.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -28,6 +31,7 @@ class EmbeddingService {
 
   /**
    * The logger.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -35,6 +39,7 @@ class EmbeddingService {
 
   /**
    * The HTTP client.
+   * {@inheritdoc}
    *
    * @var \GuzzleHttp\Client
    */
@@ -42,6 +47,7 @@ class EmbeddingService {
 
   /**
    * The embedding cache manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
    */
@@ -49,11 +55,13 @@ class EmbeddingService {
 
   /**
    * Constructs an EmbeddingService object.
+   * {@inheritdoc}
    *
    * @param array $config
    *   The full backend configuration including AI embeddings settings.
    */
-  public function __construct(array $config) {
+  public function __construct(array $config)
+  {
     // Extract Azure AI configuration from the full config.
     $this->config = $config['azure_ai'] ?? $config;
 
@@ -80,31 +88,38 @@ class EmbeddingService {
 
   /**
    * Sets the logger.
+   * {@inheritdoc}
    *
    * @param \Psr\Log\LoggerInterface $logger
    *   The logger.
    */
-  public function setLogger(LoggerInterface $logger) {
+  public function setLogger(LoggerInterface $logger)
+  {
     $this->logger = $logger;
   }
 
   /**
    * Sets the cache manager.
+   * {@inheritdoc}
    *
-   * @param \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager $cache_manager
+   * @param \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
+   *   $cache_manager
    *   The cache manager.
    */
-  public function setCacheManager(EmbeddingCacheManager $cache_manager) {
+  public function setCacheManager(EmbeddingCacheManager $cache_manager)
+  {
     $this->cacheManager = $cache_manager;
   }
 
   /**
    * Sets the API key.
+   * {@inheritdoc}
    *
    * @param string $api_key
    *   The API key.
    */
-  public function setApiKey($api_key) {
+  public function setApiKey($api_key)
+  {
     $this->apiKey = $api_key;
     // Update HTTP client headers.
     $this->httpClient = new Client([
@@ -118,23 +133,27 @@ class EmbeddingService {
 
   /**
    * Generates embeddings for given texts with caching.
+   * {@inheritdoc}
    *
    * @param array|string $texts
    *   Array of text strings or a single string to generate embeddings for.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of embedding vectors or single vector if input was string.
+   *   {@inheritdoc}
    *
    * @throws \Drupal\search_api\SearchApiException
    *   If embedding generation fails.
    */
-  public function generateEmbeddings($texts) {
+  public function generateEmbeddings($texts)
+  {
 
     // Handle single text input.
-    $single_input = FALSE;
+    $single_input = false;
     if (is_string($texts)) {
       $texts = [$texts];
-      $single_input = TRUE;
+      $single_input = true;
     }
 
     if (empty($texts)) {
@@ -149,16 +168,14 @@ class EmbeddingService {
     if ($this->cacheManager) {
       foreach ($texts as $index => $text) {
         $cached = $this->cacheManager->get($text);
-        if ($cached !== NULL) {
+        if ($cached !== null) {
           $cached_embeddings[$index] = $cached;
-        }
-        else {
+        } else {
           $uncached_texts[] = $text;
           $text_indices[] = $index;
         }
       }
-    }
-    else {
+    } else {
       $uncached_texts = $texts;
       $text_indices = array_keys($texts);
     }
@@ -183,8 +200,7 @@ class EmbeddingService {
     foreach ($texts as $index => $text) {
       if (isset($cached_embeddings[$index])) {
         $all_embeddings[] = $cached_embeddings[$index];
-      }
-      else {
+      } else {
         $all_embeddings[] = $new_embeddings[$new_embedding_index++];
       }
     }
@@ -195,33 +211,41 @@ class EmbeddingService {
 
   /**
    * Alias for generateEmbeddings for single text input.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text to generate embedding for.
+   *   {@inheritdoc}.
    *
    * @return array
    *   The embedding vector.
+   *   {@inheritdoc}
    *
    * @throws \Drupal\search_api\SearchApiException
    *   If embedding generation fails.
    */
-  public function generateEmbedding($text) {
+  public function generateEmbedding($text)
+  {
     return $this->generateEmbeddings($text);
   }
 
   /**
    * Calls Azure OpenAI API to generate embeddings.
+   * {@inheritdoc}
    *
    * @param array $texts
    *   Array of texts to generate embeddings for.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of embedding vectors.
+   *   {@inheritdoc}
    *
    * @throws \Drupal\search_api\SearchApiException
    *   If API call fails.
    */
-  protected function callAzureApi(array $texts) {
+  protected function callAzureApi(array $texts)
+  {
     if (empty($this->config['endpoint'])) {
       throw new SearchApiException('Azure AI endpoint not configured.');
     }
@@ -253,7 +277,7 @@ class EmbeddingService {
           ],
         ]);
 
-        $data = json_decode($response->getBody()->getContents(), TRUE);
+        $data = json_decode($response->getBody()->getContents(), true);
 
         if (!isset($data['data'])) {
           throw new SearchApiException('Invalid response from Azure AI API.');
@@ -263,13 +287,12 @@ class EmbeddingService {
         foreach ($data['data'] as $item) {
           $all_embeddings[] = $item['embedding'];
         }
-      }
-      catch (RequestException $e) {
+      } catch (RequestException $e) {
         $error_message = 'Azure AI API request failed: ' . $e->getMessage();
 
         if ($e->hasResponse()) {
           $error_body = $e->getResponse()->getBody()->getContents();
-          $error_data = json_decode($error_body, TRUE);
+          $error_data = json_decode($error_body, true);
           if (isset($error_data['error']['message'])) {
             $error_message .= ' - ' . $error_data['error']['message'];
           }
@@ -277,8 +300,7 @@ class EmbeddingService {
 
         $this->logger->error($error_message);
         throw new SearchApiException($error_message, $e->getCode(), $e);
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $this->logger->error('Embedding generation failed: @message', [
           '@message' => $e->getMessage(),
         ]);
@@ -298,14 +320,17 @@ class EmbeddingService {
 
   /**
    * Validates the embedding service configuration.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if configuration is valid.
+   *   true if configuration is valid.
+   *   {@inheritdoc}
    *
    * @throws \Drupal\search_api\SearchApiException
    *   If configuration is invalid.
    */
-  public function validateConfiguration() {
+  public function validateConfiguration()
+  {
     if (empty($this->config['endpoint'])) {
       throw new SearchApiException('Azure AI endpoint is required.');
     }
@@ -324,21 +349,22 @@ class EmbeddingService {
       if (!is_array($test_embedding) || empty($test_embedding)) {
         throw new SearchApiException('Invalid embedding response from Azure AI.');
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       throw new SearchApiException('Azure AI connection test failed: ' . $e->getMessage());
     }
 
-    return TRUE;
+    return true;
   }
 
   /**
    * Gets the embedding dimensions based on the configured model.
+   * {@inheritdoc}
    *
    * @return int
    *   The number of dimensions.
    */
-  public function getEmbeddingDimensions() {
+  public function getEmbeddingDimensions()
+  {
     // Use configured dimensions if available.
     if (!empty($this->config['dimensions'])) {
       return (int) $this->config['dimensions'];
@@ -355,5 +381,4 @@ class EmbeddingService {
 
     return $model_dimensions[$model] ?? 1536;
   }
-
 }

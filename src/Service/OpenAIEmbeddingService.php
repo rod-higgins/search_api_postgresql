@@ -8,9 +8,11 @@ use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
 /**
  * OpenAI embedding service implementation with caching and retry logic.
  */
-class OpenAIEmbeddingService implements EmbeddingServiceInterface {
+class OpenAIEmbeddingService implements EmbeddingServiceInterface
+{
   /**
    * The OpenAI API endpoint.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -18,6 +20,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The OpenAI API key.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -25,6 +28,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The embedding model to use.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -32,6 +36,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The embedding dimension.
+   * {@inheritdoc}
    *
    * @var int
    */
@@ -39,6 +44,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Maximum number of retries for API calls.
+   * {@inheritdoc}
    *
    * @var int
    */
@@ -46,6 +52,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Delay between retries in milliseconds.
+   * {@inheritdoc}
    *
    * @var int
    */
@@ -53,6 +60,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The embedding cache manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
    */
@@ -60,6 +68,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Maximum tokens per request.
+   * {@inheritdoc}
    *
    * @var int
    */
@@ -67,6 +76,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Organization ID (optional).
+   * {@inheritdoc}
    *
    * @var string|null
    */
@@ -74,6 +84,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Request timeout in seconds.
+   * {@inheritdoc}
    *
    * @var int
    */
@@ -81,6 +92,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Available embedding models and their dimensions.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -92,6 +104,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Constructs an OpenAI embedding service.
+   * {@inheritdoc}
    *
    * @param string $api_key
    *   The OpenAI API key.
@@ -113,15 +126,15 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
    *   Custom API endpoint (default: OpenAI's API).
    */
   public function __construct(
-    $api_key,
-    $model = 'text-embedding-3-small',
-    $dimension = NULL,
-    $max_retries = 3,
-    $retry_delay = 1000,
-    ?EmbeddingCacheManager $cache_manager = NULL,
-    $organization_id = NULL,
-    $timeout = 30,
-    $endpoint = 'https://api.openai.com/v1/embeddings',
+      $api_key,
+      $model = 'text-embedding-3-small',
+      $dimension = null,
+      $max_retries = 3,
+      $retry_delay = 1000,
+      ?EmbeddingCacheManager $cache_manager = null,
+      $organization_id = null,
+      $timeout = 30,
+      $endpoint = 'https://api.openai.com/v1/embeddings',
   ) {
     $this->apiKey = $api_key;
     $this->model = $model;
@@ -133,10 +146,9 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
     $this->endpoint = $endpoint;
 
     // Set dimension based on model or custom value.
-    if ($dimension !== NULL) {
+    if ($dimension !== null) {
       $this->dimension = $dimension;
-    }
-    else {
+    } else {
       $this->dimension = self::$modelDimensions[$model] ?? 1536;
     }
 
@@ -147,12 +159,13 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function generateEmbedding($text) {
+  public function generateEmbedding($text)
+  {
     // Clean and prepare text.
     $text = $this->preprocessText($text);
 
     if (empty($text)) {
-      return NULL;
+      return null;
     }
 
     // Try to get from cache first.
@@ -160,7 +173,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       $metadata = $this->getCacheMetadata();
       $cached_embedding = $this->cacheManager->getCachedEmbedding($text, $metadata);
 
-      if ($cached_embedding !== NULL) {
+      if ($cached_embedding !== null) {
         return $cached_embedding;
       }
     }
@@ -180,7 +193,8 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function generateBatchEmbeddings(array $texts) {
+  public function generateBatchEmbeddings(array $texts)
+  {
     if (empty($texts)) {
       return [];
     }
@@ -215,14 +229,12 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
         if (isset($cached_embeddings[$i])) {
           $final_embeddings[$original_index] = $cached_embeddings[$i];
-        }
-        else {
+        } else {
           $texts_to_generate[] = $text;
           $indices_to_generate[] = $original_index;
         }
       }
-    }
-    else {
+    } else {
       // No cache, generate all embeddings.
       $texts_to_generate = $processed_texts;
       $indices_to_generate = $original_indices;
@@ -258,27 +270,32 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function getDimension() {
+  public function getDimension()
+  {
     return $this->dimension;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function isAvailable() {
+  public function isAvailable()
+  {
     return !empty($this->apiKey) && !empty($this->model);
   }
 
   /**
    * Generates a single embedding from the API.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The preprocessed text.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   The embedding vector or NULL on failure.
    */
-  protected function generateEmbeddingFromApi($text) {
+  protected function generateEmbeddingFromApi($text)
+  {
     $data = [
       'input' => $text,
       'model' => $this->model,
@@ -289,20 +306,23 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       $data['dimensions'] = $this->dimension;
     }
 
-    $result = $this->makeApiCall($data, FALSE);
+    $result = $this->makeApiCall($data, false);
     return $result;
   }
 
   /**
    * Generates batch embeddings from the API.
+   * {@inheritdoc}
    *
    * @param array $texts
    *   Array of preprocessed texts.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of embedding vectors.
    */
-  protected function generateBatchEmbeddingsFromApi(array $texts) {
+  protected function generateBatchEmbeddingsFromApi(array $texts)
+  {
     $data = [
       'input' => $texts,
       'model' => $this->model,
@@ -313,22 +333,25 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       $data['dimensions'] = $this->dimension;
     }
 
-    $result = $this->makeApiCall($data, TRUE);
+    $result = $this->makeApiCall($data, true);
     return $result ?: [];
   }
 
   /**
    * Makes an API call to OpenAI with retry logic.
+   * {@inheritdoc}
    *
    * @param array $data
    *   The request data.
    * @param bool $is_batch
    *   Whether this is a batch request.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   The embedding(s) or NULL on failure.
    */
-  protected function makeApiCall(array $data, $is_batch = FALSE) {
+  protected function makeApiCall(array $data, $is_batch = false)
+  {
     $headers = [
       'Content-Type: application/json',
       'Authorization: Bearer ' . $this->apiKey,
@@ -344,12 +367,12 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       $curl = curl_init();
       curl_setopt_array($curl, [
         CURLOPT_URL => $this->endpoint,
-        CURLOPT_RETURNTRANSFER => TRUE,
-        CURLOPT_POST => TRUE,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => json_encode($data),
         CURLOPT_HTTPHEADER => $headers,
         CURLOPT_TIMEOUT => $this->timeout,
-        CURLOPT_SSL_VERIFYPEER => TRUE,
+        CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_USERAGENT => 'Drupal Search API PostgreSQL Module',
       ]);
 
@@ -368,7 +391,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       }
 
       if ($http_code === 200) {
-        $result = json_decode($response, TRUE);
+        $result = json_decode($response, true);
 
         if (isset($result['error'])) {
           throw new SearchApiException('OpenAI API error: ' . $result['error']['message']);
@@ -378,13 +401,12 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
           $embeddings = [];
           if (isset($result['data']) && is_array($result['data'])) {
             foreach ($result['data'] as $item) {
-              $embeddings[] = $item['embedding'] ?? NULL;
+              $embeddings[] = $item['embedding'] ?? null;
             }
           }
           return $embeddings;
-        }
-        else {
-          return $result['data'][0]['embedding'] ?? NULL;
+        } else {
+          return $result['data'][0]['embedding'] ?? null;
         }
       }
 
@@ -410,11 +432,10 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       // Parse error response for better error messages.
       $error_message = 'HTTP ' . $http_code;
       if ($response) {
-        $error_data = json_decode($response, TRUE);
+        $error_data = json_decode($response, true);
         if (isset($error_data['error']['message'])) {
           $error_message .= ': ' . $error_data['error']['message'];
-        }
-        else {
+        } else {
           $error_message .= ' - ' . $response;
         }
       }
@@ -422,19 +443,22 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       throw new SearchApiException('OpenAI API error: ' . $error_message);
     }
 
-    return NULL;
+    return null;
   }
 
   /**
    * Splits texts into batches based on token limits.
+   * {@inheritdoc}
    *
    * @param array $texts
    *   Array of texts to split.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of text batches.
    */
-  protected function splitIntoBatches(array $texts) {
+  protected function splitIntoBatches(array $texts)
+  {
     $batches = [];
     $current_batch = [];
     $current_tokens = 0;
@@ -443,8 +467,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       $estimated_tokens = $this->estimateTokenCount($text);
 
       // If adding this text would exceed limits, start a new batch.
-      if (
-            !empty($current_batch) &&
+      if (!empty($current_batch) &&
             ($current_tokens + $estimated_tokens > $this->maxTokensPerRequest ||
             // OpenAI has a limit of 2048 inputs per batch.
             count($current_batch) >= 2048)
@@ -467,25 +490,30 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Estimates token count for text.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text to estimate.
+   *   {@inheritdoc}.
    *
    * @return int
    *   Estimated token count.
    */
-  protected function estimateTokenCount($text) {
+  protected function estimateTokenCount($text)
+  {
     // Rough estimation: ~4 characters per token for English text.
     return ceil(strlen($text) / 4);
   }
 
   /**
    * Gets cache metadata for this embedding service.
+   * {@inheritdoc}
    *
    * @return array
    *   Metadata array for cache key generation.
    */
-  protected function getCacheMetadata() {
+  protected function getCacheMetadata()
+  {
     return [
       'service' => 'openai',
       'model' => $this->model,
@@ -496,14 +524,17 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Preprocesses text before embedding generation.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The input text.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The preprocessed text.
    */
-  protected function preprocessText($text) {
+  protected function preprocessText($text)
+  {
     // Remove excessive whitespace.
     $text = preg_replace('/\s+/', ' ', trim($text));
 
@@ -516,7 +547,7 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       $text = substr($text, 0, $max_chars);
       // Try to break at word boundary.
       $last_space = strrpos($text, ' ');
-      if ($last_space !== FALSE && $last_space > $max_chars * 0.8) {
+      if ($last_space !== false && $last_space > $max_chars * 0.8) {
         $text = substr($text, 0, $last_space);
       }
     }
@@ -526,14 +557,17 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets maximum characters for a given model.
+   * {@inheritdoc}
    *
    * @param string $model
    *   The model name.
+   *   {@inheritdoc}.
    *
    * @return int
    *   Maximum characters (conservative estimate).
    */
-  protected function getMaxCharsForModel($model) {
+  protected function getMaxCharsForModel($model)
+  {
     // Conservative character limits based on token limits
     // OpenAI models generally have 8192 token limits.
     $token_limits = [
@@ -549,28 +583,34 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets maximum tokens per request for a model.
+   * {@inheritdoc}
    *
    * @param string $model
    *   The model name.
+   *   {@inheritdoc}.
    *
    * @return int
    *   Maximum tokens per request.
    */
-  protected function getMaxTokensForModel($model) {
+  protected function getMaxTokensForModel($model)
+  {
     // Standard limit for OpenAI embedding models.
     return 8192;
   }
 
   /**
    * Parses retry-after header from API response.
+   * {@inheritdoc}
    *
    * @param string $response
    *   The API response.
+   *   {@inheritdoc}.
    *
    * @return int
    *   Retry after seconds, or 0 if not found.
    */
-  protected function parseRetryAfterHeader($response) {
+  protected function parseRetryAfterHeader($response)
+  {
     // This is a simplified implementation
     // In practice, you'd parse the actual HTTP headers.
     return 0;
@@ -578,38 +618,44 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets cache statistics for this service.
+   * {@inheritdoc}
    *
    * @return array
    *   Cache statistics if cache manager is available.
    */
-  public function getCacheStats() {
+  public function getCacheStats()
+  {
     if ($this->cacheManager) {
       return $this->cacheManager->getCacheStatistics();
     }
-    return ['cache_enabled' => FALSE];
+    return ['cache_enabled' => false];
   }
 
   /**
    * Invalidates cache entries for this service.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if cache was invalidated.
+   *   true if cache was invalidated.
    */
-  public function invalidateCache() {
+  public function invalidateCache()
+  {
     if ($this->cacheManager) {
       $metadata = $this->getCacheMetadata();
       return $this->cacheManager->invalidateByMetadata($metadata) > 0;
     }
-    return FALSE;
+    return false;
   }
 
   /**
    * Gets service information and configuration.
+   * {@inheritdoc}
    *
    * @return array
    *   Service information.
    */
-  public function getServiceInfo() {
+  public function getServiceInfo()
+  {
     return [
       'service_type' => 'openai_direct',
       'model' => $this->model,
@@ -617,25 +663,27 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       'endpoint' => $this->endpoint,
       'max_retries' => $this->maxRetries,
       'timeout' => $this->timeout,
-      'cache_enabled' => $this->cacheManager !== NULL,
-      'organization_id' => $this->organizationId ? '[SET]' : NULL,
+      'cache_enabled' => $this->cacheManager !== null,
+      'organization_id' => $this->organizationId ? '[SET]' : null,
     ];
   }
 
   /**
    * Tests the service connectivity.
+   * {@inheritdoc}
    *
    * @return array
    *   Test results.
    */
-  public function testConnection() {
+  public function testConnection()
+  {
     try {
       $test_text = 'test connection';
       $embedding = $this->generateEmbeddingFromApi($test_text);
 
       if ($embedding && is_array($embedding) && count($embedding) === $this->dimension) {
         return [
-          'success' => TRUE,
+          'success' => true,
           'message' => 'Connection successful',
           'dimension' => count($embedding),
           'model' => $this->model,
@@ -643,14 +691,13 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
       }
 
       return [
-        'success' => FALSE,
+        'success' => false,
         'message' => 'Invalid response from API',
         'dimension' => $embedding ? count($embedding) : 0,
       ];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       return [
-        'success' => FALSE,
+        'success' => false,
         'message' => 'Connection failed: ' . $e->getMessage(),
         'exception' => get_class($e),
       ];
@@ -659,38 +706,45 @@ class OpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets available models for OpenAI embeddings.
+   * {@inheritdoc}
    *
    * @return array
    *   Available models with their dimensions.
    */
-  public static function getAvailableModels() {
+  public static function getAvailableModels()
+  {
     return self::$modelDimensions;
   }
 
   /**
    * Validates a model name.
+   * {@inheritdoc}
    *
    * @param string $model
    *   The model name to validate.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if model is valid.
+   *   true if model is valid.
    */
-  public static function isValidModel($model) {
+  public static function isValidModel($model)
+  {
     return isset(self::$modelDimensions[$model]);
   }
 
   /**
    * Gets the default dimension for a model.
+   * {@inheritdoc}
    *
    * @param string $model
    *   The model name.
+   *   {@inheritdoc}.
    *
    * @return int|null
    *   Default dimension or NULL if model is invalid.
    */
-  public static function getModelDimension($model) {
-    return self::$modelDimensions[$model] ?? NULL;
+  public static function getModelDimension($model)
+  {
+    return self::$modelDimensions[$model] ?? null;
   }
-
 }

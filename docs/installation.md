@@ -78,7 +78,11 @@ ddev start
 ### 2. Setup Database Extensions
 
 ```bash
-ddev drush php:script scripts/local-setup.php
+# Connect to the database and enable extensions
+ddev psql -c "CREATE EXTENSION IF NOT EXISTS vector;"
+ddev psql -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+ddev psql -c "CREATE EXTENSION IF NOT EXISTS btree_gin;"
+ddev psql -c "CREATE EXTENSION IF NOT EXISTS unaccent;"
 ```
 
 ### 3. Verify Setup

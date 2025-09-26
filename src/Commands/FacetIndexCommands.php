@@ -8,20 +8,24 @@ use Drupal\search_api\Entity\Index;
 /**
  * Drush commands for facet index management.
  */
-class FacetIndexCommands extends DrushCommands {
+class FacetIndexCommands extends DrushCommands
+{
 
   /**
    * Clean up orphaned facet indexes.
+   * {@inheritdoc}
    *
    * @param string $index_id
    *   The Search API index ID.
+   *   {@inheritdoc}.
    *
    * @command search-api-postgresql:cleanup-facet-indexes
    * @aliases sapg-cleanup
-   * @usage drush search-api-postgresql:cleanup-facet-indexes document_index
+   * @usage   drush search-api-postgresql:cleanup-facet-indexes document_index
    *   Clean up orphaned facet indexes for the document_index.
    */
-  public function cleanupFacetIndexes($index_id) {
+  public function cleanupFacetIndexes($index_id)
+  {
     $index = Index::load($index_id);
 
     if (!$index) {
@@ -35,9 +39,6 @@ class FacetIndexCommands extends DrushCommands {
       return 1;
     }
 
-    /**
-* @var \Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend $backend
-*/
     $backend = $server->getBackend();
 
     $this->output()->writeln("Analyzing facet indexes for '{$index_id}'...");
@@ -46,8 +47,7 @@ class FacetIndexCommands extends DrushCommands {
 
     if ($cleaned_count > 0) {
       $this->output()->writeln("<info>Cleaned up {$cleaned_count} orphaned facet indexes.</info>");
-    }
-    else {
+    } else {
       $this->output()->writeln("<comment>No orphaned facet indexes found.</comment>");
     }
 
@@ -56,16 +56,19 @@ class FacetIndexCommands extends DrushCommands {
 
   /**
    * List all facet indexes for an index.
+   * {@inheritdoc}
    *
    * @param string $index_id
    *   The Search API index ID.
+   *   {@inheritdoc}.
    *
    * @command search-api-postgresql:list-facet-indexes
    * @aliases sapg-list
-   * @usage drush search-api-postgresql:list-facet-indexes document_index
+   * @usage   drush search-api-postgresql:list-facet-indexes document_index
    *   List all facet indexes for the document_index.
    */
-  public function listFacetIndexes($index_id) {
+  public function listFacetIndexes($index_id)
+  {
     $index = Index::load($index_id);
 
     if (!$index) {
@@ -79,9 +82,6 @@ class FacetIndexCommands extends DrushCommands {
       return 1;
     }
 
-    /**
-* @var \Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend $backend
-*/
     $backend = $server->getBackend();
 
     $table_name = $backend->getIndexTableNameForManager($index);
@@ -106,5 +106,4 @@ class FacetIndexCommands extends DrushCommands {
 
     return 0;
   }
-
 }

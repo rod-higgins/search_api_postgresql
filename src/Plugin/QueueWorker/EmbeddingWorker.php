@@ -14,6 +14,7 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Processes embedding generation queue items.
+ * {@inheritdoc}
  *
  * @QueueWorker(
  *   id = "search_api_postgresql_embedding",
@@ -21,9 +22,11 @@ use Psr\Log\LoggerInterface;
  *   cron = {"time" = 60}
  * )
  */
-class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginInterface {
+class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginInterface
+{
   /**
    * The entity type manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
@@ -31,6 +34,7 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * The cache manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
    */
@@ -38,6 +42,7 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * The analytics service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService
    */
@@ -45,6 +50,7 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * The logger.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -52,6 +58,7 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * The start time for processing.
+   * {@inheritdoc}
    *
    * @var float
    */
@@ -59,6 +66,7 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Maximum processing time in seconds.
+   * {@inheritdoc}
    *
    * @var int
    */
@@ -66,6 +74,7 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Constructs an EmbeddingWorker object.
+   * {@inheritdoc}
    *
    * @param array $configuration
    *   A configuration array containing information about the plugin instance.
@@ -83,13 +92,13 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
    *   The logger.
    */
   public function __construct(
-    array $configuration,
-    $plugin_id,
-    $plugin_definition,
-    EntityTypeManagerInterface $entity_type_manager,
-    EmbeddingCacheManager $cache_manager,
-    EmbeddingAnalyticsService $analytics_service,
-    LoggerInterface $logger,
+      array $configuration,
+      $plugin_id,
+      $plugin_definition,
+      EntityTypeManagerInterface $entity_type_manager,
+      EmbeddingCacheManager $cache_manager,
+      EmbeddingAnalyticsService $analytics_service,
+      LoggerInterface $logger,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
     $this->entityTypeManager = $entity_type_manager;
@@ -101,33 +110,37 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition)
+  {
     return new static(
-          $configuration,
-          $plugin_id,
-          $plugin_definition,
-          $container->get('entity_type.manager'),
-          $container->get('search_api_postgresql.cache_manager'),
-          $container->get('search_api_postgresql.analytics'),
-          $container->get('logger.channel.search_api_postgresql')
-      );
+        $configuration,
+        $plugin_id,
+        $plugin_definition,
+        $container->get('entity_type.manager'),
+        $container->get('search_api_postgresql.cache_manager'),
+        $container->get('search_api_postgresql.analytics'),
+        $container->get('logger.channel.search_api_postgresql')
+    );
   }
 
   /**
    * {@inheritdoc}
+   * {@inheritdoc}
    *
    * @param mixed $data
    *   The queue item data to process.
+   *   {@inheritdoc}.
    *
    * @throws \Drupal\Core\Queue\SuspendQueueException
    *   If processing should be suspended.
    * @throws \Exception
    *   If processing fails.
    */
-  public function processItem($data) {
+  public function processItem($data)
+  {
     // Initialize start time.
     if (!isset($this->startTime)) {
-      $this->startTime = microtime(TRUE);
+      $this->startTime = microtime(true);
     }
 
     // Check if we're approaching time limit.
@@ -141,25 +154,24 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
       switch ($data['operation']) {
         case 'generate_embedding':
           $this->processEmbeddingGeneration($data);
-          break;
+            break;
 
         case 'batch_generate_embeddings':
           $this->processBatchEmbeddingGeneration($data);
-          break;
+            break;
 
         case 'regenerate_index_embeddings':
           $this->processIndexEmbeddingRegeneration($data);
-          break;
+            break;
 
         default:
-          throw new \InvalidArgumentException("Unknown operation: {$data['operation']}");
+            throw new \InvalidArgumentException("Unknown operation: {$data['operation']}");
       }
 
       $this->logger->debug('Successfully processed queue item: @operation', [
         '@operation' => $data['operation'],
       ]);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to process queue item: @message', [
         '@message' => $e->getMessage(),
         '@data' => json_encode($data),
@@ -172,11 +184,13 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Processes single embedding generation.
+   * {@inheritdoc}
    *
    * @param array $data
    *   Queue item data.
    */
-  protected function processEmbeddingGeneration(array $data) {
+  protected function processEmbeddingGeneration(array $data)
+  {
     $server_id = $data['server_id'];
     $index_id = $data['index_id'];
     $item_id = $data['item_id'];
@@ -208,11 +222,13 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Processes batch embedding generation.
+   * {@inheritdoc}
    *
    * @param array $data
    *   Queue item data.
    */
-  protected function processBatchEmbeddingGeneration(array $data) {
+  protected function processBatchEmbeddingGeneration(array $data)
+  {
     $server_id = $data['server_id'];
     $index_id = $data['index_id'];
     // Array of ['item_id' => 'text_content'].
@@ -234,7 +250,10 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
     $embeddings = $embedding_service->generateBatchEmbeddings($texts);
 
     if (count($embeddings) !== count($texts)) {
-      throw new \Exception("Batch embedding generation failed: expected " . count($texts) . " embeddings, got " . count($embeddings));
+      throw new \Exception(
+          "Batch embedding generation failed: expected " . count($texts) .
+          " embeddings, got " . count($embeddings)
+      );
     }
 
     // Store embeddings.
@@ -251,11 +270,13 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Processes index embedding regeneration.
+   * {@inheritdoc}
    *
    * @param array $data
    *   Queue item data.
    */
-  protected function processIndexEmbeddingRegeneration(array $data) {
+  protected function processIndexEmbeddingRegeneration(array $data)
+  {
     $server_id = $data['server_id'];
     $index_id = $data['index_id'];
     $batch_size = $data['batch_size'] ?? 50;
@@ -270,11 +291,11 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
     // Connect to get index manager.
     $connect_method = $reflection->getMethod('connect');
-    $connect_method->setAccessible(TRUE);
+    $connect_method->setAccessible(true);
     $connect_method->invoke($backend);
 
     $index_manager_property = $reflection->getProperty('indexManager');
-    $index_manager_property->setAccessible(TRUE);
+    $index_manager_property->setAccessible(true);
     $index_manager = $index_manager_property->getValue($backend);
 
     // Process batch of items.
@@ -289,8 +310,7 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
         '@count' => $items_processed,
         '@offset' => $offset,
       ]);
-    }
-    else {
+    } else {
       $this->logger->info('Completed embedding regeneration for index @index', [
         '@index' => $index_id,
       ]);
@@ -299,6 +319,7 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Regenerates embeddings for a batch of items.
+   * {@inheritdoc}
    *
    * @param mixed $index_manager
    *   The index manager.
@@ -308,11 +329,13 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
    *   The batch size.
    * @param int $offset
    *   The offset.
+   *   {@inheritdoc}.
    *
    * @return int
    *   Number of items processed.
    */
-  protected function regenerateEmbeddingsBatch($index_manager, IndexInterface $index, $batch_size, $offset) {
+  protected function regenerateEmbeddingsBatch($index_manager, IndexInterface $index, $batch_size, $offset)
+  {
     // This would need to be implemented based on the specific index manager
     // For now, return 0 to indicate completion.
     return 0;
@@ -320,6 +343,7 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Stores an embedding in the database.
+   * {@inheritdoc}
    *
    * @param mixed $server
    *   The search server.
@@ -330,18 +354,19 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
    * @param array $embedding
    *   The embedding vector.
    */
-  protected function storeEmbedding($server, IndexInterface $index, $item_id, array $embedding) {
+  protected function storeEmbedding($server, IndexInterface $index, $item_id, array $embedding)
+  {
     $backend = $server->getBackend();
     $config = $backend->getConfiguration();
 
     // Get database connection.
     $reflection = new \ReflectionClass($backend);
     $connect_method = $reflection->getMethod('connect');
-    $connect_method->setAccessible(TRUE);
+    $connect_method->setAccessible(true);
     $connect_method->invoke($backend);
 
     $connector_property = $reflection->getProperty('connector');
-    $connector_property->setAccessible(TRUE);
+    $connector_property->setAccessible(true);
     $connector = $connector_property->getValue($backend);
 
     // Build table name.
@@ -360,14 +385,17 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Validates queue item data.
+   * {@inheritdoc}
    *
    * @param array $data
    *   Queue item data.
+   *   {@inheritdoc}.
    *
    * @throws \InvalidArgumentException
    *   If data is invalid.
    */
-  protected function validateQueueItem(array $data) {
+  protected function validateQueueItem(array $data)
+  {
     $required_fields = ['operation', 'server_id'];
 
     foreach ($required_fields as $field) {
@@ -380,18 +408,18 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
     switch ($data['operation']) {
       case 'generate_embedding':
         $required = ['index_id', 'item_id', 'text_content'];
-        break;
+          break;
 
       case 'batch_generate_embeddings':
         $required = ['index_id', 'items'];
-        break;
+          break;
 
       case 'regenerate_index_embeddings':
         $required = ['index_id'];
-        break;
+          break;
 
       default:
-        throw new \InvalidArgumentException("Unknown operation: {$data['operation']}");
+          throw new \InvalidArgumentException("Unknown operation: {$data['operation']}");
     }
 
     foreach ($required as $field) {
@@ -403,17 +431,21 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Loads a server by ID.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
+   *   {@inheritdoc}.
    *
    * @return \Drupal\search_api\ServerInterface
    *   The server.
+   *   {@inheritdoc}
    *
    * @throws \Exception
    *   If server not found.
    */
-  protected function loadServer($server_id) {
+  protected function loadServer($server_id)
+  {
     $server = \Drupal::entityTypeManager()->getStorage('search_api_server')->load($server_id);
 
     if (!$server) {
@@ -425,17 +457,21 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Loads an index by ID.
+   * {@inheritdoc}
    *
    * @param string $index_id
    *   The index ID.
+   *   {@inheritdoc}.
    *
    * @return \Drupal\search_api\IndexInterface
    *   The index.
+   *   {@inheritdoc}
    *
    * @throws \Exception
    *   If index not found.
    */
-  protected function loadIndex($index_id) {
+  protected function loadIndex($index_id)
+  {
     $index = \Drupal::entityTypeManager()->getStorage('search_api_index')->load($index_id);
 
     if (!$index) {
@@ -447,42 +483,45 @@ class EmbeddingWorker extends QueueWorkerBase implements ContainerFactoryPluginI
 
   /**
    * Gets the embedding service for a server.
+   * {@inheritdoc}
    *
    * @param mixed $server
    *   The search server.
+   *   {@inheritdoc}.
    *
    * @return \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface|null
    *   The embedding service.
    */
-  protected function getEmbeddingService($server) {
+  protected function getEmbeddingService($server)
+  {
     $backend = $server->getBackend();
 
     // Connect to initialize services.
     $reflection = new \ReflectionClass($backend);
     $connect_method = $reflection->getMethod('connect');
-    $connect_method->setAccessible(TRUE);
+    $connect_method->setAccessible(true);
     $connect_method->invoke($backend);
 
     // Get embedding service.
     try {
       $embedding_service_property = $reflection->getProperty('embeddingService');
-      $embedding_service_property->setAccessible(TRUE);
+      $embedding_service_property->setAccessible(true);
       return $embedding_service_property->getValue($backend);
-    }
-    catch (\ReflectionException $e) {
-      return NULL;
+    } catch (\ReflectionException $e) {
+      return null;
     }
   }
 
   /**
    * Checks if we're near the time limit.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if near time limit.
+   *   true if near time limit.
    */
-  protected function isNearTimeLimit() {
-    $elapsed = microtime(TRUE) - $this->startTime;
+  protected function isNearTimeLimit()
+  {
+    $elapsed = microtime(true) - $this->startTime;
     return $elapsed > $this->maxProcessingTime;
   }
-
 }

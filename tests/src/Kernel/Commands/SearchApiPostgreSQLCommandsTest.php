@@ -10,7 +10,8 @@ use Drupal\KernelTests\KernelTestBase;
  *
  * @group search_api_postgresql
  */
-class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
+class SearchApiPostgreSQLCommandsTest extends KernelTestBase
+{
   /**
    * {@inheritdoc}
    */
@@ -29,7 +30,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->installSchema('system', ['sequences']);
@@ -40,12 +42,11 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
 
     try {
       $this->commands = new SearchApiPostgreSQLCommands(
-            $this->container->get('entity_type.manager'),
-            $this->container->get('config.factory'),
-            $this->container->get('logger.factory')->get('search_api_postgresql')
-        );
-    }
-    catch (\Error $e) {
+          $this->container->get('entity_type.manager'),
+          $this->container->get('config.factory'),
+          $this->container->get('logger.factory')->get('search_api_postgresql')
+      );
+    } catch (\Error $e) {
       $this->markTestSkipped('Could not instantiate commands: ' . $e->getMessage());
     }
   }
@@ -53,11 +54,11 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests commands service instantiation.
    */
-  public function testCommandsInstantiation() {
+  public function testCommandsInstantiation()
+  {
     if ($this->commands) {
       $this->assertInstanceOf('\Drupal\search_api_postgresql\Commands\SearchApiPostgreSQLCommands', $this->commands);
-    }
-    else {
+    } else {
       $this->markTestSkipped('Commands service not instantiated');
     }
   }
@@ -65,7 +66,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests that command methods exist.
    */
-  public function testCommandMethodsExist() {
+  public function testCommandMethodsExist()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
@@ -89,7 +91,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests index status command.
    */
-  public function testIndexStatusCommand() {
+  public function testIndexStatusCommand()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
@@ -98,9 +101,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
     if (method_exists($this->commands, 'indexStatus')) {
       // We can't fully test without a real search server
       // but we can verify the method structure.
-      $this->assertTrue(TRUE);
-    }
-    else {
+      $this->assertTrue(true);
+    } else {
       $this->markTestSkipped('indexStatus method not available');
     }
   }
@@ -108,16 +110,16 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests cache clear command.
    */
-  public function testClearCacheCommand() {
+  public function testClearCacheCommand()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
 
     if (method_exists($this->commands, 'clearCache')) {
       // Test cache clearing functionality.
-      $this->assertTrue(TRUE);
-    }
-    else {
+      $this->assertTrue(true);
+    } else {
       $this->markTestSkipped('clearCache method not available');
     }
   }
@@ -125,16 +127,16 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests configuration validation command.
    */
-  public function testValidateConfigurationCommand() {
+  public function testValidateConfigurationCommand()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
 
     if (method_exists($this->commands, 'validateConfiguration')) {
       // Test configuration validation.
-      $this->assertTrue(TRUE);
-    }
-    else {
+      $this->assertTrue(true);
+    } else {
       $this->markTestSkipped('validateConfiguration method not available');
     }
   }
@@ -142,16 +144,16 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests embedding generation command.
    */
-  public function testGenerateEmbeddingsCommand() {
+  public function testGenerateEmbeddingsCommand()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
 
     if (method_exists($this->commands, 'generateEmbeddings')) {
       // Test embedding generation.
-      $this->assertTrue(TRUE);
-    }
-    else {
+      $this->assertTrue(true);
+    } else {
       $this->markTestSkipped('generateEmbeddings method not available');
     }
   }
@@ -159,16 +161,16 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests queue processing command.
    */
-  public function testProcessQueueCommand() {
+  public function testProcessQueueCommand()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
 
     if (method_exists($this->commands, 'processQueue')) {
       // Test queue processing.
-      $this->assertTrue(TRUE);
-    }
-    else {
+      $this->assertTrue(true);
+    } else {
       $this->markTestSkipped('processQueue method not available');
     }
   }
@@ -176,16 +178,16 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests server status command.
    */
-  public function testServerStatusCommand() {
+  public function testServerStatusCommand()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
 
     if (method_exists($this->commands, 'serverStatus')) {
       // Test server status checking.
-      $this->assertTrue(TRUE);
-    }
-    else {
+      $this->assertTrue(true);
+    } else {
       $this->markTestSkipped('serverStatus method not available');
     }
   }
@@ -193,16 +195,16 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests data migration command.
    */
-  public function testMigrateDataCommand() {
+  public function testMigrateDataCommand()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
 
     if (method_exists($this->commands, 'migrateData')) {
       // Test data migration functionality.
-      $this->assertTrue(TRUE);
-    }
-    else {
+      $this->assertTrue(true);
+    } else {
       $this->markTestSkipped('migrateData method not available');
     }
   }
@@ -210,7 +212,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests command help and documentation.
    */
-  public function testCommandDocumentation() {
+  public function testCommandDocumentation()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
@@ -220,7 +223,7 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
     $methods = $reflection->getMethods(\ReflectionMethod::IS_PUBLIC);
 
     foreach ($methods as $method) {
-      if (strpos($method->getDocComment(), '@command') !== FALSE) {
+      if (strpos($method->getDocComment(), '@command') !== false) {
         // This is a Drush command.
         $this->assertNotEmpty($method->getDocComment());
       }
@@ -230,7 +233,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests command option handling.
    */
-  public function testCommandOptions() {
+  public function testCommandOptions()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
@@ -255,7 +259,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests command error handling.
    */
-  public function testCommandErrorHandling() {
+  public function testCommandErrorHandling()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
@@ -276,7 +281,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests command output formatting.
    */
-  public function testCommandOutputFormatting() {
+  public function testCommandOutputFormatting()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
@@ -298,7 +304,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests command progress reporting.
    */
-  public function testCommandProgressReporting() {
+  public function testCommandProgressReporting()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
@@ -320,7 +327,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests command batch processing.
    */
-  public function testCommandBatchProcessing() {
+  public function testCommandBatchProcessing()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
@@ -343,7 +351,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests command logging and debugging.
    */
-  public function testCommandLogging() {
+  public function testCommandLogging()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
@@ -369,7 +378,8 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
   /**
    * Tests command configuration integration.
    */
-  public function testCommandConfigurationIntegration() {
+  public function testCommandConfigurationIntegration()
+  {
     if (!$this->commands) {
       $this->markTestSkipped('Commands service not instantiated');
     }
@@ -383,7 +393,7 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
       'default_timeout' => 300,
       'max_memory_usage' => '512M',
       'log_level' => 'info',
-      'enable_progress_bar' => TRUE,
+      'enable_progress_bar' => true,
     ];
 
     foreach ($commandConfig as $key => $value) {
@@ -391,5 +401,4 @@ class SearchApiPostgreSQLCommandsTest extends KernelTestBase {
       $this->assertNotNull($value);
     }
   }
-
 }

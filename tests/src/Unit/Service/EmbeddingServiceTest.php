@@ -9,7 +9,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class EmbeddingServiceTest extends TestCase {
+class EmbeddingServiceTest extends TestCase
+{
   /**
    * The embedding service under test.
    *
@@ -25,7 +26,8 @@ class EmbeddingServiceTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->httpClient = $this->createMock(ClientInterface::class);
@@ -46,11 +48,11 @@ class EmbeddingServiceTest extends TestCase {
     ]);
 
     $this->embeddingService = new AzureOpenAIEmbeddingService(
-          $this->httpClient,
-          $this->configFactory,
-          $this->cache,
-          $this->logger
-      );
+        $this->httpClient,
+        $this->configFactory,
+        $this->cache,
+        $this->logger
+    );
   }
 
   /**
@@ -58,12 +60,13 @@ class EmbeddingServiceTest extends TestCase {
    *
    * @covers ::generateEmbedding
    */
-  public function testGenerateEmbeddingSuccess() {
+  public function testGenerateEmbeddingSuccess()
+  {
     $text = 'This is a test text for embedding generation.';
     $expectedEmbedding = array_fill(0, 1536, 0.1);
 
     // Mock cache miss.
-    $this->cache->method('get')->willReturn(NULL);
+    $this->cache->method('get')->willReturn(null);
 
     // Mock successful API response.
     $responseBody = json_encode([
@@ -97,7 +100,8 @@ class EmbeddingServiceTest extends TestCase {
    *
    * @covers ::generateEmbedding
    */
-  public function testGenerateEmbeddingCacheHit() {
+  public function testGenerateEmbeddingCacheHit()
+  {
     $text = 'Cached text';
     $cachedEmbedding = array_fill(0, 1536, 0.2);
 
@@ -117,7 +121,8 @@ class EmbeddingServiceTest extends TestCase {
    *
    * @covers ::generateBatchEmbeddings
    */
-  public function testGenerateBatchEmbeddings() {
+  public function testGenerateBatchEmbeddings()
+  {
     $texts = [
       'First text for embedding',
       'Second text for embedding',
@@ -164,11 +169,12 @@ class EmbeddingServiceTest extends TestCase {
    *
    * @covers ::generateEmbedding
    */
-  public function testGenerateEmbeddingApiError() {
+  public function testGenerateEmbeddingApiError()
+  {
     $text = 'Text that will cause API error';
 
     // Mock cache miss.
-    $this->cache->method('get')->willReturn(NULL);
+    $this->cache->method('get')->willReturn(null);
 
     // Mock API error response.
     $response = new Response(400, [], '{"error": {"message": "Invalid request"}}');
@@ -183,11 +189,12 @@ class EmbeddingServiceTest extends TestCase {
    *
    * @covers ::generateEmbedding
    */
-  public function testGenerateEmbeddingRateLimit() {
+  public function testGenerateEmbeddingRateLimit()
+  {
     $text = 'Text that will hit rate limit';
 
     // Mock cache miss.
-    $this->cache->method('get')->willReturn(NULL);
+    $this->cache->method('get')->willReturn(null);
 
     // Mock rate limit response.
     $response = new Response(429, ['Retry-After' => '60'], '{"error": {"message": "Rate limit exceeded"}}');
@@ -202,7 +209,8 @@ class EmbeddingServiceTest extends TestCase {
    *
    * @covers ::preprocessText
    */
-  public function testPreprocessText() {
+  public function testPreprocessText()
+  {
     $text = "  This is text with   multiple   spaces\n\nand newlines.  ";
     $processed = $this->embeddingService->preprocessText($text);
 
@@ -217,7 +225,8 @@ class EmbeddingServiceTest extends TestCase {
    *
    * @covers ::chunkText
    */
-  public function testChunkText() {
+  public function testChunkText()
+  {
     $longText = str_repeat('This is a very long text that needs to be chunked. ', 100);
     $chunks = $this->embeddingService->chunkText($longText, 500);
 
@@ -234,7 +243,8 @@ class EmbeddingServiceTest extends TestCase {
    *
    * @covers ::validateEmbedding
    */
-  public function testValidateEmbedding() {
+  public function testValidateEmbedding()
+  {
     // Valid embedding.
     $validEmbedding = array_fill(0, 1536, 0.5);
     $this->assertTrue($this->embeddingService->validateEmbedding($validEmbedding));
@@ -253,7 +263,8 @@ class EmbeddingServiceTest extends TestCase {
    *
    * @covers ::isServiceAvailable
    */
-  public function testIsServiceAvailable() {
+  public function testIsServiceAvailable()
+  {
     // Mock successful health check.
     $response = new Response(200, [], '{"status": "ok"}');
     $this->httpClient->method('request')->willReturn($response);
@@ -266,7 +277,8 @@ class EmbeddingServiceTest extends TestCase {
    *
    * @covers ::getUsageStatistics
    */
-  public function testGetUsageStatistics() {
+  public function testGetUsageStatistics()
+  {
     $stats = $this->embeddingService->getUsageStatistics();
 
     $this->assertIsArray($stats);
@@ -275,5 +287,4 @@ class EmbeddingServiceTest extends TestCase {
     $this->assertArrayHasKey('cache_hits', $stats);
     $this->assertArrayHasKey('cache_misses', $stats);
   }
-
 }

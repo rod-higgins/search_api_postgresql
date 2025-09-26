@@ -13,21 +13,24 @@ use Drupal\search_api_postgresql\Service\ResilientEmbeddingService;
 /**
  * Enhanced IndexManager with graceful degradation for embedding failures.
  */
-class ResilientIndexManager extends IndexManager {
+class ResilientIndexManager extends IndexManager
+{
   /**
    * Degradation state tracking.
+   * {@inheritdoc}
    *
    * @var array
    */
   protected $degradationState = [
     'embedding_failures' => 0,
     'total_items' => 0,
-    'fallback_mode' => FALSE,
+    'fallback_mode' => false,
     'messages' => [],
   ];
 
   /**
    * Configuration for degradation behavior.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -36,14 +39,19 @@ class ResilientIndexManager extends IndexManager {
   /**
    * {@inheritdoc}
    */
-  public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config, $embedding_service = NULL) {
+  public function __construct(
+      PostgreSQLConnector $connector,
+      FieldMapper $field_mapper,
+      array $config,
+      $embedding_service = null
+  ) {
     parent::__construct($connector, $field_mapper, $config, $embedding_service);
 
     $this->degradationConfig = [
     // 50% failure rate triggers fallback
       'embedding_failure_threshold' => 0.5,
-      'allow_partial_indexing' => TRUE,
-      'continue_on_embedding_failure' => TRUE,
+      'allow_partial_indexing' => true,
+      'continue_on_embedding_failure' => true,
       'max_embedding_retries' => 2,
     // Seconds.
       'embedding_timeout' => 30,
@@ -53,7 +61,8 @@ class ResilientIndexManager extends IndexManager {
   /**
    * {@inheritdoc}
    */
-  public function indexItems(IndexInterface $index, array $items) {
+  public function indexItems(IndexInterface $index, array $items)
+  {
     $this->resetDegradationState();
     $this->degradationState['total_items'] = count($items);
 
@@ -63,14 +72,11 @@ class ResilientIndexManager extends IndexManager {
 
     try {
       return $this->indexItemsWithEmbeddings($index, $items);
-    }
-    catch (PartialBatchFailureException $e) {
+    } catch (PartialBatchFailureException $e) {
       return $this->handlePartialIndexingFailure($index, $e);
-    }
-    catch (GracefulDegradationException $e) {
+    } catch (GracefulDegradationException $e) {
       return $this->handleIndexingDegradation($index, $items, $e);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       // Convert unexpected exceptions to graceful degradation.
       $degradation_exception = DegradationExceptionFactory::createFromException($e, [
         'service_name' => 'Indexing Service',
@@ -83,16 +89,19 @@ class ResilientIndexManager extends IndexManager {
 
   /**
    * Indexes items with embedding generation and graceful degradation.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    * @param array $items
    *   The items to index.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of successfully indexed item IDs.
    */
-  protected function indexItemsWithEmbeddings(IndexInterface $index, array $items) {
+  protected function indexItemsWithEmbeddings(IndexInterface $index, array $items)
+  {
     $table_name = $this->getIndexTableName($index);
     $indexed_items = [];
     $embedding_failures = [];
@@ -124,7 +133,7 @@ class ResilientIndexManager extends IndexManager {
       // Index each item.
       foreach ($items as $item_id => $item) {
         try {
-          $embedding = $embeddings[$item_id] ?? NULL;
+          $embedding = $embeddings[$item_id] ?? null;
           $this->indexSingleItem($table_name, $index, $item, $item_data[$item_id], $embedding);
           $indexed_items[] = $item_id;
 
@@ -132,22 +141,19 @@ class ResilientIndexManager extends IndexManager {
           if (isset($embedding_texts[$item_id])) {
             if ($embedding) {
               // Embedding succeeded.
-            }
-            else {
+            } else {
               $this->recordEmbeddingFailure($item_id, 'No embedding generated');
             }
           }
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
           $this->recordEmbeddingFailure($item_id, $e->getMessage());
 
           if ($this->degradationConfig['continue_on_embedding_failure']) {
             // Try to index without embedding.
             try {
-              $this->indexSingleItem($table_name, $index, $item, $item_data[$item_id], NULL);
+              $this->indexSingleItem($table_name, $index, $item, $item_data[$item_id], null);
               $indexed_items[] = $item_id;
-            }
-            catch (\Exception $inner_e) {
+            } catch (\Exception $inner_e) {
               // Complete failure for this item.
               \Drupal::logger('search_api_postgresql')->error('Failed to index item @item: @message', [
                 '@item' => $item_id,
@@ -164,8 +170,7 @@ class ResilientIndexManager extends IndexManager {
       $this->evaluateDegradationState();
 
       return $indexed_items;
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->connector->rollback();
       throw $e;
     }
@@ -173,28 +178,30 @@ class ResilientIndexManager extends IndexManager {
 
   /**
    * Generates embeddings with degradation handling.
+   * {@inheritdoc}
    *
    * @param array $embedding_texts
    *   Array of texts to embed.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of embeddings keyed by item ID.
    */
-  protected function generateEmbeddingsWithDegradation(array $embedding_texts) {
+  protected function generateEmbeddingsWithDegradation(array $embedding_texts)
+  {
     if (!$this->embeddingService instanceof ResilientEmbeddingService) {
       // Wrap in resilient service if not already.
       $this->embeddingService = new ResilientEmbeddingService(
-            $this->embeddingService,
-            \Drupal::service('search_api_postgresql.circuit_breaker'),
-            \Drupal::service('search_api_postgresql.cache_manager'),
-            \Drupal::logger('search_api_postgresql')
-        );
+          $this->embeddingService,
+          \Drupal::service('search_api_postgresql.circuit_breaker'),
+          \Drupal::service('search_api_postgresql.cache_manager'),
+          \Drupal::logger('search_api_postgresql')
+      );
     }
 
     try {
       return $this->embeddingService->generateBatchEmbeddings($embedding_texts);
-    }
-    catch (PartialBatchFailureException $e) {
+    } catch (PartialBatchFailureException $e) {
       // Handle partial failures.
       $successful = $e->getSuccessfulItems();
       $failed = $e->getFailedItems();
@@ -209,8 +216,7 @@ class ResilientIndexManager extends IndexManager {
       ]);
 
       return $successful;
-    }
-    catch (GracefulDegradationException $e) {
+    } catch (GracefulDegradationException $e) {
       // All embeddings failed, but we can continue indexing without them.
       foreach (array_keys($embedding_texts) as $item_id) {
         $this->recordEmbeddingFailure($item_id, $e->getMessage());
@@ -224,6 +230,7 @@ class ResilientIndexManager extends IndexManager {
 
   /**
    * Indexes a single item with prepared data.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
@@ -236,7 +243,13 @@ class ResilientIndexManager extends IndexManager {
    * @param array|null $embedding
    *   The embedding vector.
    */
-  protected function indexSingleItem($table_name, IndexInterface $index, ItemInterface $item, array $field_values, ?array $embedding = NULL) {
+  protected function indexSingleItem(
+      $table_name,
+      IndexInterface $index,
+      ItemInterface $item,
+      array $field_values,
+      ?array $embedding = null
+  ) {
     $values = [
       'search_api_id' => $item->getId(),
       'search_api_datasource' => $item->getDatasourceId(),
@@ -274,8 +287,7 @@ class ResilientIndexManager extends IndexManager {
       if ($key === 'search_vector') {
         // Raw SQL expression.
         $placeholders[] = $value;
-      }
-      else {
+      } else {
         $placeholder = ":{$key}";
         $placeholders[] = $placeholder;
         $params[$placeholder] = $value;
@@ -288,23 +300,27 @@ class ResilientIndexManager extends IndexManager {
       $params[':content_embedding'] = '[' . implode(',', $embedding) . ']';
     }
 
-    $insert_sql = "INSERT INTO {$table_name} (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
+    $insert_sql = "INSERT INTO {$table_name} (" . implode(', ', $columns) .
+      ") VALUES (" . implode(', ', $placeholders) . ")";
     $this->connector->executeQuery($insert_sql, $params);
   }
 
   /**
    * Prepares field values for an item.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Item\ItemInterface $item
    *   The item.
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Prepared field values with 'processed' and 'searchable_text' keys.
    */
-  protected function prepareItemFieldValues(ItemInterface $item, IndexInterface $index) {
-    $fields = $item->getFields(TRUE);
+  protected function prepareItemFieldValues(ItemInterface $item, IndexInterface $index)
+  {
+    $fields = $item->getFields(true);
     $processed_values = [];
     $searchable_text = '';
     $searchable_fields = $this->fieldMapper->getSearchableFields($index);
@@ -324,9 +340,8 @@ class ResilientIndexManager extends IndexManager {
         if (in_array($field_id, $searchable_fields)) {
           $searchable_text .= ' ' . $this->fieldMapper->prepareFieldValue($value, 'text');
         }
-      }
-      else {
-        $processed_values[$field_id] = NULL;
+      } else {
+        $processed_values[$field_id] = null;
       }
     }
 
@@ -338,42 +353,50 @@ class ResilientIndexManager extends IndexManager {
 
   /**
    * Indexes items without embeddings (fallback mode).
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    * @param array $items
    *   The items to index.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of successfully indexed item IDs.
    */
-  protected function indexItemsTextOnly(IndexInterface $index, array $items) {
+  protected function indexItemsTextOnly(IndexInterface $index, array $items)
+  {
     return parent::indexItems($index, $items);
   }
 
   /**
    * Handles partial indexing failure.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    * @param \Drupal\search_api_postgresql\Exception\PartialBatchFailureException $exception
    *   The partial failure exception.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of successfully indexed item IDs.
    */
-  protected function handlePartialIndexingFailure(IndexInterface $index, PartialBatchFailureException $exception) {
+  protected function handlePartialIndexingFailure(IndexInterface $index, PartialBatchFailureException $exception)
+  {
     $success_rate = $exception->getSuccessRate();
 
     if ($success_rate >= 50) {
       // Acceptable partial failure.
       \Drupal::messenger()->addWarning($exception->getUserMessage());
-    }
-    else {
+    } else {
       // High failure rate.
-      \Drupal::messenger()->addError(t('Indexing experienced significant issues. @success_rate% of items were processed successfully.', [
-        '@success_rate' => round($success_rate, 1),
-      ]));
+      \Drupal::messenger()->addError(t(
+          'Indexing experienced significant issues. @success_rate% of items were processed successfully.',
+          [
+          '@success_rate' => round($success_rate, 1),
+          ]
+      ));
     }
 
     return array_keys($exception->getSuccessfulItems());
@@ -381,6 +404,7 @@ class ResilientIndexManager extends IndexManager {
 
   /**
    * Handles indexing degradation.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
@@ -388,40 +412,47 @@ class ResilientIndexManager extends IndexManager {
    *   The items to index.
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The degradation exception.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of successfully indexed item IDs.
    */
-  protected function handleIndexingDegradation(IndexInterface $index, array $items, GracefulDegradationException $exception) {
+  protected function handleIndexingDegradation(
+      IndexInterface $index,
+      array $items,
+      GracefulDegradationException $exception
+  ) {
     $strategy = $exception->getFallbackStrategy();
 
     switch ($strategy) {
       case 'text_search_only':
       case 'text_search_fallback':
         \Drupal::messenger()->addWarning($exception->getUserMessage());
-        return $this->indexItemsTextOnly($index, $items);
+          return $this->indexItemsTextOnly($index, $items);
 
       case 'continue_with_partial_results':
         // Already handled by partial failure logic.
         \Drupal::messenger()->addWarning($exception->getUserMessage());
-        return [];
+          return [];
 
       default:
         // For other strategies, try text-only indexing.
         \Drupal::messenger()->addWarning($exception->getUserMessage());
-        return $this->indexItemsTextOnly($index, $items);
+          return $this->indexItemsTextOnly($index, $items);
     }
   }
 
   /**
    * Records an embedding failure.
+   * {@inheritdoc}
    *
    * @param string $item_id
    *   The item ID.
    * @param string $reason
    *   The failure reason.
    */
-  protected function recordEmbeddingFailure($item_id, $reason) {
+  protected function recordEmbeddingFailure($item_id, $reason)
+  {
     $this->degradationState['embedding_failures']++;
 
     \Drupal::logger('search_api_postgresql')->debug('Embedding failed for item @item: @reason', [
@@ -432,11 +463,13 @@ class ResilientIndexManager extends IndexManager {
 
   /**
    * Adds a degradation message.
+   * {@inheritdoc}
    *
    * @param string $message
    *   The message.
    */
-  protected function addDegradationMessage($message) {
+  protected function addDegradationMessage($message)
+  {
     if (!in_array($message, $this->degradationState['messages'])) {
       $this->degradationState['messages'][] = $message;
     }
@@ -445,26 +478,34 @@ class ResilientIndexManager extends IndexManager {
   /**
    * Evaluates the current degradation state.
    */
-  protected function evaluateDegradationState() {
+  protected function evaluateDegradationState()
+  {
     $total = $this->degradationState['total_items'];
     $failures = $this->degradationState['embedding_failures'];
 
     if ($total > 0) {
       $failure_rate = $failures / $total;
 
-      if ($failure_rate >= $this->degradationConfig['embedding_failure_threshold']) {
-        $this->degradationState['fallback_mode'] = TRUE;
+      if ($failure_rate >=
+        $this->degradationConfig['embedding_failure_threshold']) {
+        $this->degradationState['fallback_mode'] = true;
 
-        $message = t('Vector search features may be limited due to embedding generation issues. Text search remains fully functional.');
+        $message = t(
+            'Vector search features may be limited due to ' .
+            'embedding generation issues. Text search remains fully functional.'
+        );
         $this->addDegradationMessage($message);
 
         \Drupal::messenger()->addWarning($message);
 
-        \Drupal::logger('search_api_postgresql')->warning('High embedding failure rate detected: @rate% (@failures/@total)', [
-          '@rate' => round($failure_rate * 100, 1),
-          '@failures' => $failures,
-          '@total' => $total,
-        ]);
+        \Drupal::logger('search_api_postgresql')->warning(
+            'High embedding failure rate detected: @rate% (@failures/@total)',
+            [
+            '@rate' => round($failure_rate * 100, 1),
+            '@failures' => $failures,
+            '@total' => $total,
+            ]
+        );
       }
     }
   }
@@ -472,54 +513,63 @@ class ResilientIndexManager extends IndexManager {
   /**
    * Resets the degradation state.
    */
-  protected function resetDegradationState() {
+  protected function resetDegradationState()
+  {
     $this->degradationState = [
       'embedding_failures' => 0,
       'total_items' => 0,
-      'fallback_mode' => FALSE,
+      'fallback_mode' => false,
       'messages' => [],
     ];
   }
 
   /**
    * Gets the current degradation state.
+   * {@inheritdoc}
    *
    * @return array
    *   The degradation state.
    */
-  public function getDegradationState() {
+  public function getDegradationState()
+  {
     return $this->degradationState;
   }
 
   /**
    * Checks if indexing is in fallback mode.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if in fallback mode.
+   *   true if in fallback mode.
    */
-  public function isInFallbackMode() {
+  public function isInFallbackMode()
+  {
     return $this->degradationState['fallback_mode'];
   }
 
   /**
    * Gets degradation messages.
+   * {@inheritdoc}
    *
    * @return array
    *   Array of degradation messages.
    */
-  public function getDegradationMessages() {
+  public function getDegradationMessages()
+  {
     return $this->degradationState['messages'];
   }
 
   /**
    * Attempts to recover from degradation by testing the embedding service.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if recovery successful.
+   *   true if recovery successful.
    */
-  public function attemptRecovery() {
+  public function attemptRecovery()
+  {
     if (!$this->embeddingService) {
-      return FALSE;
+      return false;
     }
 
     try {
@@ -529,22 +579,22 @@ class ResilientIndexManager extends IndexManager {
       if ($test_embedding) {
         $this->resetDegradationState();
         \Drupal::logger('search_api_postgresql')->info('Embedding service recovery successful');
-        return TRUE;
+        return true;
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       \Drupal::logger('search_api_postgresql')->warning('Embedding service recovery failed: @message', [
         '@message' => $e->getMessage(),
       ]);
     }
 
-    return FALSE;
+    return false;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function regenerateEmbeddings(IndexInterface $index) {
+  public function regenerateEmbeddings(IndexInterface $index)
+  {
     if (!$this->isVectorSearchEnabled() || !$this->embeddingService) {
       throw new VectorSearchDegradedException('Vector search not enabled or embedding service unavailable');
     }
@@ -553,8 +603,7 @@ class ResilientIndexManager extends IndexManager {
 
     try {
       return $this->regenerateEmbeddingsWithDegradation($index);
-    }
-    catch (GracefulDegradationException $e) {
+    } catch (GracefulDegradationException $e) {
       \Drupal::messenger()->addWarning($e->getUserMessage());
       throw $e;
     }
@@ -562,11 +611,13 @@ class ResilientIndexManager extends IndexManager {
 
   /**
    * Regenerates embeddings with graceful degradation.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    */
-  protected function regenerateEmbeddingsWithDegradation(IndexInterface $index) {
+  protected function regenerateEmbeddingsWithDegradation(IndexInterface $index)
+  {
     $table_name = $this->getIndexTableName($index);
 
     // Get all items without pagination for now (could be enhanced for large datasets)
@@ -613,6 +664,7 @@ class ResilientIndexManager extends IndexManager {
 
   /**
    * Processes a batch of embeddings with degradation handling.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (quoted).
@@ -621,7 +673,8 @@ class ResilientIndexManager extends IndexManager {
    * @param array $texts
    *   Array of texts to embed.
    */
-  protected function processBatchEmbeddingsWithDegradation($table_name, array $item_ids, array $texts) {
+  protected function processBatchEmbeddingsWithDegradation($table_name, array $item_ids, array $texts)
+  {
     $this->degradationState['total_items'] += count($item_ids);
 
     try {
@@ -640,24 +693,20 @@ class ResilientIndexManager extends IndexManager {
               ':vector' => $vector_value,
               ':item_id' => $item_id,
             ]);
-          }
-          else {
+          } else {
             $this->recordEmbeddingFailure($item_id, 'No embedding generated in batch');
           }
         }
         $this->connector->commit();
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $this->connector->rollback();
         throw $e;
       }
-    }
-    catch (GracefulDegradationException $e) {
+    } catch (GracefulDegradationException $e) {
       // Log and continue with next batch.
       foreach ($item_ids as $item_id) {
         $this->recordEmbeddingFailure($item_id, $e->getMessage());
       }
     }
   }
-
 }

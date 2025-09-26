@@ -10,7 +10,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class EmbeddingManagementFormTest extends TestCase {
+class EmbeddingManagementFormTest extends TestCase
+{
   /**
    * The form under test.
    */
@@ -39,7 +40,8 @@ class EmbeddingManagementFormTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load actual class.
@@ -49,75 +51,85 @@ class EmbeddingManagementFormTest extends TestCase {
     $this->entityTypeManager = new class {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getStorage($entity_type) {
+      public function getStorage($entity_type)
+      {
         return new class {
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function loadMultiple($ids = NULL) {
+          public function loadMultiple($ids = null)
+          {
             return [
               'server1' => new class {
 
                 /**
-                 *
+                 * {@inheritdoc}
                  */
-                public function id() {
+                public function id()
+                {
                             return 'server1';
                 }
 
                           /**
-                           *
+                           * {@inheritdoc}
                            */
-                public function label() {
+                public function label()
+                {
                               return 'Server 1';
                 }
 
                                     /**
-                                     *
+                                     * {@inheritdoc}
                                      */
-                public function getBackendId() {
+                public function getBackendId()
+                {
                     return 'search_api_postgresql';
                 }
 
                                     /**
-                                     *
+                                     * {@inheritdoc}
                                      */
-                public function isEnabled() {
-                    return TRUE;
+                public function isEnabled()
+                {
+                    return true;
                 }
 
               },
               'server2' => new class {
 
                                   /**
-                                   *
+                                   * {@inheritdoc}
                                    */
-                public function id() {
+                public function id()
+                {
                   return 'server2';
                 }
 
                           /**
-                           *
+                           * {@inheritdoc}
                            */
-                public function label() {
+                public function label()
+                {
                     return 'Server 2';
                 }
 
                               /**
-                               *
+                               * {@inheritdoc}
                                */
-                public function getBackendId() {
+                public function getBackendId()
+                {
                     return 'search_api_postgresql';
                 }
 
                               /**
-                               *
+                               * {@inheritdoc}
                                */
-                public function isEnabled() {
-                    return TRUE;
+                public function isEnabled()
+                {
+                    return true;
                 }
 
               },
@@ -125,11 +137,12 @@ class EmbeddingManagementFormTest extends TestCase {
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function load($id) {
+          public function load($id)
+          {
             $items = $this->loadMultiple();
-            return $items[$id] ?? NULL;
+            return $items[$id] ?? null;
           }
 
         };
@@ -140,30 +153,34 @@ class EmbeddingManagementFormTest extends TestCase {
     $this->queueManager = new class {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getQueueSize() {
+      public function getQueueSize()
+      {
         return 150;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getProcessedCount() {
+      public function getProcessedCount()
+      {
         return 850;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getFailedCount() {
+      public function getFailedCount()
+      {
         return 25;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getQueueStatus() {
+      public function getQueueStatus()
+      {
         return [
           'total_items' => 1000,
           'processed' => 850,
@@ -174,30 +191,34 @@ class EmbeddingManagementFormTest extends TestCase {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function addItems($items) {
-        return TRUE;
+      public function addItems($items)
+      {
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function processQueue($limit = 50) {
+      public function processQueue($limit = 50)
+      {
         return 10;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function clearQueue() {
-        return TRUE;
+      public function clearQueue()
+      {
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function retryFailedItems() {
+      public function retryFailedItems()
+      {
         return 5;
       }
 
@@ -206,9 +227,10 @@ class EmbeddingManagementFormTest extends TestCase {
     $this->analyticsService = new class {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getEmbeddingStats() {
+      public function getEmbeddingStats()
+      {
         return [
           'total_embeddings' => 5000,
           'embeddings_today' => 150,
@@ -219,9 +241,10 @@ class EmbeddingManagementFormTest extends TestCase {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getServerStats($server_id) {
+      public function getServerStats($server_id)
+      {
         return [
           'embeddings_count' => 2500,
           'last_update' => time() - 600,
@@ -231,9 +254,10 @@ class EmbeddingManagementFormTest extends TestCase {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getIndexStats($index_id) {
+      public function getIndexStats($index_id)
+      {
         return [
           'document_count' => 1000,
           'embedded_count' => 950,
@@ -249,79 +273,90 @@ class EmbeddingManagementFormTest extends TestCase {
       private $errors = [];
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getValue($key, $default = NULL) {
+      public function getValue($key, $default = null)
+      {
         return $this->values[$key] ?? $default;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function setValue($key, $value) {
+      public function setValue($key, $value)
+      {
         $this->values[$key] = $value;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getValues() {
+      public function getValues()
+      {
         return $this->values;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function setValues(array $values) {
+      public function setValues(array $values)
+      {
         $this->values = $values;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function setError($element, $message) {
+      public function setError($element, $message)
+      {
         $this->errors[] = ['element' => $element, 'message' => $message];
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getErrors() {
+      public function getErrors()
+      {
         return $this->errors;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function clearErrors() {
+      public function clearErrors()
+      {
         $this->errors = [];
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function isSubmitted() {
+      public function isSubmitted()
+      {
         return !empty($this->values);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function isExecuted() {
+      public function isExecuted()
+      {
         return $this->isSubmitted() && empty($this->errors);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getTriggeringElement() {
-        return $this->values['op'] ?? NULL;
+      public function getTriggeringElement()
+      {
+        return $this->values['op'] ?? null;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function setRedirect($url) {
+      public function setRedirect($url)
+      {
         $this->values['redirect'] = $url;
       }
 
@@ -329,12 +364,11 @@ class EmbeddingManagementFormTest extends TestCase {
 
     try {
       $this->form = new EmbeddingManagementForm(
-            $this->entityTypeManager,
-            $this->queueManager,
-            $this->analyticsService
-        );
-    }
-    catch (\TypeError $e) {
+          $this->entityTypeManager,
+          $this->queueManager,
+          $this->analyticsService
+      );
+    } catch (\TypeError $e) {
       $this->markTestSkipped('Cannot instantiate form due to dependencies: ' . $e->getMessage());
     }
   }
@@ -342,21 +376,23 @@ class EmbeddingManagementFormTest extends TestCase {
   /**
    * Tests form instantiation.
    */
-  public function testFormInstantiation() {
+  public function testFormInstantiation()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
 
     $this->assertInstanceOf(
-          EmbeddingManagementForm::class,
-          $this->form
-      );
+        EmbeddingManagementForm::class,
+        $this->form
+    );
   }
 
   /**
    * Tests getFormId method.
    */
-  public function testGetFormId() {
+  public function testGetFormId()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -370,7 +406,8 @@ class EmbeddingManagementFormTest extends TestCase {
   /**
    * Tests buildForm method.
    */
-  public function testBuildForm() {
+  public function testBuildForm()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -393,19 +430,19 @@ class EmbeddingManagementFormTest extends TestCase {
 
       foreach ($expectedElements as $element) {
         // Element might exist in various forms.
-        $this->assertTrue(TRUE, "Form should contain element: {$element}");
+        $this->assertTrue(true, "Form should contain element: {$element}");
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       // Form building may fail without full Drupal context.
-      $this->assertTrue(TRUE, "Form building attempted");
+      $this->assertTrue(true, "Form building attempted");
     }
   }
 
   /**
    * Tests validateForm method.
    */
-  public function testValidateForm() {
+  public function testValidateForm()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -421,18 +458,18 @@ class EmbeddingManagementFormTest extends TestCase {
       $this->form->validateForm($form, $this->formState);
 
       // Validation should complete without exceptions.
-      $this->assertTrue(TRUE);
-    }
-    catch (\Exception $e) {
+      $this->assertTrue(true);
+    } catch (\Exception $e) {
       // Validation may fail without full Drupal context.
-      $this->assertTrue(TRUE, "Form validation attempted");
+      $this->assertTrue(true, "Form validation attempted");
     }
   }
 
   /**
    * Tests submitForm method.
    */
-  public function testSubmitForm() {
+  public function testSubmitForm()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -448,18 +485,18 @@ class EmbeddingManagementFormTest extends TestCase {
       $this->form->submitForm($form, $this->formState);
 
       // Submission should complete without exceptions.
-      $this->assertTrue(TRUE);
-    }
-    catch (\Exception $e) {
+      $this->assertTrue(true);
+    } catch (\Exception $e) {
       // Submission may fail without full Drupal context.
-      $this->assertTrue(TRUE, "Form submission attempted");
+      $this->assertTrue(true, "Form submission attempted");
     }
   }
 
   /**
    * Tests form validation with invalid input.
    */
-  public function testFormValidationWithInvalidInput() {
+  public function testFormValidationWithInvalidInput()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -480,11 +517,10 @@ class EmbeddingManagementFormTest extends TestCase {
         $this->form->validateForm($form, $this->formState);
 
         // Either validation passes (handled gracefully) or throws exception.
-        $this->assertTrue(TRUE);
-      }
-      catch (\Exception $e) {
+        $this->assertTrue(true);
+      } catch (\Exception $e) {
         // Invalid input may cause validation errors.
-        $this->assertTrue(TRUE);
+        $this->assertTrue(true);
       }
     }
   }
@@ -492,7 +528,8 @@ class EmbeddingManagementFormTest extends TestCase {
   /**
    * Tests queue operation methods.
    */
-  public function testQueueOperations() {
+  public function testQueueOperations()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -519,7 +556,8 @@ class EmbeddingManagementFormTest extends TestCase {
   /**
    * Tests analytics integration.
    */
-  public function testAnalyticsIntegration() {
+  public function testAnalyticsIntegration()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -547,7 +585,8 @@ class EmbeddingManagementFormTest extends TestCase {
   /**
    * Tests server and index loading.
    */
-  public function testServerAndIndexLoading() {
+  public function testServerAndIndexLoading()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -573,7 +612,8 @@ class EmbeddingManagementFormTest extends TestCase {
   /**
    * Tests bulk operation functionality.
    */
-  public function testBulkOperations() {
+  public function testBulkOperations()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -591,16 +631,15 @@ class EmbeddingManagementFormTest extends TestCase {
         $this->formState->setValues([
           'operation' => $operation,
           'server_id' => 'server1',
-          'confirm' => TRUE,
+          'confirm' => true,
         ]);
 
         // Test that form can handle bulk operations.
         $this->form->submitForm($form, $this->formState);
-        $this->assertTrue(TRUE, "Bulk operation {$operation} handled");
-      }
-      catch (\Exception $e) {
+        $this->assertTrue(true, "Bulk operation {$operation} handled");
+      } catch (\Exception $e) {
         // Operations may fail without full context.
-        $this->assertTrue(TRUE, "Bulk operation {$operation} attempted");
+        $this->assertTrue(true, "Bulk operation {$operation} attempted");
       }
     }
   }
@@ -608,7 +647,8 @@ class EmbeddingManagementFormTest extends TestCase {
   /**
    * Tests form state management.
    */
-  public function testFormStateManagement() {
+  public function testFormStateManagement()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -618,7 +658,7 @@ class EmbeddingManagementFormTest extends TestCase {
       'server_id' => 'test_server',
       'operation' => 'test_operation',
       'batch_size' => 100,
-      'confirm' => TRUE,
+      'confirm' => true,
     ];
 
     foreach ($testValues as $key => $value) {
@@ -640,7 +680,8 @@ class EmbeddingManagementFormTest extends TestCase {
   /**
    * Tests error handling in form operations.
    */
-  public function testErrorHandling() {
+  public function testErrorHandling()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -660,7 +701,8 @@ class EmbeddingManagementFormTest extends TestCase {
   /**
    * Tests form method existence and accessibility.
    */
-  public function testFormMethods() {
+  public function testFormMethods()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -674,16 +716,17 @@ class EmbeddingManagementFormTest extends TestCase {
 
     foreach ($requiredMethods as $method) {
       $this->assertTrue(
-            method_exists($this->form, $method),
-            "Form should have method: {$method}"
-        );
+          method_exists($this->form, $method),
+          "Form should have method: {$method}"
+      );
     }
   }
 
   /**
    * Tests form element structure and validation.
    */
-  public function testFormElementStructure() {
+  public function testFormElementStructure()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -712,17 +755,17 @@ class EmbeddingManagementFormTest extends TestCase {
         $this->assertIsString($pattern);
         $this->assertStringStartsWith('#', $pattern);
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       // Form building may fail without Drupal context.
-      $this->assertTrue(TRUE, "Form structure testing attempted");
+      $this->assertTrue(true, "Form structure testing attempted");
     }
   }
 
   /**
    * Tests performance monitoring integration.
    */
-  public function testPerformanceMonitoring() {
+  public function testPerformanceMonitoring()
+  {
     if (!$this->form) {
       $this->markTestSkipped('Form not instantiated');
     }
@@ -747,5 +790,4 @@ class EmbeddingManagementFormTest extends TestCase {
       $this->assertLessThanOrEqual(100, $stats['cache_hit_rate']);
     }
   }
-
 }

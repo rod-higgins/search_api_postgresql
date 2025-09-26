@@ -13,7 +13,8 @@ use Drupal\node\Entity\NodeType;
  *
  * @group search_api_postgresql
  */
-class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
+class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase
+{
   /**
    * {@inheritdoc}
    */
@@ -64,7 +65,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  public function setUp(): void
+  {
     parent::setUp();
 
     // Create admin user.
@@ -98,7 +100,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Creates a content type for testing.
    */
-  protected function createContentType() {
+  protected function createContentType(array $values = [])
+  {
     $this->nodeType = NodeType::create([
       'type' => 'article',
       'name' => 'Article',
@@ -112,7 +115,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Creates a PostgreSQL search server for testing.
    */
-  protected function createTestServer() {
+  protected function createTestServer()
+  {
     $server_config = [
       'database' => [
         'host' => getenv('DB_HOST') ?: 'localhost',
@@ -122,10 +126,10 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
         'password' => getenv('DB_PASS') ?: 'drupal',
       ],
       'vector_search' => [
-        'enabled' => FALSE,
+        'enabled' => false,
       ],
       'cache' => [
-        'enabled' => TRUE,
+        'enabled' => true,
         'cache_type' => 'memory',
       ],
     ];
@@ -142,7 +146,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Creates a search index for testing.
    */
-  protected function createTestIndex() {
+  protected function createTestIndex()
+  {
     $this->index = Index::create([
       'id' => 'test_index',
       'name' => 'Test Index',
@@ -152,7 +157,7 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
           'plugin_id' => 'entity:node',
           'settings' => [
             'bundles' => [
-              'default' => TRUE,
+              'default' => true,
               'selected' => ['article'],
             ],
           ],
@@ -190,10 +195,10 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
         'html_filter' => [
           'plugin_id' => 'html_filter',
           'settings' => [
-            'all_fields' => FALSE,
+            'all_fields' => false,
             'fields' => ['body'],
-            'title' => TRUE,
-            'alt' => TRUE,
+            'title' => true,
+            'alt' => true,
             'tags' => [
               'h1' => 5,
               'h2' => 3,
@@ -206,7 +211,7 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
         'tokenizer' => [
           'plugin_id' => 'tokenizer',
           'settings' => [
-            'all_fields' => FALSE,
+            'all_fields' => false,
             'fields' => ['title', 'body'],
             'spaces' => '[\\s]+',
             'overlap_cjk' => 1,
@@ -216,7 +221,7 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
         'stopwords' => [
           'plugin_id' => 'stopwords',
           'settings' => [
-            'all_fields' => FALSE,
+            'all_fields' => false,
             'fields' => ['title', 'body'],
             'stopwords' => [
               'a', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by',
@@ -235,27 +240,41 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Creates test content for searching.
    */
-  protected function createTestContent() {
+  protected function createTestContent()
+  {
     $test_data = [
       [
         'title' => 'Machine Learning and Artificial Intelligence',
-        'body' => 'Machine learning is a method of data analysis that automates analytical model building. It is a branch of artificial intelligence based on the idea that systems can learn from data, identify patterns and make decisions with minimal human intervention.',
+        'body' => 'Machine learning is a method of data analysis that automates ' .
+          'analytical model building. It is a branch of artificial intelligence ' .
+          'based on the idea that systems can learn from data, identify patterns ' .
+          'and make decisions with minimal human intervention.',
       ],
       [
         'title' => 'PostgreSQL Database Management',
-        'body' => 'PostgreSQL is a powerful, open source object-relational database system that uses and extends the SQL language combined with many features that safely store and scale the most complicated data workloads.',
+        'body' => 'PostgreSQL is a powerful, open source object-relational database ' .
+          'system that uses and extends the SQL language combined with many ' .
+          'features that safely store and scale the most complicated data workloads.',
       ],
       [
         'title' => 'Drupal Content Management System',
-        'body' => 'Drupal is a free and open-source content management framework written in PHP and distributed under the GNU General Public License. It provides a back-end framework for at least 14% of the top 10,000 websites worldwide.',
+        'body' => 'Drupal is a free and open-source content management framework ' .
+          'written in PHP and distributed under the GNU General Public License. ' .
+          'It provides a back-end framework for at least 14% of the top 10,000 ' .
+          'websites worldwide.',
       ],
       [
         'title' => 'Search API and Vector Databases',
-        'body' => 'Search API provides a unified framework for implementing search services in Drupal. With vector databases, we can implement semantic search that understands context and meaning rather than just exact keyword matches.',
+        'body' => 'Search API provides a unified framework for implementing search ' .
+          'services in Drupal. With vector databases, we can implement semantic ' .
+          'search that understands context and meaning rather than just exact ' .
+          'keyword matches.',
       ],
       [
         'title' => 'Full-Text Search Implementation',
-        'body' => 'Full-text search allows users to search for documents based on the content within them. Modern implementations include relevance scoring, highlighting, faceted search, and advanced query capabilities.',
+        'body' => 'Full-text search allows users to search for documents based on ' .
+          'the content within them. Modern implementations include relevance ' .
+          'scoring, highlighting, faceted search, and advanced query capabilities.',
       ],
     ];
 
@@ -278,7 +297,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests server creation and configuration.
    */
-  public function testServerCreation() {
+  public function testServerCreation()
+  {
     // Check that server was created.
     $this->assertNotNull($this->server);
     $this->assertEquals('postgresql', $this->server->getBackendId());
@@ -296,7 +316,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests index creation and configuration.
    */
-  public function testIndexCreation() {
+  public function testIndexCreation()
+  {
     // Check that index was created.
     $this->assertNotNull($this->index);
     $this->assertEquals($this->server->id(), $this->index->getServerId());
@@ -323,7 +344,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests content indexing process.
    */
-  public function testContentIndexing() {
+  public function testContentIndexing()
+  {
     // Initially, no items should be indexed.
     $this->assertEquals(0, $this->index->getTrackerInstance()->getTotalItemsCount());
 
@@ -342,7 +364,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests search functionality through the API.
    */
-  public function testSearchFunctionality() {
+  public function testSearchFunctionality()
+  {
     // Index the content first.
     $this->index->indexItems();
 
@@ -357,11 +380,11 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
 
     // Check that the correct item was found.
     $result_items = $results->getResultItems();
-    $found_machine_learning = FALSE;
+    $found_machine_learning = false;
     foreach ($result_items as $item) {
       $entity = $item->getOriginalObject()->getValue();
       if ($entity && $entity->getTitle() === 'Machine Learning and Artificial Intelligence') {
-        $found_machine_learning = TRUE;
+        $found_machine_learning = true;
         break;
       }
     }
@@ -371,7 +394,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests advanced search features.
    */
-  public function testAdvancedSearchFeatures() {
+  public function testAdvancedSearchFeatures()
+  {
     // Index the content first.
     $this->index->indexItems();
 
@@ -396,7 +420,7 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
 
     // Test status filter.
     $query = $this->index->query();
-    $query->addCondition('status', TRUE);
+    $query->addCondition('status', true);
     $results = $query->execute();
     $this->assertEquals(count($this->testNodes), $results->getResultCount());
   }
@@ -404,7 +428,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests search result sorting and paging.
    */
-  public function testSearchSortingAndPaging() {
+  public function testSearchSortingAndPaging()
+  {
     // Index the content first.
     $this->index->indexItems();
 
@@ -439,14 +464,15 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests search with filters and facets.
    */
-  public function testSearchFiltering() {
+  public function testSearchFiltering()
+  {
     // Index the content first.
     $this->index->indexItems();
 
     // Test multiple conditions (AND)
     $query = $this->index->query();
     $query->keys('search');
-    $query->addCondition('status', TRUE);
+    $query->addCondition('status', true);
     $results = $query->execute();
     $this->assertGreaterThan(0, $results->getResultCount());
 
@@ -463,14 +489,15 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests search highlighting and excerpts.
    */
-  public function testSearchHighlighting() {
+  public function testSearchHighlighting()
+  {
     // Index the content first.
     $this->index->indexItems();
 
     // Search with highlighting.
     $query = $this->index->query();
     $query->keys('machine learning');
-    $query->setOption('search_api_excerpt', TRUE);
+    $query->setOption('search_api_excerpt', true);
     $results = $query->execute();
 
     $this->assertGreaterThan(0, $results->getResultCount());
@@ -489,7 +516,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests error handling and edge cases.
    */
-  public function testErrorHandling() {
+  public function testErrorHandling()
+  {
     // Index the content first.
     $this->index->indexItems();
 
@@ -519,7 +547,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests cache integration.
    */
-  public function testCacheIntegration() {
+  public function testCacheIntegration()
+  {
     // Index the content first.
     $this->index->indexItems();
 
@@ -539,7 +568,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests index maintenance operations.
    */
-  public function testIndexMaintenance() {
+  public function testIndexMaintenance()
+  {
     // Index the content first.
     $this->index->indexItems();
     $initial_count = $this->index->getTrackerInstance()->getIndexedItemsCount();
@@ -561,7 +591,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * Tests vector search functionality if available.
    */
-  public function testVectorSearchIfAvailable() {
+  public function testVectorSearchIfAvailable()
+  {
     // Check if vector data type is available.
     $data_type_manager = \Drupal::service('plugin.manager.search_api.data_type');
     if (!$data_type_manager->hasDefinition('vector')) {
@@ -596,7 +627,8 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
   /**
    * {@inheritdoc}
    */
-  protected function tearDown(): void {
+  protected function tearDown(): void
+  {
     // Clean up test data.
     foreach ($this->testNodes as $node) {
       $node->delete();
@@ -612,5 +644,4 @@ class PostgreSQLBackendFunctionalTest extends SearchApiBrowserTestBase {
 
     parent::tearDown();
   }
-
 }

@@ -11,9 +11,11 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Form for managing embedding queue processing.
  */
-class QueueManagementForm extends FormBase {
+class QueueManagementForm extends FormBase
+{
   /**
    * The embedding queue manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
    */
@@ -21,6 +23,7 @@ class QueueManagementForm extends FormBase {
 
   /**
    * The embedding analytics service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService
    */
@@ -30,8 +33,8 @@ class QueueManagementForm extends FormBase {
    * Constructs a QueueManagementForm.
    */
   public function __construct(
-    EmbeddingQueueManager $queue_manager,
-    EmbeddingAnalyticsService $analytics_service,
+      EmbeddingQueueManager $queue_manager,
+      EmbeddingAnalyticsService $analytics_service,
   ) {
     $this->queueManager = $queue_manager;
     $this->analyticsService = $analytics_service;
@@ -40,24 +43,27 @@ class QueueManagementForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
+  public static function create(ContainerInterface $container)
+  {
     return new static(
-          $container->get('search_api_postgresql.embedding_queue_manager'),
-          $container->get('search_api_postgresql.analytics')
-      );
+        $container->get('search_api_postgresql.embedding_queue_manager'),
+        $container->get('search_api_postgresql.analytics')
+    );
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getFormId() {
+  public function getFormId()
+  {
     return 'search_api_postgresql_queue_management';
   }
 
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state) {
+  public function buildForm(array $form, FormStateInterface $form_state)
+  {
     $form['#attached']['library'][] = 'search_api_postgresql/admin';
 
     // Page header.
@@ -84,7 +90,7 @@ class QueueManagementForm extends FormBase {
     $form['stats'] = [
       '#type' => 'details',
       '#title' => $this->t('Queue Statistics'),
-      '#open' => TRUE,
+      '#open' => true,
     ];
 
     $form['stats']['table'] = [
@@ -99,7 +105,7 @@ class QueueManagementForm extends FormBase {
         [$this->t('Failed items'), number_format($queue_stats['failed_items'] ?? 0)],
         [$this->t('Completed today'), number_format($queue_stats['completed_today'] ?? 0)],
         [$this->t('Average processing time'), ($queue_stats['avg_processing_time'] ?? 0) . ' seconds'],
-        [$this->t('Queue enabled'), ($queue_stats['config']['enabled'] ?? FALSE) ? $this->t('Yes') : $this->t('No')],
+        [$this->t('Queue enabled'), ($queue_stats['config']['enabled'] ?? false) ? $this->t('Yes') : $this->t('No')],
       ],
     ];
 
@@ -107,7 +113,7 @@ class QueueManagementForm extends FormBase {
     $form['actions_section'] = [
       '#type' => 'details',
       '#title' => $this->t('Queue Actions'),
-      '#open' => TRUE,
+      '#open' => true,
     ];
 
     $form['actions_section']['action'] = [
@@ -122,7 +128,7 @@ class QueueManagementForm extends FormBase {
         'requeue_failed' => $this->t('Requeue failed items'),
       ],
       '#default_value' => 'process_now',
-      '#required' => TRUE,
+      '#required' => true,
     ];
 
     $form['actions_section']['batch_size'] = [
@@ -156,7 +162,7 @@ class QueueManagementForm extends FormBase {
     $form['config'] = [
       '#type' => 'details',
       '#title' => $this->t('Queue Configuration'),
-      '#open' => FALSE,
+      '#open' => false,
     ];
 
     $config = $queue_stats['config'] ?? [];
@@ -164,7 +170,7 @@ class QueueManagementForm extends FormBase {
     $form['config']['enabled'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Enable queue processing'),
-      '#default_value' => $config['enabled'] ?? FALSE,
+      '#default_value' => $config['enabled'] ?? false,
       '#description' => $this->t('Enable background queue processing for embeddings.'),
     ];
 
@@ -208,7 +214,7 @@ class QueueManagementForm extends FormBase {
     $form['activity'] = [
       '#type' => 'details',
       '#title' => $this->t('Recent Activity'),
-      '#open' => FALSE,
+      '#open' => false,
     ];
 
     $recent_activity = $this->queueManager->getRecentActivity(20);
@@ -236,8 +242,7 @@ class QueueManagementForm extends FormBase {
         ],
         '#rows' => $activity_rows,
       ];
-    }
-    else {
+    } else {
       $form['activity']['empty'] = [
         '#type' => 'markup',
         '#markup' => '<p>' . $this->t('No recent activity found.') . '</p>',
@@ -267,7 +272,8 @@ class QueueManagementForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function validateForm(array &$form, FormStateInterface $form_state) {
+  public function validateForm(array &$form, FormStateInterface $form_state)
+  {
     $action = $form_state->getValue('action');
 
     // Validate destructive actions.
@@ -286,9 +292,9 @@ class QueueManagementForm extends FormBase {
       $batch_size = $form_state->getValue('batch_size');
       if ($batch_size < 1 || $batch_size > 100) {
         $form_state->setErrorByName(
-              'batch_size',
-              $this->t('Batch size must be between 1 and 100.')
-          );
+            'batch_size',
+            $this->t('Batch size must be between 1 and 100.')
+        );
       }
     }
 
@@ -296,16 +302,17 @@ class QueueManagementForm extends FormBase {
     $max_processing_time = $form_state->getValue('max_processing_time');
     if ($max_processing_time < 10 || $max_processing_time > 300) {
       $form_state->setErrorByName(
-            'max_processing_time',
-            $this->t('Maximum processing time must be between 10 and 300 seconds.')
-        );
+          'max_processing_time',
+          $this->t('Maximum processing time must be between 10 and 300 seconds.')
+      );
     }
   }
 
   /**
    * {@inheritdoc}
    */
-  public function submitForm(array &$form, FormStateInterface $form_state) {
+  public function submitForm(array &$form, FormStateInterface $form_state)
+  {
     $action = $form_state->getValue('action');
     $batch_size = $form_state->getValue('batch_size');
 
@@ -315,36 +322,36 @@ class QueueManagementForm extends FormBase {
         $this->messenger()->addStatus($this->t('Processed @count items from the queue.', [
           '@count' => $result['processed'],
         ]));
-        break;
+          break;
 
       case 'clear_failed':
         $result = $this->queueManager->clearFailedItems();
         $this->messenger()->addStatus($this->t('Cleared @count failed items from the queue.', [
           '@count' => $result['cleared'],
         ]));
-        break;
+          break;
 
       case 'clear_all':
         $result = $this->queueManager->clearAllItems();
         $this->messenger()->addStatus($this->t('Cleared all items from the queue.'));
-        break;
+          break;
 
       case 'pause_queue':
         $this->queueManager->pauseQueue();
         $this->messenger()->addStatus($this->t('Queue processing has been paused.'));
-        break;
+          break;
 
       case 'resume_queue':
         $this->queueManager->resumeQueue();
         $this->messenger()->addStatus($this->t('Queue processing has been resumed.'));
-        break;
+          break;
 
       case 'requeue_failed':
         $result = $this->queueManager->requeueFailedItems();
         $this->messenger()->addStatus($this->t('Requeued @count failed items.', [
           '@count' => $result['requeued'],
         ]));
-        break;
+          break;
     }
 
     // Log the action.
@@ -356,7 +363,8 @@ class QueueManagementForm extends FormBase {
   /**
    * Submit handler for configuration form.
    */
-  public function submitConfiguration(array &$form, FormStateInterface $form_state) {
+  public function submitConfiguration(array &$form, FormStateInterface $form_state)
+  {
     $config = [
       'enabled' => $form_state->getValue('enabled'),
       'batch_size' => $form_state->getValue('default_batch_size'),
@@ -369,5 +377,4 @@ class QueueManagementForm extends FormBase {
 
     $this->messenger()->addStatus($this->t('Queue configuration has been saved.'));
   }
-
 }

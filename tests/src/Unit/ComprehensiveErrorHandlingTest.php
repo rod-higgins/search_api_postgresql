@@ -20,10 +20,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Comprehensive tests for error handling system.
  *
- * @group search_api_postgresql
+ * @group              search_api_postgresql
  * @coversDefaultClass \Drupal\search_api_postgresql\Exception\ComprehensiveExceptionFactory
  */
-class ComprehensiveErrorHandlingTest extends UnitTestCase {
+class ComprehensiveErrorHandlingTest extends UnitTestCase
+{
   /**
    * The logger mock.
    *
@@ -48,7 +49,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->logger = $this->createMock(LoggerInterface::class);
@@ -61,7 +63,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
    *
    * @covers ::createFromException
    */
-  public function testDatabaseConnectionException() {
+  public function testDatabaseConnectionException()
+  {
     // Test connection refused scenario.
     $original_exception = new \Exception('Connection refused to host 127.0.0.1', 2002);
     $context = [
@@ -85,7 +88,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
    *
    * @covers \Drupal\search_api_postgresql\Exception\MemoryExhaustedException
    */
-  public function testMemoryExhaustionHandling() {
+  public function testMemoryExhaustionHandling()
+  {
     // 512MB
     $memory_usage = 512 * 1024 * 1024;
     // 256MB (impossible scenario for testing)
@@ -102,7 +106,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests vector index corruption handling.
    */
-  public function testVectorIndexCorruptionHandling() {
+  public function testVectorIndexCorruptionHandling()
+  {
     $exception = new VectorIndexCorruptedException('test_index');
 
     $this->assertEquals('text_search_with_reindex_queue', $exception->getFallbackStrategy());
@@ -113,7 +118,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests API key expiration scenarios.
    */
-  public function testApiKeyExpiredHandling() {
+  public function testApiKeyExpiredHandling()
+  {
     $exception = new ApiKeyExpiredException('Azure OpenAI');
 
     $this->assertEquals('text_search_only', $exception->getFallbackStrategy());
@@ -124,7 +130,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests insufficient permissions handling.
    */
-  public function testInsufficientPermissionsHandling() {
+  public function testInsufficientPermissionsHandling()
+  {
     $exception = new InsufficientPermissionsException('vector_search_admin');
 
     $this->assertEquals('limited_functionality', $exception->getFallbackStrategy());
@@ -135,7 +142,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests error classification accuracy.
    */
-  public function testErrorClassification() {
+  public function testErrorClassification()
+  {
     $test_cases = [
       // Database errors.
       [
@@ -171,7 +179,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests exception factory pattern matching.
    */
-  public function testExceptionFactoryPatternMatching() {
+  public function testExceptionFactoryPatternMatching()
+  {
     $test_patterns = [
       // Network patterns.
       [
@@ -213,7 +222,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests rate limiting scenarios.
    */
-  public function testRateLimitingScenarios() {
+  public function testRateLimitingScenarios()
+  {
     // Test 429 status code.
     $original_exception = new \Exception('Too Many Requests', 429);
     $context = ['retry_after' => 120, 'service_name' => 'Azure OpenAI'];
@@ -228,7 +238,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests temporary API failure handling.
    */
-  public function testTemporaryApiFailureHandling() {
+  public function testTemporaryApiFailureHandling()
+  {
     $test_codes = [500, 502, 503, 504];
 
     foreach ($test_codes as $code) {
@@ -246,7 +257,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests message generation for different degradation types.
    */
-  public function testDegradationMessageGeneration() {
+  public function testDegradationMessageGeneration()
+  {
     $test_exceptions = [
       new EmbeddingServiceUnavailableException('Azure OpenAI'),
       new VectorSearchDegradedException('Index maintenance'),
@@ -274,13 +286,14 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests contextual message enhancement.
    */
-  public function testContextualMessageEnhancement() {
+  public function testContextualMessageEnhancement()
+  {
     $exception = new EmbeddingServiceUnavailableException('Test Service');
 
     // Test with admin context.
     $admin_context = [
       'user_role' => 'administrator',
-      'show_technical_details' => TRUE,
+      'show_technical_details' => true,
     ];
 
     $admin_message = $this->messageService->generateMessage($exception, $admin_context);
@@ -300,7 +313,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests status report generation for multiple issues.
    */
-  public function testStatusReportGeneration() {
+  public function testStatusReportGeneration()
+  {
     // Test healthy state.
     $healthy_report = $this->messageService->generateStatusReport([]);
 
@@ -325,7 +339,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests error recovery strategies.
    */
-  public function testErrorRecoveryStrategies() {
+  public function testErrorRecoveryStrategies()
+  {
     $strategies = [
       'text_search_only' => EmbeddingServiceUnavailableException::class,
       'rate_limit_backoff' => RateLimitException::class,
@@ -338,14 +353,11 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
 
       if ($exception_class === MemoryExhaustedException::class) {
         $exception = $reflection->newInstance(1000000, 500000);
-      }
-      elseif ($exception_class === VectorIndexCorruptedException::class) {
+      } elseif ($exception_class === VectorIndexCorruptedException::class) {
         $exception = $reflection->newInstance('test_index');
-      }
-      elseif ($exception_class === RateLimitException::class) {
+      } elseif ($exception_class === RateLimitException::class) {
         $exception = $reflection->newInstance(60, 'Test Service');
-      }
-      else {
+      } else {
         $exception = $reflection->newInstance('Test Service');
       }
 
@@ -356,7 +368,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests cascading failure prevention.
    */
-  public function testCascadingFailurePrevention() {
+  public function testCascadingFailurePrevention()
+  {
     // Simulate a cascade of failures.
     $primary_failure = new DatabaseConnectionException(['host' => 'localhost', 'port' => 5432]);
     $secondary_failure = new EmbeddingServiceUnavailableException('Azure OpenAI');
@@ -376,7 +389,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests graceful degradation chain.
    */
-  public function testGracefulDegradationChain() {
+  public function testGracefulDegradationChain()
+  {
     // Test that each exception provides a viable fallback.
     $chain_tests = [
       EmbeddingServiceUnavailableException::class => 'text_search_only',
@@ -390,11 +404,9 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
 
       if ($exception_class === MemoryExhaustedException::class) {
         $exception = $reflection->newInstance(1000000, 500000);
-      }
-      elseif ($exception_class === RateLimitException::class) {
+      } elseif ($exception_class === RateLimitException::class) {
         $exception = $reflection->newInstance(60, 'Test Service');
-      }
-      else {
+      } else {
         $exception = $reflection->newInstance('Test Service');
       }
 
@@ -409,7 +421,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests exception logging behavior.
    */
-  public function testExceptionLoggingBehavior() {
+  public function testExceptionLoggingBehavior()
+  {
     $should_log_exceptions = [
       new DatabaseConnectionException(['host' => 'localhost', 'port' => 5432]),
       new MemoryExhaustedException(1000000, 500000),
@@ -432,7 +445,8 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
   /**
    * Tests user message quality and consistency.
    */
-  public function testUserMessageQuality() {
+  public function testUserMessageQuality()
+  {
     $exceptions = [
       new EmbeddingServiceUnavailableException('Azure OpenAI'),
       new VectorSearchDegradedException('Index maintenance'),
@@ -455,18 +469,19 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
 
       // Messages should suggest alternatives or next steps.
       $this->assertTrue(
-            strpos($message, 'temporarily') !== FALSE ||
-            strpos($message, 'alternative') !== FALSE ||
-            strpos($message, 'continue') !== FALSE ||
-            strpos($message, 'available') !== FALSE
-        );
+          strpos($message, 'temporarily') !== false ||
+            strpos($message, 'alternative') !== false ||
+            strpos($message, 'continue') !== false ||
+            strpos($message, 'available') !== false
+      );
     }
   }
 
   /**
    * Tests error context preservation.
    */
-  public function testErrorContextPreservation() {
+  public function testErrorContextPreservation()
+  {
     $original_exception = new \Exception('Connection timeout', 1234);
     $context = [
       'operation' => 'embedding_generation',
@@ -479,13 +494,12 @@ class ComprehensiveErrorHandlingTest extends UnitTestCase {
 
     // Context should be preserved for debugging.
     $message_with_context = $this->messageService->generateMessage(
-          $classified_exception,
-          ['show_technical_details' => TRUE] + $context
-      );
+        $classified_exception,
+        ['show_technical_details' => true] + $context
+    );
 
     $this->assertArrayHasKey('technical_details', $message_with_context);
     $this->assertArrayHasKey('context', $message_with_context['technical_details']);
     $this->assertEquals('embedding_generation', $message_with_context['technical_details']['context']['operation']);
   }
-
 }

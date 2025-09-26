@@ -9,10 +9,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Tests for the Memory embedding cache.
  *
- * @group search_api_postgresql
+ * @group              search_api_postgresql
  * @coversDefaultClass \Drupal\search_api_postgresql\Cache\MemoryEmbeddingCache
  */
-class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
+class MemoryEmbeddingCacheUnitTest extends UnitTestCase
+{
   /**
    * The memory cache under test.
    *
@@ -30,7 +31,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->logger = $this->createMock(LoggerInterface::class);
@@ -50,7 +52,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    *
    * @covers ::get
    */
-  public function testCacheMiss() {
+  public function testCacheMiss()
+  {
     $hash = 'nonexistent_hash';
     $result = $this->cache->get($hash);
     $this->assertNull($result);
@@ -62,7 +65,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    * @covers ::set
    * @covers ::get
    */
-  public function testCacheSetAndGet() {
+  public function testCacheSetAndGet()
+  {
     $hash = 'test_hash_' . time();
     $embedding = [1.0, 2.0, 3.0, 4.0];
 
@@ -80,7 +84,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    * @covers ::set
    * @covers ::get
    */
-  public function testCacheExpiration() {
+  public function testCacheExpiration()
+  {
     $hash = 'expiring_hash';
     $embedding = [1.0, 2.0, 3.0];
 
@@ -104,7 +109,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    * @covers ::invalidate
    * @covers ::get
    */
-  public function testCacheInvalidation() {
+  public function testCacheInvalidation()
+  {
     $hash = 'invalidation_hash';
     $embedding = [5.0, 6.0, 7.0];
 
@@ -125,7 +131,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    * @covers ::setMultiple
    * @covers ::getMultiple
    */
-  public function testMultipleCacheOperations() {
+  public function testMultipleCacheOperations()
+  {
     $items = [
       'hash1' => [1.0, 2.0],
       'hash2' => [3.0, 4.0],
@@ -151,7 +158,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    * @covers ::clear
    * @covers ::get
    */
-  public function testCacheClear() {
+  public function testCacheClear()
+  {
     // Set multiple items.
     $this->cache->set('clear_test1', [1.0, 2.0]);
     $this->cache->set('clear_test2', [3.0, 4.0]);
@@ -173,7 +181,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    *
    * @covers ::getStats
    */
-  public function testCacheStatistics() {
+  public function testCacheStatistics()
+  {
     // Perform some cache operations.
     $this->cache->set('stats_test1', [1.0]);
     $this->cache->set('stats_test2', [2.0]);
@@ -200,7 +209,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    *
    * @covers ::set
    */
-  public function testCacheSizeLimits() {
+  public function testCacheSizeLimits()
+  {
     // Create cache with small max size.
     $smallCache = new MemoryEmbeddingCache($this->logger, ['max_entries' => 2]);
 
@@ -219,8 +229,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
     $this->assertNotNull($smallCache->get('item3'));
 
     // At least one of the earlier items should be evicted.
-    $item1Exists = $smallCache->get('item1') !== NULL;
-    $item2Exists = $smallCache->get('item2') !== NULL;
+    $item1Exists = $smallCache->get('item1') !== null;
+    $item2Exists = $smallCache->get('item2') !== null;
     $this->assertFalse($item1Exists && $item2Exists);
   }
 
@@ -229,7 +239,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    *
    * @covers ::maintenance
    */
-  public function testCacheMaintenance() {
+  public function testCacheMaintenance()
+  {
     // Add some items.
     // Short TTL.
     $this->cache->set('maint_test1', [1.0], 1);
@@ -254,7 +265,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    *
    * @covers ::validateHash
    */
-  public function testHashValidation() {
+  public function testHashValidation()
+  {
     // Valid hash (64 character hex string)
     $validHash = str_repeat('a', 64);
     $this->assertTrue($this->cache->set($validHash, [1.0]));
@@ -269,7 +281,8 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
    *
    * @covers ::validateEmbedding
    */
-  public function testEmbeddingValidation() {
+  public function testEmbeddingValidation()
+  {
     $hash = str_repeat('b', 64);
 
     // Valid embedding.
@@ -280,5 +293,4 @@ class MemoryEmbeddingCacheUnitTest extends UnitTestCase {
     $this->expectException(\InvalidArgumentException::class);
     $this->cache->set($hash, []);
   }
-
 }

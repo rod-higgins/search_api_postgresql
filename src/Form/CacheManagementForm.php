@@ -13,9 +13,11 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Form for managing embedding cache.
  */
-class CacheManagementForm extends FormBase {
+class CacheManagementForm extends FormBase
+{
   /**
    * The config factory.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Config\ConfigFactoryInterface
    */
@@ -23,6 +25,7 @@ class CacheManagementForm extends FormBase {
 
   /**
    * The embedding cache manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
    */
@@ -30,6 +33,7 @@ class CacheManagementForm extends FormBase {
 
   /**
    * The embedding analytics service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService
    */
@@ -39,9 +43,9 @@ class CacheManagementForm extends FormBase {
    * Constructs a CacheManagementForm.
    */
   public function __construct(
-    ConfigFactoryInterface $config_factory,
-    EmbeddingCacheManager $cache_manager,
-    EmbeddingAnalyticsService $analytics_service,
+      ConfigFactoryInterface $config_factory,
+      EmbeddingCacheManager $cache_manager,
+      EmbeddingAnalyticsService $analytics_service,
   ) {
     $this->configFactory = $config_factory;
     $this->cacheManager = $cache_manager;
@@ -51,25 +55,28 @@ class CacheManagementForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
+  public static function create(ContainerInterface $container)
+  {
     return new static(
-          $container->get('config.factory'),
-          $container->get('search_api_postgresql.cache_manager'),
-          $container->get('search_api_postgresql.analytics')
-      );
+        $container->get('config.factory'),
+        $container->get('search_api_postgresql.cache_manager'),
+        $container->get('search_api_postgresql.analytics')
+    );
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getFormId() {
+  public function getFormId()
+  {
     return 'search_api_postgresql_cache_management';
   }
 
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state) {
+  public function buildForm(array $form, FormStateInterface $form_state)
+  {
     $form['#attached']['library'][] = 'search_api_postgresql/admin';
 
     // Page header.
@@ -96,7 +103,7 @@ class CacheManagementForm extends FormBase {
     $form['stats'] = [
       '#type' => 'details',
       '#title' => $this->t('Cache Statistics'),
-      '#open' => TRUE,
+      '#open' => true,
     ];
 
     $form['stats']['table'] = [
@@ -119,7 +126,7 @@ class CacheManagementForm extends FormBase {
     $form['actions_section'] = [
       '#type' => 'details',
       '#title' => $this->t('Cache Actions'),
-      '#open' => TRUE,
+      '#open' => true,
     ];
 
     $form['actions_section']['action'] = [
@@ -133,7 +140,7 @@ class CacheManagementForm extends FormBase {
         'export_stats' => $this->t('Export statistics'),
       ],
       '#default_value' => 'clear_expired',
-      '#required' => TRUE,
+      '#required' => true,
     ];
 
     $form['actions_section']['age_threshold'] = [
@@ -164,7 +171,7 @@ class CacheManagementForm extends FormBase {
     $form['config'] = [
       '#type' => 'details',
       '#title' => $this->t('Cache Configuration'),
-      '#open' => FALSE,
+      '#open' => false,
     ];
 
     $config = $this->configFactory->get('search_api_postgresql.cache');
@@ -172,7 +179,7 @@ class CacheManagementForm extends FormBase {
     $form['config']['enabled'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Enable embedding cache'),
-      '#default_value' => $config->get('enabled') ?? TRUE,
+      '#default_value' => $config->get('enabled') ?? true,
       '#description' => $this->t('Disable to turn off all embedding caching.'),
     ];
 
@@ -233,7 +240,8 @@ class CacheManagementForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function validateForm(array &$form, FormStateInterface $form_state) {
+  public function validateForm(array &$form, FormStateInterface $form_state)
+  {
     $action = $form_state->getValue('action');
 
     if ($action === 'clear_all') {
@@ -250,9 +258,9 @@ class CacheManagementForm extends FormBase {
       $age_threshold = $form_state->getValue('age_threshold');
       if ($age_threshold < 1 || $age_threshold > 365) {
         $form_state->setErrorByName(
-              'age_threshold',
-              $this->t('Age threshold must be between 1 and 365 days.')
-          );
+            'age_threshold',
+            $this->t('Age threshold must be between 1 and 365 days.')
+        );
       }
     }
   }
@@ -260,7 +268,8 @@ class CacheManagementForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function submitForm(array &$form, FormStateInterface $form_state) {
+  public function submitForm(array &$form, FormStateInterface $form_state)
+  {
     $action = $form_state->getValue('action');
     $age_threshold = $form_state->getValue('age_threshold');
 
@@ -269,28 +278,30 @@ class CacheManagementForm extends FormBase {
         // Changed from clearAll()
         $result = $this->cacheManager->clear();
         $this->messenger()->addStatus($this->t('All cache entries have been cleared.'));
-        break;
+          break;
 
       case 'clear_expired':
         // For now, use performMaintenance which cleans up expired entries.
         $result = $this->cacheManager->performMaintenance();
         $this->messenger()->addStatus($this->t('Cache maintenance completed (expired entries cleaned).'));
-        break;
+          break;
 
       case 'clear_by_age':
         // For now, just clear all cache with a warning.
         $result = $this->cacheManager->clear();
-        $this->messenger()->addWarning($this->t('Age-based clearing not yet implemented. All cache has been cleared instead.'));
-        break;
+        $this->messenger()->addWarning(
+            $this->t('Age-based clearing not yet implemented. All cache has been cleared instead.')
+        );
+          break;
 
       case 'optimize':
         $result = $this->cacheManager->performMaintenance();
         $this->messenger()->addStatus($this->t('Cache has been optimized.'));
-        break;
+          break;
 
       case 'export_stats':
         $this->exportStatistics();
-        return;
+          return;
     }
 
     // Log the action.
@@ -302,7 +313,8 @@ class CacheManagementForm extends FormBase {
   /**
    * Submit handler for configuration form.
    */
-  public function submitConfiguration(array &$form, FormStateInterface $form_state) {
+  public function submitConfiguration(array &$form, FormStateInterface $form_state)
+  {
     $config = $this->configFactory->getEditable('search_api_postgresql.cache');
 
     $config->set('enabled', $form_state->getValue('enabled'));
@@ -318,7 +330,8 @@ class CacheManagementForm extends FormBase {
   /**
    * Export cache statistics.
    */
-  protected function exportStatistics() {
+  protected function exportStatistics()
+  {
     $stats = $this->cacheManager->getCacheStatistics();
     $analytics = $this->analyticsService->getCacheAnalytics();
 
@@ -332,7 +345,10 @@ class CacheManagementForm extends FormBase {
 
     $response = new Response($json_data);
     $response->headers->set('Content-Type', 'application/json');
-    $response->headers->set('Content-Disposition', 'attachment; filename="cache_statistics_' . date('Y-m-d_H-i-s') . '.json"');
+    $response->headers->set(
+        'Content-Disposition',
+        'attachment; filename="cache_statistics_' . date('Y-m-d_H-i-s') . '.json"'
+    );
 
     $response->send();
   }
@@ -340,7 +356,8 @@ class CacheManagementForm extends FormBase {
   /**
    * Format bytes to human readable format.
    */
-  protected function formatBytes($bytes, $precision = 2) {
+  protected function formatBytes($bytes, $precision = 2)
+  {
     $units = ['B', 'KB', 'MB', 'GB', 'TB'];
 
     for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
@@ -349,5 +366,4 @@ class CacheManagementForm extends FormBase {
 
     return round($bytes, $precision) . ' ' . $units[$i];
   }
-
 }

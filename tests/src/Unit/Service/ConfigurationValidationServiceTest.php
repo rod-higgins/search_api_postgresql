@@ -11,7 +11,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class ConfigurationValidationServiceTest extends TestCase {
+class ConfigurationValidationServiceTest extends TestCase
+{
   /**
    * The configuration validation service under test.
    */
@@ -25,7 +26,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load actual service.
@@ -55,65 +57,74 @@ class ConfigurationValidationServiceTest extends TestCase {
       public $logs = [];
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function emergency($message, array $context = []) {
+      public function emergency($message, array $context = [])
+      {
         $this->log('emergency', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function alert($message, array $context = []) {
+      public function alert($message, array $context = [])
+      {
         $this->log('alert', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function critical($message, array $context = []) {
+      public function critical($message, array $context = [])
+      {
         $this->log('critical', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function error($message, array $context = []) {
+      public function error($message, array $context = [])
+      {
         $this->log('error', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function warning($message, array $context = []) {
+      public function warning($message, array $context = [])
+      {
         $this->log('warning', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function notice($message, array $context = []) {
+      public function notice($message, array $context = [])
+      {
         $this->log('notice', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function info($message, array $context = []) {
+      public function info($message, array $context = [])
+      {
         $this->log('info', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function debug($message, array $context = []) {
+      public function debug($message, array $context = [])
+      {
         $this->log('debug', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function log($level, $message, array $context = []) {
+      public function log($level, $message, array $context = [])
+      {
         $this->logs[] = ['level' => $level, 'message' => $message, 'context' => $context];
       }
 
@@ -123,23 +134,26 @@ class ConfigurationValidationServiceTest extends TestCase {
     $entityTypeManager = new class {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getStorage($entity_type) {
+      public function getStorage($entity_type)
+      {
         return new class {
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function loadMultiple(?array $ids = NULL) {
+          public function loadMultiple(?array $ids = null)
+          {
             return [];
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function load($id) {
-            return NULL;
+          public function load($id)
+          {
+            return null;
           }
 
         };
@@ -151,16 +165,18 @@ class ConfigurationValidationServiceTest extends TestCase {
     $keyRepository = new class {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getKey($key_id) {
-        return NULL;
+      public function getKey($key_id)
+      {
+        return null;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getKeys() {
+      public function getKeys()
+      {
         return [];
       }
 
@@ -168,12 +184,11 @@ class ConfigurationValidationServiceTest extends TestCase {
 
     try {
       $this->validationService = new ConfigurationValidationService(
-            $entityTypeManager,
-            $keyRepository,
-            $this->logger
-        );
-    }
-    catch (TypeError $e) {
+          $entityTypeManager,
+          $keyRepository,
+          $this->logger
+      );
+    } catch (TypeError $e) {
       // Skip if we can't instantiate due to type constraints.
       $this->markTestSkipped('Cannot instantiate service due to type constraints: ' . $e->getMessage());
     }
@@ -182,14 +197,16 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests service instantiation.
    */
-  public function testServiceInstantiation() {
+  public function testServiceInstantiation()
+  {
     $this->assertNotNull($this->validationService);
   }
 
   /**
    * Tests that the service has expected methods.
    */
-  public function testServiceMethods() {
+  public function testServiceMethods()
+  {
     if (!$this->validationService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -202,7 +219,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests configuration validation structure.
    */
-  public function testConfigurationValidationStructure() {
+  public function testConfigurationValidationStructure()
+  {
     if (!$this->validationService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -226,7 +244,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests invalid configuration handling.
    */
-  public function testInvalidConfigurationHandling() {
+  public function testInvalidConfigurationHandling()
+  {
     $invalidConfigs = [
     // Empty config.
       [],
@@ -244,7 +263,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests database connection parameters validation.
    */
-  public function testDatabaseConnectionValidation() {
+  public function testDatabaseConnectionValidation()
+  {
     $validConnection = [
       'host' => 'localhost',
       'port' => 5432,
@@ -263,7 +283,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests API key validation patterns.
    */
-  public function testApiKeyValidation() {
+  public function testApiKeyValidation()
+  {
     $validApiKeys = [
       'azure_api_key' => 'valid-key-format',
       'openai_api_key' => 'sk-1234567890abcdef',
@@ -278,7 +299,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests security configuration validation.
    */
-  public function testSecurityConfigurationValidation() {
+  public function testSecurityConfigurationValidation()
+  {
     $securityConfig = [
       'ssl_mode' => 'require',
       'ssl_cert' => '/path/to/cert.pem',
@@ -293,7 +315,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests performance configuration validation.
    */
-  public function testPerformanceConfigurationValidation() {
+  public function testPerformanceConfigurationValidation()
+  {
     $performanceConfig = [
       'connection_timeout' => 30,
       'query_timeout' => 60,
@@ -310,7 +333,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests vector configuration validation.
    */
-  public function testVectorConfigurationValidation() {
+  public function testVectorConfigurationValidation()
+  {
     $vectorConfig = [
       'dimensions' => 1536,
       'similarity_function' => 'cosine',
@@ -327,7 +351,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests logging during validation.
    */
-  public function testValidationLogging() {
+  public function testValidationLogging()
+  {
     // Clear previous logs.
     $this->logger->logs = [];
 
@@ -343,7 +368,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests configuration schema validation.
    */
-  public function testConfigurationSchema() {
+  public function testConfigurationSchema()
+  {
     $requiredFields = [
       'database.host',
       'database.port',
@@ -361,7 +387,8 @@ class ConfigurationValidationServiceTest extends TestCase {
   /**
    * Tests environment-specific configuration.
    */
-  public function testEnvironmentConfiguration() {
+  public function testEnvironmentConfiguration()
+  {
     $environments = ['development', 'staging', 'production'];
 
     foreach ($environments as $env) {
@@ -376,5 +403,4 @@ class ConfigurationValidationServiceTest extends TestCase {
       $this->assertIsString($config['logging_level']);
     }
   }
-
 }

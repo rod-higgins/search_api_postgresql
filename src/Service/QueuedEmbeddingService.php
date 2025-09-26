@@ -9,9 +9,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Wrapper service that can process embeddings either synchronously or via queue.
  */
-class QueuedEmbeddingService implements EmbeddingServiceInterface {
+class QueuedEmbeddingService implements EmbeddingServiceInterface
+{
   /**
    * The embedding queue manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
    */
@@ -19,6 +21,7 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The logger.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -26,6 +29,7 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The config factory.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Config\ConfigFactoryInterface
    */
@@ -33,6 +37,7 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The actual embedding service for synchronous processing.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface
    */
@@ -40,6 +45,7 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Service configuration.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -47,6 +53,7 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Queue context for current operation.
+   * {@inheritdoc}
    *
    * @var array|null
    */
@@ -54,6 +61,7 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Track ongoing embedding generations to prevent recursion.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -61,6 +69,7 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Constructs a QueuedEmbeddingService.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager $queue_manager
    *   The embedding queue manager.
@@ -69,7 +78,11 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory.
    */
-  public function __construct(EmbeddingQueueManager $queue_manager, LoggerInterface $logger, ConfigFactoryInterface $config_factory) {
+  public function __construct(
+      EmbeddingQueueManager $queue_manager,
+      LoggerInterface $logger,
+      ConfigFactoryInterface $config_factory
+  ) {
     $this->queueManager = $queue_manager;
     $this->logger = $logger;
     $this->configFactory = $config_factory;
@@ -80,18 +93,21 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Sets the actual embedding service for synchronous processing.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface $embedding_service
    *   The embedding service.
    */
-  public function setEmbeddingService(EmbeddingServiceInterface $embedding_service) {
+  public function setEmbeddingService(EmbeddingServiceInterface $embedding_service)
+  {
     $this->embeddingService = $embedding_service;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function generateEmbedding($text) {
+  public function generateEmbedding($text)
+  {
     // Create a hash of the text to track duplicates.
     $text_hash = md5($text);
 
@@ -100,11 +116,11 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
       $this->logger->warning('Recursive embedding generation detected for text hash @hash, skipping', [
         '@hash' => $text_hash,
       ]);
-      return NULL;
+      return null;
     }
 
     // Mark this text as being processed.
-    self::$processingTexts[$text_hash] = TRUE;
+    self::$processingTexts[$text_hash] = true;
 
     try {
       // Your existing debug code...
@@ -118,13 +134,11 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
       if ($should_queue && $has_context) {
         $this->logger->debug('Taking QUEUED path');
         $result = $this->generateEmbeddingQueued($text);
-      }
-      else {
+      } else {
         $this->logger->debug('Taking SYNCHRONOUS path');
         if ($this->embeddingService) {
           $result = $this->embeddingService->generateEmbedding($text);
-        }
-        else {
+        } else {
           throw new \Exception('No embedding service available for synchronous processing');
         }
       }
@@ -139,7 +153,8 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function generateBatchEmbeddings(array $texts) {
+  public function generateBatchEmbeddings(array $texts)
+  {
     if ($this->shouldUseQueue() && $this->hasQueueContext()) {
       return $this->generateBatchEmbeddingsQueued($texts);
     }
@@ -155,7 +170,8 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function getDimension() {
+  public function getDimension()
+  {
     if ($this->embeddingService) {
       return $this->embeddingService->getDimension();
     }
@@ -166,10 +182,11 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function isAvailable() {
+  public function isAvailable()
+  {
     // Always available if queue is enabled.
     if ($this->shouldUseQueue()) {
-      return TRUE;
+      return true;
     }
 
     // Check if synchronous service is available.
@@ -178,14 +195,17 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Generates embedding using queue processing.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text to embed.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   The embedding vector, or NULL if queued.
    */
-  protected function generateEmbeddingQueued($text) {
+  protected function generateEmbeddingQueued($text)
+  {
     $context = $this->getQueueContext();
 
     if (!$context) {
@@ -193,12 +213,12 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
     }
 
     $queued = $this->queueManager->queueEmbeddingGeneration(
-          $context['server_id'],
-          $context['index_id'],
-          $context['item_id'],
-          $text,
-          $this->getQueuePriority($context)
-      );
+        $context['server_id'],
+        $context['index_id'],
+        $context['item_id'],
+        $text,
+        $this->getQueuePriority($context)
+    );
 
     if (!$queued) {
       throw new \Exception('Failed to queue embedding generation');
@@ -209,19 +229,22 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
     ]);
 
     // Return null to indicate processing is queued.
-    return NULL;
+    return null;
   }
 
   /**
    * Generates batch embeddings using queue processing.
+   * {@inheritdoc}
    *
    * @param array $texts
    *   Array of texts to embed.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Empty array indicating processing is queued.
    */
-  protected function generateBatchEmbeddingsQueued(array $texts) {
+  protected function generateBatchEmbeddingsQueued(array $texts)
+  {
     $context = $this->getQueueContext();
 
     if (!$context || !isset($context['items'])) {
@@ -229,11 +252,11 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
     }
 
     $queued = $this->queueManager->queueBatchEmbeddingGeneration(
-          $context['server_id'],
-          $context['index_id'],
-          $context['items'],
-          $this->getQueuePriority($context)
-      );
+        $context['server_id'],
+        $context['index_id'],
+        $context['items'],
+        $this->getQueuePriority($context)
+    );
 
     if (!$queued) {
       throw new \Exception('Failed to queue batch embedding generation');
@@ -249,6 +272,7 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Queues index items for embedding generation.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
@@ -258,20 +282,22 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
    *   Array of search API items.
    * @param array $options
    *   Processing options.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if successfully queued.
+   *   true if successfully queued.
    */
-  public function queueIndexItems($server_id, $index_id, array $items, array $options = []) {
+  public function queueIndexItems($server_id, $index_id, array $items, array $options = [])
+  {
     if (!$this->queueManager->isQueueEnabledForServer($server_id)) {
-      return FALSE;
+      return false;
     }
 
     // Set queue context for this operation.
     $this->setQueueContext([
       'server_id' => $server_id,
       'index_id' => $index_id,
-      'batch_mode' => $options['batch_mode'] ?? TRUE,
+      'batch_mode' => $options['batch_mode'] ?? true,
       'priority' => $options['priority'] ?? 'normal',
     ]);
 
@@ -281,12 +307,13 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
       throw new \Exception("Index not found: {$index_id}");
     }
 
-    $use_batch = $options['batch_mode'] ?? TRUE;
+    $use_batch = $options['batch_mode'] ?? true;
     return $this->queueManager->queueIndexItems($index, $items, $use_batch);
   }
 
   /**
    * Processes embeddings synchronously (fallback mode).
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
@@ -294,11 +321,13 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
    *   Array of items to process.
    * @param array $options
    *   Processing options.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Processing results.
    */
-  public function processSynchronously($server_id, array $items, array $options = []) {
+  public function processSynchronously($server_id, array $items, array $options = [])
+  {
     if (!$this->embeddingService) {
       throw new \Exception('No embedding service available for synchronous processing');
     }
@@ -314,13 +343,11 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
         if ($embedding) {
           $results['processed']++;
-        }
-        else {
+        } else {
           $results['failed']++;
           $results['errors'][] = "Failed to generate embedding for item: {$item_id}";
         }
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $results['failed']++;
         $results['errors'][] = "Error processing item {$item_id}: " . $e->getMessage();
       }
@@ -331,11 +358,13 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets queue processing status.
+   * {@inheritdoc}
    *
    * @return array
    *   Queue status information.
    */
-  public function getQueueStatus() {
+  public function getQueueStatus()
+  {
     return [
       'queue_enabled' => $this->shouldUseQueue(),
       'queue_stats' => $this->queueManager->getQueueStats(),
@@ -346,14 +375,17 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Processes the queue manually.
+   * {@inheritdoc}
    *
    * @param array $options
    *   Processing options.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Processing results.
    */
-  public function processQueue(array $options = []) {
+  public function processQueue(array $options = [])
+  {
     $max_items = $options['max_items'] ?? 50;
     $time_limit = $options['time_limit'] ?? 60;
 
@@ -362,102 +394,116 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Clears the embedding queue.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if successfully cleared.
+   *   true if successfully cleared.
    */
-  public function clearQueue() {
+  public function clearQueue()
+  {
     return $this->queueManager->clearQueue();
   }
 
   /**
    * Sets queue context for current operation.
+   * {@inheritdoc}
    *
    * @param array $context
    *   Queue context data.
    */
-  public function setQueueContext(array $context) {
+  public function setQueueContext(array $context)
+  {
     $this->queueContext = $context;
   }
 
   /**
    * Gets current queue context.
+   * {@inheritdoc}
    *
    * @return array|null
    *   Queue context or NULL if not set.
    */
-  public function getQueueContext() {
-    return $this->queueContext ?? NULL;
+  public function getQueueContext()
+  {
+    return $this->queueContext ?? null;
   }
 
   /**
    * Clears queue context.
    */
-  public function clearQueueContext() {
-    $this->queueContext = NULL;
+  public function clearQueueContext()
+  {
+    $this->queueContext = null;
   }
 
   /**
    * Checks if queue processing should be used.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if queue should be used.
+   *   true if queue should be used.
    */
-  protected function shouldUseQueue() {
+  protected function shouldUseQueue()
+  {
     // Check global queue setting.
-    if (!($this->config['enabled'] ?? FALSE)) {
-      return FALSE;
+    if (!($this->config['enabled'] ?? false)) {
+      return false;
     }
 
     // Check if we're in a queue context.
     $context = $this->getQueueContext();
     if (!$context) {
-      return FALSE;
+      return false;
     }
 
     // Check server-specific setting.
-    $server_id = $context['server_id'] ?? NULL;
+    $server_id = $context['server_id'] ?? null;
     if ($server_id && !$this->queueManager->isQueueEnabledForServer($server_id)) {
-      return FALSE;
+      return false;
     }
 
-    return TRUE;
+    return true;
   }
 
   /**
    * Checks if we have proper queue context.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if queue context is available.
+   *   true if queue context is available.
    */
-  protected function hasQueueContext() {
+  protected function hasQueueContext()
+  {
     $context = $this->getQueueContext();
 
     if (!$context) {
-      return FALSE;
+      return false;
     }
 
     // Check required context fields.
     $required = ['server_id', 'index_id'];
     foreach ($required as $field) {
       if (empty($context[$field])) {
-        return FALSE;
+        return false;
       }
     }
 
-    return TRUE;
+    return true;
   }
 
   /**
    * Gets queue priority for the current context.
+   * {@inheritdoc}
    *
    * @param array $context
    *   Queue context.
+   *   {@inheritdoc}.
    *
    * @return int
    *   Queue priority.
    */
-  protected function getQueuePriority(array $context) {
+  protected function getQueuePriority(array $context)
+  {
     $priority_name = $context['priority'] ?? 'normal';
 
     $priority_map = [
@@ -471,15 +517,17 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets default configuration.
+   * {@inheritdoc}
    *
    * @return array
    *   Default configuration.
    */
-  protected function getDefaultConfig() {
+  protected function getDefaultConfig()
+  {
     return [
-      'enabled' => FALSE,
+      'enabled' => false,
       'default_dimension' => 1536,
-      'fallback_to_sync' => TRUE,
+      'fallback_to_sync' => true,
     // Use batch processing for 5+ items.
       'batch_threshold' => 5,
       'priority_mapping' => [
@@ -489,5 +537,4 @@ class QueuedEmbeddingService implements EmbeddingServiceInterface {
       ],
     ];
   }
-
 }

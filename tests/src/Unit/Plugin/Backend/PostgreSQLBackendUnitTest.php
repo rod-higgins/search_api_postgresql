@@ -15,7 +15,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class PostgreSQLBackendUnitTest extends TestCase {
+class PostgreSQLBackendUnitTest extends TestCase
+{
   /**
    * The PostgreSQL backend plugin under test.
    *
@@ -31,7 +32,8 @@ class PostgreSQLBackendUnitTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load the actual module files.
@@ -41,57 +43,66 @@ class PostgreSQLBackendUnitTest extends TestCase {
     $this->logger = new class implements LoggerInterface {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function emergency($message, array $context = []) {
+      public function emergency($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function alert($message, array $context = []) {
+      public function alert($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function critical($message, array $context = []) {
+      public function critical($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function error($message, array $context = []) {
+      public function error($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function warning($message, array $context = []) {
+      public function warning($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function notice($message, array $context = []) {
+      public function notice($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function info($message, array $context = []) {
+      public function info($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function debug($message, array $context = []) {
+      public function debug($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function log($level, $message, array $context = []) {
+      public function log($level, $message, array $context = [])
+      {
       }
 
     };
@@ -100,14 +111,16 @@ class PostgreSQLBackendUnitTest extends TestCase {
     $loggerFactory = new class ($this->logger) implements LoggerChannelFactoryInterface {
       private $logger;
 
-      public function __construct($logger) {
+      public function __construct($logger)
+      {
         $this->logger = $logger;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function get($channel) {
+      public function get($channel)
+      {
         return $this->logger;
       }
 
@@ -117,120 +130,137 @@ class PostgreSQLBackendUnitTest extends TestCase {
     $configFactory = new class implements ConfigFactoryInterface {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function get($name) {
+      public function get($name)
+      {
         return new class implements Config {
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function get($key = '') {
+          public function get($key = '')
+          {
             return [];
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function set($key, $value) {
+          public function set($key, $value)
+          {
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function save($has_trusted_data = FALSE) {
+          public function save($has_trusted_data = false)
+          {
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function delete() {
+          public function delete()
+          {
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function getName() {
+          public function getName()
+          {
             return 'test';
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function getCacheTags() {
+          public function getCacheTags()
+          {
             return [];
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function getCacheMaxAge() {
+          public function getCacheMaxAge()
+          {
             return 0;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function getCacheContexts() {
+          public function getCacheContexts()
+          {
             return [];
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function merge(array $data_to_merge) {
+          public function merge(array $data_to_merge)
+          {
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function clear($key) {
+          public function clear($key)
+          {
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function setData(array $data) {
+          public function setData(array $data)
+          {
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function getRawData() {
+          public function getRawData()
+          {
             return [];
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function isNew() {
-            return FALSE;
+          public function isNew()
+          {
+            return false;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function getOriginal($key = '', $apply_overrides = TRUE) {
-            return NULL;
+          public function getOriginal($key = '', $apply_overrides = true)
+          {
+            return null;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function setModuleOverride(array $data) {
+          public function setModuleOverride(array $data)
+          {
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function setSettingsOverride(array $data) {
+          public function setSettingsOverride(array $data)
+          {
             return $this;
           }
 
@@ -238,43 +268,49 @@ class PostgreSQLBackendUnitTest extends TestCase {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getEditable($name) {
+      public function getEditable($name)
+      {
         return $this->get($name);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getCacheKeys() {
+      public function getCacheKeys()
+      {
         return [];
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function clearStaticCache() {
+      public function clearStaticCache()
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function listAll($prefix = '') {
+      public function listAll($prefix = '')
+      {
         return [];
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function rename($old_name, $new_name) {
+      public function rename($old_name, $new_name)
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function reset($name = NULL) {
+      public function reset($name = null)
+      {
         return $this;
       }
 
@@ -283,411 +319,471 @@ class PostgreSQLBackendUnitTest extends TestCase {
     // Create minimal database connection.
     $database = new class implements Connection {
 
-      public function __construct() {
+      public function __construct()
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function query($query, array $args = [], array $options = []) {
-        return TRUE;
+      public function query($query, array $args = [], array $options = [])
+      {
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function select($table, $alias = NULL, array $options = []) {
+      public function select($table, $alias = null, array $options = [])
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function insert($table, array $options = []) {
+      public function insert($table, array $options = [])
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function update($table, array $options = []) {
+      public function update($table, array $options = [])
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function delete($table, array $options = []) {
+      public function delete($table, array $options = [])
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function merge($table, array $options = []) {
+      public function merge($table, array $options = [])
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function upsert($table, array $options = []) {
+      public function upsert($table, array $options = [])
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function condition($field, $value = NULL, $operator = '=') {
+      public function condition($field, $value = null, $operator = '=')
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function isNull($field) {
+      public function isNull($field)
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function isNotNull($field) {
+      public function isNotNull($field)
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function exists($table) {
-        return TRUE;
+      public function exists($table)
+      {
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function range($start = NULL, $length = NULL) {
+      public function range($start = null, $length = null)
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function union($query, $type = '') {
+      public function union($query, $type = '')
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function addExpression($expression, $alias = NULL, $arguments = []) {
+      public function addExpression($expression, $alias = null, $arguments = [])
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function orderBy($field, $direction = 'ASC') {
+      public function orderBy($field, $direction = 'ASC')
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function orderRandom() {
+      public function orderRandom()
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function groupBy($field) {
+      public function groupBy($field)
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function havingCondition($field, $value = NULL, $operator = '=') {
+      public function havingCondition($field, $value = null, $operator = '=')
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function fields($table_alias, array $fields = []) {
+      public function fields($table_alias, array $fields = [])
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function addField($table_alias, $field, $alias = NULL) {
+      public function addField($table_alias, $field, $alias = null)
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function removeField($field) {
+      public function removeField($field)
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getFields() {
+      public function getFields()
+      {
         return [];
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function hasTag($tag) {
-        return FALSE;
+      public function hasTag($tag)
+      {
+        return false;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function hasAllTags() {
-        return FALSE;
+      public function hasAllTags()
+      {
+        return false;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function hasAnyTag() {
-        return FALSE;
+      public function hasAnyTag()
+      {
+        return false;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function addTag($tag) {
+      public function addTag($tag)
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function innerJoin($table, $alias = NULL, $condition = NULL) {
+      public function innerJoin($table, $alias = null, $condition = null)
+      {
         return $alias;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function leftJoin($table, $alias = NULL, $condition = NULL) {
+      public function leftJoin($table, $alias = null, $condition = null)
+      {
         return $alias;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function rightJoin($table, $alias = NULL, $condition = NULL) {
+      public function rightJoin($table, $alias = null, $condition = null)
+      {
         return $alias;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function join($table, $alias = NULL, $condition = NULL) {
+      public function join($table, $alias = null, $condition = null)
+      {
         return $alias;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function where($snippet, $args = []) {
+      public function where($snippet, $args = [])
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function compile($connection, $queryPlaceholder) {
+      public function compile($connection, $queryPlaceholder)
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function compiled() {
-        return FALSE;
+      public function compiled()
+      {
+        return false;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function __toString() {
+      public function __toString()
+      {
         return '';
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function execute() {
+      public function execute()
+      {
         return $this;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getConnectionOptions() {
+      public function getConnectionOptions()
+      {
         return [];
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function setConnectionOptions(array $options) {
+      public function setConnectionOptions(array $options)
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public static function open(array &$connection_options = []) {
+      public static function open(array &$connection_options = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function destroy() {
+      public function destroy()
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getTarget() {
+      public function getTarget()
+      {
         return 'default';
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getKey() {
+      public function getKey()
+      {
         return 'default';
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getLogger() {
-        return NULL;
+      public function getLogger()
+      {
+        return null;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function setLogger($logger) {
+      public function setLogger($logger)
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function schema() {
-        return NULL;
+      public function schema()
+      {
+        return null;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function startTransaction($name = '') {
-        return NULL;
+      public function startTransaction($name = '')
+      {
+        return null;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function rollBack($savepoint_name = '') {
+      public function rollBack($savepoint_name = '')
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function pushTransaction($name) {
+      public function pushTransaction($name)
+      {
         return '';
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function popTransaction($name) {
+      public function popTransaction($name)
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function inTransaction() {
-        return FALSE;
+      public function inTransaction()
+      {
+        return false;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function transactionDepth() {
+      public function transactionDepth()
+      {
         return 0;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function commit() {
+      public function commit()
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function supportsTransactions() {
-        return TRUE;
+      public function supportsTransactions()
+      {
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function supportsTransactionalDDL() {
-        return TRUE;
+      public function supportsTransactionalDDL()
+      {
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function databaseType() {
+      public function databaseType()
+      {
         return 'pgsql';
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function version() {
+      public function version()
+      {
         return '13.0';
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function isEventSupported($event) {
-        return FALSE;
+      public function isEventSupported($event)
+      {
+        return false;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function addConnectionOptions(array $options) {
+      public function addConnectionOptions(array $options)
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function driver() {
+      public function driver()
+      {
         return 'pgsql';
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function clientVersion() {
+      public function clientVersion()
+      {
         return '13.0';
       }
 
@@ -710,13 +806,13 @@ class PostgreSQLBackendUnitTest extends TestCase {
     ];
 
     $this->backend = new PostgreSQLBackend(
-          $configuration,
-          $plugin_id,
-          $plugin_definition,
-          $database,
-          $configFactory,
-          $loggerFactory
-      );
+        $configuration,
+        $plugin_id,
+        $plugin_definition,
+        $database,
+        $configFactory,
+        $loggerFactory
+    );
   }
 
   /**
@@ -725,7 +821,8 @@ class PostgreSQLBackendUnitTest extends TestCase {
    * @covers ::getPluginId
    * @covers ::label
    */
-  public function testBackendIdentification() {
+  public function testBackendIdentification()
+  {
     $this->assertEquals('postgresql', $this->backend->getPluginId());
     $this->assertNotEmpty($this->backend->label());
   }
@@ -735,7 +832,8 @@ class PostgreSQLBackendUnitTest extends TestCase {
    *
    * @covers ::getSupportedFeatures
    */
-  public function testSupportedFeatures() {
+  public function testSupportedFeatures()
+  {
     $features = $this->backend->getSupportedFeatures();
 
     $this->assertIsArray($features);
@@ -748,7 +846,8 @@ class PostgreSQLBackendUnitTest extends TestCase {
    *
    * @covers ::getSupportedDataTypes
    */
-  public function testSupportedDataTypes() {
+  public function testSupportedDataTypes()
+  {
     $dataTypes = $this->backend->getSupportedDataTypes();
 
     $this->assertIsArray($dataTypes);
@@ -765,7 +864,8 @@ class PostgreSQLBackendUnitTest extends TestCase {
    *
    * @covers ::supportsDataType
    */
-  public function testSupportsDataType() {
+  public function testSupportsDataType()
+  {
     $this->assertTrue($this->backend->supportsDataType('text'));
     $this->assertTrue($this->backend->supportsDataType('string'));
     $this->assertTrue($this->backend->supportsDataType('integer'));
@@ -777,7 +877,8 @@ class PostgreSQLBackendUnitTest extends TestCase {
    *
    * @covers ::buildConfigurationForm
    */
-  public function testBuildConfigurationForm() {
+  public function testBuildConfigurationForm()
+  {
     $form = [];
     $form_state = $this->createMock('\Drupal\Core\Form\FormStateInterface');
 
@@ -792,13 +893,14 @@ class PostgreSQLBackendUnitTest extends TestCase {
    *
    * @covers ::validateConfigurationForm
    */
-  public function testValidateConfigurationForm() {
+  public function testValidateConfigurationForm()
+  {
     $form = [];
     $form_state = $this->createMock('\Drupal\Core\Form\FormStateInterface');
 
     // Should not throw any exceptions with valid form state.
     $this->backend->validateConfigurationForm($form, $form_state);
-    $this->assertTrue(TRUE);
+    $this->assertTrue(true);
   }
 
   /**
@@ -806,7 +908,8 @@ class PostgreSQLBackendUnitTest extends TestCase {
    *
    * @covers ::submitConfigurationForm
    */
-  public function testSubmitConfigurationForm() {
+  public function testSubmitConfigurationForm()
+  {
     $form = [];
     $form_state = $this->createMock('\Drupal\Core\Form\FormStateInterface');
     $form_state->method('getValues')->willReturn([
@@ -821,7 +924,7 @@ class PostgreSQLBackendUnitTest extends TestCase {
 
     // Should not throw any exceptions.
     $this->backend->submitConfigurationForm($form, $form_state);
-    $this->assertTrue(TRUE);
+    $this->assertTrue(true);
   }
 
   /**
@@ -829,9 +932,10 @@ class PostgreSQLBackendUnitTest extends TestCase {
    *
    * @covers ::isAvailable
    */
-  public function testIsAvailable() {
+  public function testIsAvailable()
+  {
     // Mock successful database connection.
-    $this->database->method('query')->willReturn(TRUE);
+    $this->database->method('query')->willReturn(true);
 
     $this->assertTrue($this->backend->isAvailable());
   }
@@ -841,7 +945,8 @@ class PostgreSQLBackendUnitTest extends TestCase {
    *
    * @covers ::getServerDescription
    */
-  public function testGetServerDescription() {
+  public function testGetServerDescription()
+  {
     $description = $this->backend->getServerDescription();
 
     $this->assertIsArray($description);
@@ -853,7 +958,8 @@ class PostgreSQLBackendUnitTest extends TestCase {
    *
    * @covers ::viewSettings
    */
-  public function testViewSettings() {
+  public function testViewSettings()
+  {
     $settings = $this->backend->viewSettings();
 
     $this->assertIsArray($settings);
@@ -864,11 +970,11 @@ class PostgreSQLBackendUnitTest extends TestCase {
    *
    * @covers ::defaultConfiguration
    */
-  public function testDefaultConfiguration() {
+  public function testDefaultConfiguration()
+  {
     $config = $this->backend->defaultConfiguration();
 
     $this->assertIsArray($config);
     $this->assertArrayHasKey('database', $config);
   }
-
 }

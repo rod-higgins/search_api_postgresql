@@ -13,10 +13,11 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Tests for the Cache Management form.
  *
- * @group search_api_postgresql
+ * @group              search_api_postgresql
  * @coversDefaultClass \Drupal\search_api_postgresql\Form\CacheManagementForm
  */
-class CacheManagementFormTest extends UnitTestCase {
+class CacheManagementFormTest extends UnitTestCase
+{
   /**
    * The form under test.
    *
@@ -41,7 +42,8 @@ class CacheManagementFormTest extends UnitTestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->cache = $this->createMock(EmbeddingCacheInterface::class);
@@ -60,7 +62,8 @@ class CacheManagementFormTest extends UnitTestCase {
    *
    * @covers ::getFormId
    */
-  public function testGetFormId() {
+  public function testGetFormId()
+  {
     $formId = $this->form->getFormId();
     $this->assertEquals('search_api_postgresql_cache_management', $formId);
   }
@@ -70,7 +73,8 @@ class CacheManagementFormTest extends UnitTestCase {
    *
    * @covers ::buildForm
    */
-  public function testBuildForm() {
+  public function testBuildForm()
+  {
     $form = [];
     $form_state = $this->createMock(FormStateInterface::class);
 
@@ -97,7 +101,8 @@ class CacheManagementFormTest extends UnitTestCase {
    *
    * @covers ::buildForm
    */
-  public function testCacheStatisticsDisplay() {
+  public function testCacheStatisticsDisplay()
+  {
     $form = [];
     $form_state = $this->createMock(FormStateInterface::class);
 
@@ -126,7 +131,8 @@ class CacheManagementFormTest extends UnitTestCase {
    *
    * @covers ::submitForm
    */
-  public function testSubmitFormClearCache() {
+  public function testSubmitFormClearCache()
+  {
     $form = [
       'actions' => [
         'clear_cache' => ['#name' => 'clear_cache'],
@@ -140,7 +146,7 @@ class CacheManagementFormTest extends UnitTestCase {
     ]);
 
     // Mock successful cache clear.
-    $this->cache->method('clear')->willReturn(TRUE);
+    $this->cache->method('clear')->willReturn(true);
 
     // Expect success message.
     $this->messenger->expects($this->once())
@@ -155,7 +161,8 @@ class CacheManagementFormTest extends UnitTestCase {
    *
    * @covers ::submitForm
    */
-  public function testSubmitFormRunMaintenance() {
+  public function testSubmitFormRunMaintenance()
+  {
     $form = [
       'actions' => [
         'run_maintenance' => ['#name' => 'run_maintenance'],
@@ -169,7 +176,7 @@ class CacheManagementFormTest extends UnitTestCase {
     ]);
 
     // Mock successful maintenance.
-    $this->cache->method('maintenance')->willReturn(TRUE);
+    $this->cache->method('maintenance')->willReturn(true);
 
     // Expect success message.
     $this->messenger->expects($this->once())
@@ -184,7 +191,8 @@ class CacheManagementFormTest extends UnitTestCase {
    *
    * @covers ::submitForm
    */
-  public function testSubmitFormClearCacheFailure() {
+  public function testSubmitFormClearCacheFailure()
+  {
     $form = [
       'actions' => [
         'clear_cache' => ['#name' => 'clear_cache'],
@@ -197,7 +205,7 @@ class CacheManagementFormTest extends UnitTestCase {
     ]);
 
     // Mock cache clear failure.
-    $this->cache->method('clear')->willReturn(FALSE);
+    $this->cache->method('clear')->willReturn(false);
 
     // Expect error message.
     $this->messenger->expects($this->once())
@@ -212,7 +220,8 @@ class CacheManagementFormTest extends UnitTestCase {
    *
    * @covers ::submitForm
    */
-  public function testSubmitFormMaintenanceFailure() {
+  public function testSubmitFormMaintenanceFailure()
+  {
     $form = [
       'actions' => [
         'run_maintenance' => ['#name' => 'run_maintenance'],
@@ -225,7 +234,7 @@ class CacheManagementFormTest extends UnitTestCase {
     ]);
 
     // Mock maintenance failure.
-    $this->cache->method('maintenance')->willReturn(FALSE);
+    $this->cache->method('maintenance')->willReturn(false);
 
     // Expect error message.
     $this->messenger->expects($this->once())
@@ -240,7 +249,8 @@ class CacheManagementFormTest extends UnitTestCase {
    *
    * @covers ::formatCacheStats
    */
-  public function testFormatCacheStats() {
+  public function testFormatCacheStats()
+  {
     $stats = [
       'total_entries' => 2500,
       'hits' => 10000,
@@ -251,7 +261,7 @@ class CacheManagementFormTest extends UnitTestCase {
 
     $reflection = new \ReflectionClass($this->form);
     $method = $reflection->getMethod('formatCacheStats');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     $result = $method->invokeArgs($this->form, [$stats]);
 
@@ -266,10 +276,11 @@ class CacheManagementFormTest extends UnitTestCase {
    *
    * @covers ::formatCacheSize
    */
-  public function testFormatCacheSize() {
+  public function testFormatCacheSize()
+  {
     $reflection = new \ReflectionClass($this->form);
     $method = $reflection->getMethod('formatCacheSize');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     // Test bytes.
     $this->assertEquals('1023 B', $method->invokeArgs($this->form, [1023]));
@@ -289,7 +300,8 @@ class CacheManagementFormTest extends UnitTestCase {
    *
    * @covers ::create
    */
-  public function testCreateFromContainer() {
+  public function testCreateFromContainer()
+  {
     $container = $this->createMock(ContainerInterface::class);
     $container->method('get')->willReturnMap([
       ['search_api_postgresql.embedding_cache', $this->cache],
@@ -299,5 +311,4 @@ class CacheManagementFormTest extends UnitTestCase {
     $form = CacheManagementForm::create($container);
     $this->assertInstanceOf(CacheManagementForm::class, $form);
   }
-
 }

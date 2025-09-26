@@ -8,9 +8,11 @@ use Drupal\search_api_postgresql\Cache\EmbeddingCacheManager;
 /**
  * Azure OpenAI embedding service implementation with caching.
  */
-class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
+class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface
+{
   /**
    * The Azure OpenAI endpoint.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -18,6 +20,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The Azure OpenAI API key.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -25,6 +28,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The deployment name for the embedding model.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -32,6 +36,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The API version.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -39,6 +44,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The embedding dimension.
+   * {@inheritdoc}
    *
    * @var int
    */
@@ -46,6 +52,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Maximum number of retries for API calls.
+   * {@inheritdoc}
    *
    * @var int
    */
@@ -53,6 +60,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Delay between retries in milliseconds.
+   * {@inheritdoc}
    *
    * @var int
    */
@@ -60,6 +68,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The embedding cache manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
    */
@@ -67,6 +76,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Constructs an Azure OpenAI embedding service.
+   * {@inheritdoc}
    *
    * @param string $endpoint
    *   The Azure OpenAI endpoint (e.g., https://myresource.openai.azure.com/).
@@ -85,7 +95,16 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
    * @param \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager|null $cache_manager
    *   The embedding cache manager (optional).
    */
-  public function __construct($endpoint, $api_key, $deployment_name, $api_version = '2024-02-01', $dimension = 1536, $max_retries = 3, $retry_delay = 1000, ?EmbeddingCacheManager $cache_manager = NULL) {
+  public function __construct(
+      $endpoint,
+      $api_key,
+      $deployment_name,
+      $api_version = '2024-02-01',
+      $dimension = 1536,
+      $max_retries = 3,
+      $retry_delay = 1000,
+      ?EmbeddingCacheManager $cache_manager = null
+  ) {
     $this->endpoint = rtrim($endpoint, '/');
     $this->apiKey = $api_key;
     $this->deploymentName = $deployment_name;
@@ -99,12 +118,13 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function generateEmbedding($text) {
+  public function generateEmbedding($text)
+  {
     // Clean and prepare text.
     $text = $this->preprocessText($text);
 
     if (empty($text)) {
-      return NULL;
+      return null;
     }
 
     // Try to get from cache first.
@@ -112,7 +132,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
       $metadata = $this->getCacheMetadata();
       $cached_embedding = $this->cacheManager->getCachedEmbedding($text, $metadata);
 
-      if ($cached_embedding !== NULL) {
+      if ($cached_embedding !== null) {
         return $cached_embedding;
       }
     }
@@ -132,7 +152,8 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function generateBatchEmbeddings(array $texts) {
+  public function generateBatchEmbeddings(array $texts)
+  {
     if (empty($texts)) {
       return [];
     }
@@ -167,14 +188,12 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
         if (isset($cached_embeddings[$i])) {
           $final_embeddings[$original_index] = $cached_embeddings[$i];
-        }
-        else {
+        } else {
           $texts_to_generate[] = $text;
           $indices_to_generate[] = $original_index;
         }
       }
-    }
-    else {
+    } else {
       // No cache, generate all embeddings.
       $texts_to_generate = $processed_texts;
       $indices_to_generate = $original_indices;
@@ -205,24 +224,28 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function getDimension() {
+  public function getDimension()
+  {
     return $this->dimension;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function isAvailable() {
+  public function isAvailable()
+  {
     return !empty($this->endpoint) && !empty($this->apiKey) && !empty($this->deploymentName);
   }
 
   /**
    * Tests the Azure OpenAI service connectivity.
+   * {@inheritdoc}
    *
    * @return array
    *   Test results with success status and details.
    */
-  public function testConnection() {
+  public function testConnection()
+  {
     try {
       // Test with a simple embedding generation.
       $test_text = 'test connection';
@@ -230,7 +253,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
       if ($embedding && is_array($embedding) && count($embedding) === $this->dimension) {
         return [
-          'success' => TRUE,
+          'success' => true,
           'message' => 'Azure OpenAI connection successful',
           'endpoint' => $this->endpoint,
           'deployment' => $this->deploymentName,
@@ -240,15 +263,14 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
       }
 
       return [
-        'success' => FALSE,
+        'success' => false,
         'message' => 'Invalid response from Azure OpenAI API',
         'endpoint' => $this->endpoint,
         'dimension' => $embedding ? count($embedding) : 0,
       ];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       return [
-        'success' => FALSE,
+        'success' => false,
         'message' => 'Azure OpenAI connection failed: ' . $e->getMessage(),
         'endpoint' => $this->endpoint,
         'exception' => get_class($e),
@@ -258,56 +280,63 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Generates a single embedding from the API.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The preprocessed text.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   The embedding vector or NULL on failure.
    */
-  protected function generateEmbeddingFromApi($text) {
+  protected function generateEmbeddingFromApi($text)
+  {
     $url = sprintf(
-          '%s/openai/deployments/%s/embeddings?api-version=%s',
-          $this->endpoint,
-          $this->deploymentName,
-          $this->apiVersion
-      );
+        '%s/openai/deployments/%s/embeddings?api-version=%s',
+        $this->endpoint,
+        $this->deploymentName,
+        $this->apiVersion
+    );
 
     $data = [
       'input' => $text,
     ];
 
-    $result = $this->makeApiCall($url, $data, FALSE);
+    $result = $this->makeApiCall($url, $data, false);
     return $result;
   }
 
   /**
    * Generates batch embeddings from the API.
+   * {@inheritdoc}
    *
    * @param array $texts
    *   Array of preprocessed texts.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of embedding vectors.
    */
-  protected function generateBatchEmbeddingsFromApi(array $texts) {
+  protected function generateBatchEmbeddingsFromApi(array $texts)
+  {
     $url = sprintf(
-          '%s/openai/deployments/%s/embeddings?api-version=%s',
-          $this->endpoint,
-          $this->deploymentName,
-          $this->apiVersion
-      );
+        '%s/openai/deployments/%s/embeddings?api-version=%s',
+        $this->endpoint,
+        $this->deploymentName,
+        $this->apiVersion
+    );
 
     $data = [
       'input' => $texts,
     ];
 
-    $result = $this->makeApiCall($url, $data, TRUE);
+    $result = $this->makeApiCall($url, $data, true);
     return $result ?: [];
   }
 
   /**
    * Makes an API call to Azure OpenAI with retry logic.
+   * {@inheritdoc}
    *
    * @param string $url
    *   The API endpoint URL.
@@ -315,11 +344,13 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
    *   The request data.
    * @param bool $is_batch
    *   Whether this is a batch request.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   The embedding(s) or NULL on failure.
    */
-  protected function makeApiCall($url, array $data, $is_batch = FALSE) {
+  protected function makeApiCall($url, array $data, $is_batch = false)
+  {
     $headers = [
       'Content-Type: application/json',
       'api-key: ' . $this->apiKey,
@@ -330,12 +361,12 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
       $curl = curl_init();
       curl_setopt_array($curl, [
         CURLOPT_URL => $url,
-        CURLOPT_RETURNTRANSFER => TRUE,
-        CURLOPT_POST => TRUE,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => json_encode($data),
         CURLOPT_HTTPHEADER => $headers,
         CURLOPT_TIMEOUT => 30,
-        CURLOPT_SSL_VERIFYPEER => TRUE,
+        CURLOPT_SSL_VERIFYPEER => true,
       ]);
 
       $response = curl_exec($curl);
@@ -353,7 +384,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
       }
 
       if ($http_code === 200) {
-        $result = json_decode($response, TRUE);
+        $result = json_decode($response, true);
 
         if (isset($result['error'])) {
           throw new SearchApiException('Azure OpenAI API error: ' . $result['error']['message']);
@@ -365,9 +396,8 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
             $embeddings[] = $item['embedding'];
           }
           return $embeddings;
-        }
-        else {
-          return $result['data'][0]['embedding'] ?? NULL;
+        } else {
+          return $result['data'][0]['embedding'] ?? null;
         }
       }
 
@@ -383,16 +413,18 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
       throw new SearchApiException('Azure OpenAI API error: HTTP ' . $http_code . ' - ' . $response);
     }
 
-    return NULL;
+    return null;
   }
 
   /**
    * Gets cache metadata for this embedding service.
+   * {@inheritdoc}
    *
    * @return array
    *   Metadata array for cache key generation.
    */
-  protected function getCacheMetadata() {
+  protected function getCacheMetadata()
+  {
     return [
       'service' => 'azure_openai',
       'endpoint' => $this->endpoint,
@@ -404,14 +436,17 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Preprocesses text before embedding generation.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The input text.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The preprocessed text.
    */
-  protected function preprocessText($text) {
+  protected function preprocessText($text)
+  {
     // Remove excessive whitespace.
     $text = preg_replace('/\s+/', ' ', trim($text));
 
@@ -425,7 +460,7 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
       $text = substr($text, 0, $max_chars);
       // Try to break at word boundary.
       $last_space = strrpos($text, ' ');
-      if ($last_space !== FALSE && $last_space > $max_chars * 0.8) {
+      if ($last_space !== false && $last_space > $max_chars * 0.8) {
         $text = substr($text, 0, $last_space);
       }
     }
@@ -435,29 +470,32 @@ class AzureOpenAIEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets cache statistics for this service.
+   * {@inheritdoc}
    *
    * @return array
    *   Cache statistics if cache manager is available.
    */
-  public function getCacheStats() {
+  public function getCacheStats()
+  {
     if ($this->cacheManager) {
       return $this->cacheManager->getCacheStatistics();
     }
-    return ['cache_enabled' => FALSE];
+    return ['cache_enabled' => false];
   }
 
   /**
    * Invalidates cache entries for this service.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if cache was invalidated.
+   *   true if cache was invalidated.
    */
-  public function invalidateCache() {
+  public function invalidateCache()
+  {
     if ($this->cacheManager) {
       $metadata = $this->getCacheMetadata();
       return $this->cacheManager->invalidateByMetadata($metadata) > 0;
     }
-    return FALSE;
+    return false;
   }
-
 }

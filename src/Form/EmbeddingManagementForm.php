@@ -15,9 +15,11 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Form for managing embeddings across all PostgreSQL servers and indexes.
  */
-class EmbeddingManagementForm extends FormBase {
+class EmbeddingManagementForm extends FormBase
+{
   /**
    * The entity type manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
@@ -25,6 +27,7 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * The embedding queue manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
    */
@@ -32,6 +35,7 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * The embedding analytics service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\EmbeddingAnalyticsService
    */
@@ -39,6 +43,7 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Constructs an EmbeddingManagementForm.
+   * {@inheritdoc}
    *
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity type manager.
@@ -48,9 +53,9 @@ class EmbeddingManagementForm extends FormBase {
    *   The embedding analytics service.
    */
   public function __construct(
-    EntityTypeManagerInterface $entity_type_manager,
-    EmbeddingQueueManager $queue_manager,
-    EmbeddingAnalyticsService $analytics_service,
+      EntityTypeManagerInterface $entity_type_manager,
+      EmbeddingQueueManager $queue_manager,
+      EmbeddingAnalyticsService $analytics_service,
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->queueManager = $queue_manager;
@@ -60,36 +65,42 @@ class EmbeddingManagementForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
+  public static function create(ContainerInterface $container)
+  {
     return new static(
-          $container->get('entity_type.manager'),
-          $container->get('search_api_postgresql.embedding_queue_manager'),
-          $container->get('search_api_postgresql.analytics')
-      );
+        $container->get('entity_type.manager'),
+        $container->get('search_api_postgresql.embedding_queue_manager'),
+        $container->get('search_api_postgresql.analytics')
+    );
   }
 
   /**
+   * {@inheritdoc}
    * {@inheritdoc}
    *
    * @return string
    *   The form ID.
    */
-  public function getFormId() {
+  public function getFormId()
+  {
     return 'search_api_postgresql_embedding_management';
   }
 
   /**
+   * {@inheritdoc}
    * {@inheritdoc}
    *
    * @param array $form
    *   The form array.
    * @param \Drupal\Core\Form\FormStateInterface $form_state
    *   The form state.
+   *   {@inheritdoc}.
    *
    * @return array
    *   The form render array.
    */
-  public function buildForm(array $form, FormStateInterface $form_state) {
+  public function buildForm(array $form, FormStateInterface $form_state)
+  {
     $form['#attached']['library'][] = 'search_api_postgresql/admin';
 
     // Page header.
@@ -126,10 +137,10 @@ class EmbeddingManagementForm extends FormBase {
     }
 
     // Check if any servers have AI enabled.
-    $has_ai_servers = FALSE;
+    $has_ai_servers = false;
     foreach ($servers as $server) {
       if ($this->isAiEnabledForServer($server)) {
-        $has_ai_servers = TRUE;
+        $has_ai_servers = true;
         break;
       }
     }
@@ -139,7 +150,8 @@ class EmbeddingManagementForm extends FormBase {
         '#type' => 'markup',
         '#markup' => '<div class="messages messages--info">' .
         '<h3>' . $this->t('Embedding Management Not Available') . '</h3>' .
-        '<p>' . $this->t('Embedding management is only available for servers with AI embedding features enabled.') . '</p>' .
+        '<p>' . $this->t('Embedding management is only available for servers ' .
+          'with AI embedding features enabled.') . '</p>' .
         '<p>' . $this->t('Your current PostgreSQL servers are configured for traditional search only.') . '</p>' .
         '<p>' . $this->t('To enable embedding management:') . '</p>' .
         '<ol>' .
@@ -147,7 +159,8 @@ class EmbeddingManagementForm extends FormBase {
         '<li>' . $this->t('Enable AI features in your server configuration') . '</li>' .
         '<li>' . $this->t('Re-index your content to generate embeddings') . '</li>' .
         '</ol>' .
-        '<p><a href="/admin/config/search/search-api" class="button button--primary">' . $this->t('Manage Search API') . '</a></p>' .
+        '<p><a href="/admin/config/search/search-api" ' .
+          'class="button button--primary">' . $this->t('Manage Search API') . '</a></p>' .
         '</div>',
       ];
 
@@ -161,7 +174,7 @@ class EmbeddingManagementForm extends FormBase {
       $form['server_selection'] = [
         '#type' => 'details',
         '#title' => $this->t('Server Selection'),
-        '#open' => TRUE,
+        '#open' => true,
       ];
 
       $server_options = [];
@@ -205,7 +218,7 @@ class EmbeddingManagementForm extends FormBase {
       $form['operations'] = [
         '#type' => 'details',
         '#title' => $this->t('Operations'),
-        '#open' => TRUE,
+        '#open' => true,
       ];
 
       $form['operations']['operation'] = [
@@ -219,14 +232,14 @@ class EmbeddingManagementForm extends FormBase {
           'update_dimensions' => $this->t('Update vector dimensions'),
         ],
         '#default_value' => 'regenerate_missing',
-        '#required' => TRUE,
+        '#required' => true,
       ];
 
       // Advanced options.
       $form['advanced'] = [
         '#type' => 'details',
         '#title' => $this->t('Advanced Options'),
-        '#open' => FALSE,
+        '#open' => false,
       ];
 
       $form['advanced']['batch_size'] = [
@@ -242,7 +255,7 @@ class EmbeddingManagementForm extends FormBase {
         '#type' => 'checkbox',
         '#title' => $this->t('Use background queue processing'),
         '#description' => $this->t('Process embeddings in the background via queue. Recommended for large operations.'),
-        '#default_value' => TRUE,
+        '#default_value' => true,
       ];
 
       $form['advanced']['priority'] = [
@@ -256,7 +269,7 @@ class EmbeddingManagementForm extends FormBase {
         '#default_value' => 'normal',
         '#states' => [
           'visible' => [
-            ':input[name="use_queue"]' => ['checked' => TRUE],
+            ':input[name="use_queue"]' => ['checked' => true],
           ],
         ],
       ];
@@ -265,7 +278,7 @@ class EmbeddingManagementForm extends FormBase {
         '#type' => 'checkbox',
         '#title' => $this->t('Force overwrite existing embeddings'),
         '#description' => $this->t('Regenerate embeddings even if they already exist.'),
-        '#default_value' => FALSE,
+        '#default_value' => false,
         '#states' => [
           'visible' => [
             ':input[name="operation"]' => [
@@ -280,7 +293,7 @@ class EmbeddingManagementForm extends FormBase {
       $form['cost_estimation'] = [
         '#type' => 'details',
         '#title' => $this->t('Cost Estimation'),
-        '#open' => FALSE,
+        '#open' => false,
       ];
 
       $form['cost_estimation']['estimate'] = [
@@ -294,7 +307,7 @@ class EmbeddingManagementForm extends FormBase {
       $form['status'] = [
         '#type' => 'details',
         '#title' => $this->t('Current Status'),
-        '#open' => TRUE,
+        '#open' => true,
       ];
 
       $overall_stats = $this->getOverallEmbeddingStats();
@@ -329,14 +342,16 @@ class EmbeddingManagementForm extends FormBase {
       ];
 
       return $form;
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       // If anything fails, show an error message.
       $form['error'] = [
         '#type' => 'markup',
         '#markup' => '<div class="messages messages--error">' .
         '<h3>' . $this->t('Embedding Management Error') . '</h3>' .
-        '<p>' . $this->t('There was an error loading the embedding management interface: @error', ['@error' => $e->getMessage()]) . '</p>' .
+        '<p>' . $this->t(
+            'There was an error loading the embedding management interface: @error',
+            ['@error' => $e->getMessage()]
+        ) . '</p>' .
         '</div>',
       ];
 
@@ -346,11 +361,13 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Gets overall embedding statistics.
+   * {@inheritdoc}
    *
    * @return array
    *   Array of embedding statistics.
    */
-  protected function getOverallEmbeddingStats() {
+  protected function getOverallEmbeddingStats()
+  {
     $stats = [
       'total_items' => 0,
       'items_with_embeddings' => 0,
@@ -377,18 +394,15 @@ class EmbeddingManagementForm extends FormBase {
           try {
             if (method_exists($backend, 'getVectorStats')) {
               $index_stats = $backend->getVectorStats($index);
-            }
-            elseif (method_exists($backend, 'getAzureVectorStats')) {
+            } elseif (method_exists($backend, 'getAzureVectorStats')) {
               $index_stats = $backend->getAzureVectorStats($index);
-            }
-            else {
+            } else {
               continue;
             }
 
             $stats['total_items'] += $index_stats['total_items'] ?? 0;
             $stats['items_with_embeddings'] += $index_stats['items_with_embeddings'] ?? 0;
-          }
-          catch (\Exception $e) {
+          } catch (\Exception $e) {
             // Skip indexes with errors.
             continue;
           }
@@ -404,8 +418,7 @@ class EmbeddingManagementForm extends FormBase {
       try {
         $queue_stats = $this->queueManager->getQueueStats();
         $stats['queue_pending'] = $queue_stats['items_pending'] ?? 0;
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $stats['queue_pending'] = 0;
       }
 
@@ -413,14 +426,12 @@ class EmbeddingManagementForm extends FormBase {
       try {
         $cost_data = $this->analyticsService->getCostAnalytics('30d');
         $stats['monthly_cost'] = $cost_data['projected_monthly'] ?? 0;
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $stats['monthly_cost'] = 0;
       }
 
       return $stats;
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       // If anything fails, return default stats.
       return $stats;
     }
@@ -428,38 +439,43 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Helper method to check if AI is enabled for a server.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Entity\Server $server
    *   The server entity.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if AI is enabled for the server.
+   *   true if AI is enabled for the server.
    */
-  protected function isAiEnabledForServer($server) {
+  protected function isAiEnabledForServer($server)
+  {
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
 
-      return ($config['ai_embeddings']['enabled'] ?? FALSE) ||
-            ($config['azure_embedding']['enabled'] ?? FALSE);
-    }
-    catch (\Exception $e) {
-      return FALSE;
+      return ($config['ai_embeddings']['enabled'] ?? false) ||
+            ($config['azure_embedding']['enabled'] ?? false);
+    } catch (\Exception $e) {
+      return false;
     }
   }
 
   /**
    * AJAX callback for updating index options.
+   * {@inheritdoc}
    *
    * @param array $form
    *   The form array.
    * @param \Drupal\Core\Form\FormStateInterface $form_state
    *   The form state.
+   *   {@inheritdoc}.
    *
    * @return array
    *   The updated form element.
    */
-  public function updateIndexOptions(array &$form, FormStateInterface $form_state) {
+  public function updateIndexOptions(array &$form, FormStateInterface $form_state)
+  {
     $server_id = $form_state->getValue('server_id');
     $index_options = $this->getIndexOptions($server_id);
 
@@ -470,13 +486,15 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * {@inheritdoc}
+   * {@inheritdoc}
    *
    * @param array $form
    *   The form array.
    * @param \Drupal\Core\Form\FormStateInterface $form_state
    *   The form state.
    */
-  public function validateForm(array &$form, FormStateInterface $form_state) {
+  public function validateForm(array &$form, FormStateInterface $form_state)
+  {
     $operation = $form_state->getValue('operation');
     $server_id = $form_state->getValue('server_id');
     $index_id = $form_state->getValue('index_id');
@@ -494,9 +512,9 @@ class EmbeddingManagementForm extends FormBase {
     if (in_array($operation, ['clear_embeddings', 'regenerate_all'])) {
       if (!$form_state->getValue('force_overwrite')) {
         $form_state->setErrorByName(
-              'force_overwrite',
-              $this->t('You must confirm that you want to perform this destructive operation.')
-          );
+            'force_overwrite',
+            $this->t('You must confirm that you want to perform this destructive operation.')
+        );
       }
     }
 
@@ -504,25 +522,26 @@ class EmbeddingManagementForm extends FormBase {
     $batch_size = $form_state->getValue('batch_size');
     if ($batch_size < 1 || $batch_size > $this->config->get('max_batch_size', 1000)) {
       $form_state->setErrorByName(
-            'batch_size',
-            $this->t('Batch size must be between 1 and 1000.')
-        );
+          'batch_size',
+          $this->t('Batch size must be between 1 and 1000.')
+      );
     }
 
     // Check if queue is enabled when requested.
     $use_queue = $form_state->getValue('use_queue');
     if ($use_queue) {
       $queue_stats = $this->queueManager->getQueueStats();
-      if (!($queue_stats['config']['enabled'] ?? FALSE)) {
+      if (!($queue_stats['config']['enabled'] ?? false)) {
         $form_state->setErrorByName(
-              'use_queue',
-              $this->t('Queue processing is not enabled. Enable it in the queue management settings.')
-          );
+            'use_queue',
+            $this->t('Queue processing is not enabled. Enable it in the queue management settings.')
+        );
       }
     }
   }
 
   /**
+   * {@inheritdoc}
    * {@inheritdoc}
    *
    * @param array $form
@@ -530,7 +549,8 @@ class EmbeddingManagementForm extends FormBase {
    * @param \Drupal\Core\Form\FormStateInterface $form_state
    *   The form state.
    */
-  public function submitForm(array &$form, FormStateInterface $form_state) {
+  public function submitForm(array &$form, FormStateInterface $form_state)
+  {
     $values = $form_state->getValues();
     $operation = $values['operation'];
     $server_id = $values['server_id'];
@@ -559,27 +579,26 @@ class EmbeddingManagementForm extends FormBase {
     // Display results.
     if ($results['success']) {
       $this->messenger()->addStatus(
-            $this->t('Operation "@operation" completed successfully. @details', [
-              '@operation' => $operation,
-              '@details' => $results['message'],
-            ])
-        );
+          $this->t('Operation "@operation" completed successfully. @details', [
+            '@operation' => $operation,
+            '@details' => $results['message'],
+          ])
+      );
 
       if ($use_queue && $results['queued_items'] > 0) {
         $this->messenger()->addStatus(
             $this->t('@count items have been queued for background processing.', [
               '@count' => $results['queued_items'],
             ])
-            );
+        );
       }
-    }
-    else {
+    } else {
       $this->messenger()->addError(
-            $this->t('Operation "@operation" failed: @error', [
-              '@operation' => $operation,
-              '@error' => $results['error'],
-            ])
-            );
+          $this->t('Operation "@operation" failed: @error', [
+            '@operation' => $operation,
+            '@error' => $results['error'],
+          ])
+      );
     }
 
     // Redirect to results page if available.
@@ -592,13 +611,15 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Preview changes form submission handler.
+   * {@inheritdoc}
    *
    * @param array $form
    *   The form array.
    * @param \Drupal\Core\Form\FormStateInterface $form_state
    *   The form state.
    */
-  public function previewChanges(array &$form, FormStateInterface $form_state) {
+  public function previewChanges(array &$form, FormStateInterface $form_state)
+  {
     $values = $form_state->getValues();
     $server_id = $values['server_id'];
     $index_id = $values['index_id'];
@@ -608,13 +629,17 @@ class EmbeddingManagementForm extends FormBase {
     $preview = $this->getOperationPreview($operation, $server_id, $index_id);
 
     $this->messenger()->addStatus(
-          $this->t('Preview: This operation would affect @items items across @servers servers and @indexes indexes. Estimated cost: $@cost', [
+        $this->t(
+            'Preview: This operation would affect @items items across @servers ' .
+            'servers and @indexes indexes. Estimated cost: $@cost',
+            [
             '@items' => number_format($preview['affected_items']),
             '@servers' => $preview['affected_servers'],
             '@indexes' => $preview['affected_indexes'],
             '@cost' => number_format($preview['estimated_cost'], 4),
-          ])
-      );
+            ]
+        )
+    );
 
     // Show detailed breakdown.
     if (!empty($preview['breakdown'])) {
@@ -627,20 +652,22 @@ class EmbeddingManagementForm extends FormBase {
       }
 
       $this->messenger()->addStatus(
-            $this->t('Breakdown: @breakdown', [
-              '@breakdown' => implode(', ', $breakdown_text),
-            ])
-        );
+          $this->t('Breakdown: @breakdown', [
+            '@breakdown' => implode(', ', $breakdown_text),
+          ])
+      );
     }
   }
 
   /**
    * Gets all PostgreSQL servers.
+   * {@inheritdoc}
    *
    * @return array
    *   Array of PostgreSQL server entities.
    */
-  protected function getPostgreSQLServers() {
+  protected function getPostgreSQLServers()
+  {
     return $this->entityTypeManager
       ->getStorage('search_api_server')
       ->loadByProperties(['backend' => ['postgresql', 'postgresql_azure']]);
@@ -648,22 +675,24 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Gets index options for a server.
+   * {@inheritdoc}
    *
    * @param string|null $server_id
    *   The server ID, or NULL for all servers.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of index options keyed by index ID.
    */
-  protected function getIndexOptions($server_id = NULL) {
+  protected function getIndexOptions($server_id = null)
+  {
     $options = [];
 
     if ($server_id) {
       $indexes = $this->entityTypeManager
         ->getStorage('search_api_index')
         ->loadByProperties(['server' => $server_id]);
-    }
-    else {
+    } else {
       // Get all indexes on PostgreSQL servers.
       $servers = $this->getPostgreSQLServers();
       $indexes = [];
@@ -684,14 +713,17 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Gets recent activity.
+   * {@inheritdoc}
    *
    * @param int $limit
    *   The maximum number of activity records to return.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of recent activity records.
    */
-  protected function getRecentActivity($limit = 10) {
+  protected function getRecentActivity($limit = 10)
+  {
     // This would typically query an activity log table
     // For now, return empty array as this would need to be implemented
     // based on the specific logging structure.
@@ -700,16 +732,19 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Gets operation targets (servers and indexes).
+   * {@inheritdoc}
    *
    * @param string|null $server_id
    *   The server ID, or NULL for all servers.
    * @param string|null $index_id
    *   The index ID, or NULL for all indexes.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of operation targets.
    */
-  protected function getOperationTargets($server_id = NULL, $index_id = NULL) {
+  protected function getOperationTargets($server_id = null, $index_id = null)
+  {
     $targets = [];
 
     if ($index_id) {
@@ -722,8 +757,7 @@ class EmbeddingManagementForm extends FormBase {
           'index' => $index,
         ];
       }
-    }
-    elseif ($server_id) {
+    } elseif ($server_id) {
       // All indexes on specific server.
       $server = Server::load($server_id);
       if ($server) {
@@ -738,8 +772,7 @@ class EmbeddingManagementForm extends FormBase {
           ];
         }
       }
-    }
-    else {
+    } else {
       // All PostgreSQL servers and indexes.
       $servers = $this->getPostgreSQLServers();
       foreach ($servers as $server) {
@@ -761,6 +794,7 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Executes the selected operation.
+   * {@inheritdoc}
    *
    * @param string $operation
    *   The operation type.
@@ -768,13 +802,15 @@ class EmbeddingManagementForm extends FormBase {
    *   The operation targets.
    * @param array $options
    *   The operation options.
+   *   {@inheritdoc}.
    *
    * @return array
    *   The operation results.
    */
-  protected function executeOperation($operation, array $targets, array $options) {
+  protected function executeOperation($operation, array $targets, array $options)
+  {
     $results = [
-      'success' => FALSE,
+      'success' => false,
       'message' => '',
       'queued_items' => 0,
       'processed_items' => 0,
@@ -785,29 +821,28 @@ class EmbeddingManagementForm extends FormBase {
       switch ($operation) {
         case 'regenerate_all':
           $results = $this->executeRegenerateAll($targets, $options);
-          break;
+            break;
 
         case 'regenerate_missing':
           $results = $this->executeRegenerateMissing($targets, $options);
-          break;
+            break;
 
         case 'validate_embeddings':
           $results = $this->executeValidateEmbeddings($targets, $options);
-          break;
+            break;
 
         case 'clear_embeddings':
           $results = $this->executeClearEmbeddings($targets, $options);
-          break;
+            break;
 
         case 'update_dimensions':
           $results = $this->executeUpdateDimensions($targets, $options);
-          break;
+            break;
 
         default:
-          throw new \InvalidArgumentException("Unknown operation: {$operation}");
+            throw new \InvalidArgumentException("Unknown operation: {$operation}");
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $results['error'] = $e->getMessage();
     }
 
@@ -816,16 +851,19 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Executes regenerate all embeddings operation.
+   * {@inheritdoc}
    *
    * @param array $targets
    *   The operation targets.
    * @param array $options
    *   The operation options.
+   *   {@inheritdoc}.
    *
    * @return array
    *   The operation results.
    */
-  protected function executeRegenerateAll(array $targets, array $options) {
+  protected function executeRegenerateAll(array $targets, array $options)
+  {
     $total_queued = 0;
     $total_processed = 0;
 
@@ -835,26 +873,25 @@ class EmbeddingManagementForm extends FormBase {
 
       if ($options['use_queue']) {
         $success = $this->queueManager->queueIndexEmbeddingRegeneration(
-              $server->id(),
-              $index->id(),
-              $options['batch_size'],
-              // Start from beginning.
+            $server->id(),
+            $index->id(),
+            $options['batch_size'],
+            // Start from beginning.
               0,
-              $this->getPriorityValue($options['priority'])
-          );
+            $this->getPriorityValue($options['priority'])
+        );
 
         if ($success) {
           $total_queued++;
         }
-      }
-      else {
+      } else {
         // Direct processing (simplified for example)
         $total_processed++;
       }
     }
 
     return [
-      'success' => TRUE,
+      'success' => true,
       'message' => $this->t('Regeneration initiated for @count targets', ['@count' => count($targets)]),
       'queued_items' => $total_queued,
       'processed_items' => $total_processed,
@@ -863,32 +900,38 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Executes regenerate missing embeddings operation.
+   * {@inheritdoc}
    *
    * @param array $targets
    *   The operation targets.
    * @param array $options
    *   The operation options.
+   *   {@inheritdoc}.
    *
    * @return array
    *   The operation results.
    */
-  protected function executeRegenerateMissing(array $targets, array $options) {
+  protected function executeRegenerateMissing(array $targets, array $options)
+  {
     // Similar to regenerateAll but only for items without embeddings.
     return $this->executeRegenerateAll($targets, $options);
   }
 
   /**
    * Executes validate embeddings operation.
+   * {@inheritdoc}
    *
    * @param array $targets
    *   The operation targets.
    * @param array $options
    *   The operation options.
+   *   {@inheritdoc}.
    *
    * @return array
    *   The operation results.
    */
-  protected function executeValidateEmbeddings(array $targets, array $options) {
+  protected function executeValidateEmbeddings(array $targets, array $options)
+  {
     $validation_results = [];
 
     foreach ($targets as $target) {
@@ -905,7 +948,7 @@ class EmbeddingManagementForm extends FormBase {
     }
 
     return [
-      'success' => TRUE,
+      'success' => true,
       'message' => $this->t('Validation completed for @count targets', ['@count' => count($targets)]),
       'validation_results' => $validation_results,
     ];
@@ -913,16 +956,19 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Executes clear embeddings operation.
+   * {@inheritdoc}
    *
    * @param array $targets
    *   The operation targets.
    * @param array $options
    *   The operation options.
+   *   {@inheritdoc}.
    *
    * @return array
    *   The operation results.
    */
-  protected function executeClearEmbeddings(array $targets, array $options) {
+  protected function executeClearEmbeddings(array $targets, array $options)
+  {
     $cleared_count = 0;
 
     foreach ($targets as $target) {
@@ -935,11 +981,11 @@ class EmbeddingManagementForm extends FormBase {
         // Connect and clear embeddings.
         $reflection = new \ReflectionClass($backend);
         $connect_method = $reflection->getMethod('connect');
-        $connect_method->setAccessible(TRUE);
+        $connect_method->setAccessible(true);
         $connect_method->invoke($backend);
 
         $connector_property = $reflection->getProperty('connector');
-        $connector_property->setAccessible(TRUE);
+        $connector_property->setAccessible(true);
         $connector = $connector_property->getValue($backend);
 
         $config = $backend->getConfiguration();
@@ -950,18 +996,17 @@ class EmbeddingManagementForm extends FormBase {
         $connector->executeQuery($sql);
 
         $cleared_count++;
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         // Log error but continue with other indexes.
         $this->getLogger('search_api_postgresql')->error(
-              'Failed to clear embeddings for @index: @error',
-              ['@index' => $index->label(), '@error' => $e->getMessage()]
-                );
+            'Failed to clear embeddings for @index: @error',
+            ['@index' => $index->label(), '@error' => $e->getMessage()]
+        );
       }
     }
 
     return [
-      'success' => TRUE,
+      'success' => true,
       'message' => $this->t('Cleared embeddings for @count indexes', ['@count' => $cleared_count]),
       'processed_items' => $cleared_count,
     ];
@@ -969,26 +1014,30 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Executes update dimensions operation.
+   * {@inheritdoc}
    *
    * @param array $targets
    *   The operation targets.
    * @param array $options
    *   The operation options.
+   *   {@inheritdoc}.
    *
    * @return array
    *   The operation results.
    */
-  protected function executeUpdateDimensions(array $targets, array $options) {
+  protected function executeUpdateDimensions(array $targets, array $options)
+  {
     // This would update vector column dimensions
     // Implementation depends on specific requirements.
     return [
-      'success' => TRUE,
+      'success' => true,
       'message' => $this->t('Dimension update completed'),
     ];
   }
 
   /**
    * Gets operation preview information.
+   * {@inheritdoc}
    *
    * @param string $operation
    *   The operation type.
@@ -996,11 +1045,13 @@ class EmbeddingManagementForm extends FormBase {
    *   The server ID, or NULL for all servers.
    * @param string|null $index_id
    *   The index ID, or NULL for all indexes.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Preview information including affected items and costs.
    */
-  protected function getOperationPreview($operation, $server_id = NULL, $index_id = NULL) {
+  protected function getOperationPreview($operation, $server_id = null, $index_id = null)
+  {
     $targets = $this->getOperationTargets($server_id, $index_id);
 
     $preview = [
@@ -1027,11 +1078,9 @@ class EmbeddingManagementForm extends FormBase {
         $backend = $server->getBackend();
         if (method_exists($backend, 'getVectorStats')) {
           $stats = $backend->getVectorStats($index);
-        }
-        elseif (method_exists($backend, 'getAzureVectorStats')) {
+        } elseif (method_exists($backend, 'getAzureVectorStats')) {
           $stats = $backend->getAzureVectorStats($index);
-        }
-        else {
+        } else {
           $stats = ['total_items' => 0];
         }
 
@@ -1048,8 +1097,7 @@ class EmbeddingManagementForm extends FormBase {
           'index_name' => $index->label(),
           'item_count' => $item_count,
         ];
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         // Skip indexes with errors.
         continue;
       }
@@ -1062,14 +1110,17 @@ class EmbeddingManagementForm extends FormBase {
 
   /**
    * Converts priority name to numeric value.
+   * {@inheritdoc}
    *
    * @param string $priority
    *   The priority name (high, normal, low).
+   *   {@inheritdoc}.
    *
    * @return int
    *   The numeric priority value.
    */
-  protected function getPriorityValue($priority) {
+  protected function getPriorityValue($priority)
+  {
     $priority_map = [
       'high' => 50,
       'normal' => 100,
@@ -1078,5 +1129,4 @@ class EmbeddingManagementForm extends FormBase {
 
     return $priority_map[$priority] ?? 100;
   }
-
 }

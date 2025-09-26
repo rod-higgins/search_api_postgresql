@@ -7,9 +7,11 @@ use Drupal\search_api\Query\QueryInterface;
 /**
  * Enhanced QueryBuilder with Azure AI vector search capabilities.
  */
-class AzureVectorQueryBuilder extends QueryBuilder {
+class AzureVectorQueryBuilder extends QueryBuilder
+{
   /**
    * The Azure embedding service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface
    */
@@ -18,21 +20,29 @@ class AzureVectorQueryBuilder extends QueryBuilder {
   /**
    * {@inheritdoc}
    */
-  public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config, $embedding_service = NULL) {
+  public function __construct(
+      PostgreSQLConnector $connector,
+      FieldMapper $field_mapper,
+      array $config,
+      $embedding_service = null
+  ) {
     parent::__construct($connector, $field_mapper, $config);
     $this->embeddingService = $embedding_service;
   }
 
   /**
    * Builds a vector-only search query using Azure embeddings.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
    */
-  protected function buildVectorSearchQuery(QueryInterface $query) {
+  protected function buildVectorSearchQuery(QueryInterface $query)
+  {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
 
@@ -46,8 +56,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
     try {
       $query_embedding = $this->embeddingService->generateEmbedding($search_text);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       \Drupal::logger('search_api_postgresql')->error('Failed to generate query embedding: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -76,7 +85,8 @@ class AzureVectorQueryBuilder extends QueryBuilder {
   /**
    * {@inheritdoc}
    */
-  public function buildSearchQuery(QueryInterface $query) {
+  public function buildSearchQuery(QueryInterface $query)
+  {
     // Handle queries without search keys using parent method.
     if (!$query->getKeys()) {
       return parent::buildSearchQuery($query);
@@ -91,23 +101,24 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
     switch ($search_mode) {
       case 'vector_only':
-        return $this->buildVectorSearchQuery($query);
+          return $this->buildVectorSearchQuery($query);
 
       case 'text_only':
-        return parent::buildSearchQuery($query);
+          return parent::buildSearchQuery($query);
 
       case 'hybrid':
       default:
-        return $this->buildHybridSearchQuery($query);
+          return $this->buildHybridSearchQuery($query);
     }
   }
 
   /**
    * {@inheritdoc}
-   *
+   * {@inheritdoc}
    * Overrides parent to ensure search_api_relevance is always included.
    */
-  protected function buildSelectClause(QueryInterface $query) {
+  protected function buildSelectClause(QueryInterface $query)
+  {
     $fields = [];
 
     // Add system fields (properly quoted)
@@ -128,8 +139,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
       $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') .
         ", to_tsquery('{$fts_config}', :ts_query)) AS " .
         $this->connector->quoteColumnName('search_api_relevance');
-    }
-    else {
+    } else {
       // Without search keys: provide default relevance value.
       $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
     }
@@ -139,14 +149,17 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds a hybrid search query combining PostgreSQL FTS and Azure AI vectors.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
    */
-  protected function buildHybridSearchQuery(QueryInterface $query) {
+  protected function buildHybridSearchQuery(QueryInterface $query)
+  {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
 
@@ -158,9 +171,8 @@ class AzureVectorQueryBuilder extends QueryBuilder {
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
 
     try {
-      $query_embedding = $this->embeddingService ? $this->embeddingService->generateEmbedding($search_text) : NULL;
-    }
-    catch (\Exception $e) {
+      $query_embedding = $this->embeddingService ? $this->embeddingService->generateEmbedding($search_text) : null;
+    } catch (\Exception $e) {
       \Drupal::logger('search_api_postgresql')->error('Embedding failed, falling back to text search: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -192,14 +204,17 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds SELECT clause for vector search.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The SELECT clause.
    */
-  protected function buildVectorSelectClause(QueryInterface $query) {
+  protected function buildVectorSelectClause(QueryInterface $query)
+  {
     $fields = [];
 
     // Add system fields (properly quoted)
@@ -217,8 +232,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
       // With search keys and Azure embedding service: use vector similarity score.
       $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS " .
         $this->connector->quoteColumnName('search_api_relevance');
-    }
-    else {
+    } else {
       // Without search keys or embedding service: provide default relevance value.
       $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
     }
@@ -228,14 +242,17 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds WHERE clause for vector search.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The WHERE clause.
    */
-  protected function buildVectorWhereClause(QueryInterface $query) {
+  protected function buildVectorWhereClause(QueryInterface $query)
+  {
     $conditions = ['content_embedding IS NOT NULL'];
 
     // Add minimum similarity threshold.
@@ -252,7 +269,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
     // Handle language filtering (properly quoted)
     if ($languages = $query->getLanguages()) {
-      if ($languages !== [NULL]) {
+      if ($languages !== [null]) {
         $language_placeholders = [];
         foreach ($languages as $i => $language) {
           $language_placeholders[] = ":language_{$i}";
@@ -267,6 +284,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds SELECT clause for hybrid search.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
@@ -274,11 +292,13 @@ class AzureVectorQueryBuilder extends QueryBuilder {
    *   Weight for text search scores.
    * @param float $vector_weight
    *   Weight for vector search scores.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The SELECT clause.
    */
-  protected function buildHybridSelectClause(QueryInterface $query, $text_weight, $vector_weight) {
+  protected function buildHybridSelectClause(QueryInterface $query, $text_weight, $vector_weight)
+  {
     $fields = [];
 
     // Add system fields (properly quoted)
@@ -308,8 +328,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
         ", to_tsquery('{$fts_config}', :ts_query)) AS text_score";
       $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS vector_score";
       $fields[] = "hybrid_score AS " . $this->connector->quoteColumnName('search_api_relevance');
-    }
-    else {
+    } else {
       // Without search keys or embedding service: provide default relevance value.
       $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
     }
@@ -319,14 +338,17 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds WHERE clause for hybrid search.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The WHERE clause.
    */
-  protected function buildHybridWhereClause(QueryInterface $query) {
+  protected function buildHybridWhereClause(QueryInterface $query)
+  {
     $conditions = ['1=1'];
     $search_vector_field = $this->connector->quoteColumnName('search_vector');
 
@@ -350,7 +372,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
     // Handle language filtering (properly quoted)
     if ($languages = $query->getLanguages()) {
-      if ($languages !== [NULL]) {
+      if ($languages !== [null]) {
         $language_placeholders = [];
         foreach ($languages as $i => $language) {
           $language_placeholders[] = ":language_{$i}";
@@ -365,14 +387,17 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Extracts text from complex search keys structure.
+   * {@inheritdoc}
    *
    * @param mixed $keys
    *   The search keys.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The extracted text.
    */
-  protected function extractTextFromKeys($keys) {
+  protected function extractTextFromKeys($keys)
+  {
     if (is_string($keys)) {
       return $keys;
     }
@@ -385,8 +410,7 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
       if (is_array($value)) {
         $text_parts[] = $this->extractTextFromKeys($value);
-      }
-      else {
+      } else {
         $text_parts[] = $value;
       }
     }
@@ -396,66 +420,75 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Checks if vector search is enabled.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if vector search is enabled, FALSE otherwise.
+   *   true if vector search is enabled, false otherwise.
    */
-  protected function isVectorSearchEnabled() {
+  protected function isVectorSearchEnabled()
+  {
     return !empty($this->config['vector_search']['enabled']) ||
        !empty($this->config['azure_embedding']['enabled']);
   }
 
   /**
    * Gets the text search weight from configuration.
+   * {@inheritdoc}
    *
    * @return float
    *   The text search weight.
    */
-  protected function getTextWeight() {
+  protected function getTextWeight()
+  {
     return $this->config['hybrid_search']['text_weight'] ?? 0.6;
   }
 
   /**
    * Gets the vector search weight from configuration.
+   * {@inheritdoc}
    *
    * @return float
    *   The vector search weight.
    */
-  protected function getVectorWeight() {
+  protected function getVectorWeight()
+  {
     return $this->config['hybrid_search']['vector_weight'] ?? 0.4;
   }
 
   /**
    * Gets the similarity threshold from configuration.
+   * {@inheritdoc}
    *
    * @return float
    *   The similarity threshold.
    */
-  protected function getSimilarityThreshold() {
+  protected function getSimilarityThreshold()
+  {
     return $this->config['hybrid_search']['similarity_threshold'] ?? 0.15;
   }
 
   /**
    * Assembles SQL parts into a complete query.
+   * {@inheritdoc}
    *
    * @param array $parts
    *   Array of SQL parts.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The assembled SQL query.
    */
-  protected function assembleSqlQuery(array $parts) {
+  protected function assembleSqlQuery(array $parts)
+  {
     $sql = [];
 
     foreach (['SELECT', 'FROM', 'WHERE', 'ORDER', 'LIMIT'] as $clause) {
       if (!empty($parts[$clause])) {
         if ($clause === 'SELECT') {
           $sql[] = 'SELECT ' . $parts[$clause];
-        }
-        elseif ($clause === 'FROM' || $clause === 'WHERE') {
+        } elseif ($clause === 'FROM' || $clause === 'WHERE') {
           $sql[] = $clause . ' ' . $parts[$clause];
-        }
-        else {
+        } else {
           $sql[] = $parts[$clause];
         }
       }
@@ -463,5 +496,4 @@ class AzureVectorQueryBuilder extends QueryBuilder {
 
     return implode("\n", $sql);
   }
-
 }

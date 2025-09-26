@@ -8,11 +8,13 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Tests for ResourceExceptions.
+ * {@inheritdoc}
  *
- * @group search_api_postgresql
+ * @group  search_api_postgresql
  * @covers \Drupal\search_api_postgresql\Exception\ResourceExceptions
  */
-class ResourceExceptionsTest extends TestCase {
+class ResourceExceptionsTest extends TestCase
+{
   /**
    * The ResourceExceptions instance under test.
    */
@@ -26,7 +28,8 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load actual class.
@@ -56,65 +59,74 @@ class ResourceExceptionsTest extends TestCase {
       public $logs = [];
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function emergency($message, array $context = []) {
+      public function emergency($message, array $context = [])
+      {
         $this->log('emergency', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function alert($message, array $context = []) {
+      public function alert($message, array $context = [])
+      {
         $this->log('alert', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function critical($message, array $context = []) {
+      public function critical($message, array $context = [])
+      {
         $this->log('critical', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function error($message, array $context = []) {
+      public function error($message, array $context = [])
+      {
         $this->log('error', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function warning($message, array $context = []) {
+      public function warning($message, array $context = [])
+      {
         $this->log('warning', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function notice($message, array $context = []) {
+      public function notice($message, array $context = [])
+      {
         $this->log('notice', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function info($message, array $context = []) {
+      public function info($message, array $context = [])
+      {
         $this->log('info', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function debug($message, array $context = []) {
+      public function debug($message, array $context = [])
+      {
         $this->log('debug', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function log($level, $message, array $context = []) {
+      public function log($level, $message, array $context = [])
+      {
         $this->logs[] = ['level' => $level, 'message' => $message, 'context' => $context];
       }
 
@@ -123,8 +135,7 @@ class ResourceExceptionsTest extends TestCase {
     try {
       // Attempt to instantiate the real class.
       $this->resourceExceptions = $this->createInstance();
-    }
-    catch (\TypeError $e) {
+    } catch (\TypeError $e) {
       $this->markTestSkipped('Cannot instantiate class due to dependencies: ' . $e->getMessage());
     }
   }
@@ -132,31 +143,34 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * Creates an instance of the class under test.
    */
-  protected function createInstance() {
+  protected function createInstance()
+  {
     // Create minimal dependencies based on class requirements
     // This will vary based on the specific class.
     return new ResourceExceptions(
-          $this->logger
-      );
+        $this->logger
+    );
   }
 
   /**
    * Tests class instantiation.
    */
-  public function testClassInstantiation() {
+  public function testClassInstantiation()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
     $this->assertInstanceOf(
-          '\Drupal\search_api_postgresql\Exception\ResourceExceptions',
-          $this->resourceExceptions
-      );
+        '\Drupal\search_api_postgresql\Exception\ResourceExceptions',
+        $this->resourceExceptions
+    );
   }
 
   /**
    * Tests that essential methods exist.
    */
-  public function testEssentialMethodsExist() {
+  public function testEssentialMethodsExist()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -169,16 +183,17 @@ class ResourceExceptionsTest extends TestCase {
 
     foreach ($methods as $method) {
       $this->assertTrue(
-            method_exists($this->resourceExceptions, $method->getName()),
-            "Method {$method->getName()} should exist"
-        );
+          method_exists($this->resourceExceptions, $method->getName()),
+          "Method {$method->getName()} should exist"
+      );
     }
   }
 
   /**
    * Tests getter and setter methods.
    */
-  public function testGettersAndSetters() {
+  public function testGettersAndSetters()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -195,10 +210,9 @@ class ResourceExceptionsTest extends TestCase {
           try {
             $result = $this->resourceExceptions->$methodName();
             $this->assertNotNull($result, "Getter {$methodName} should return a value");
-          }
-          catch (\Exception $e) {
+          } catch (\Exception $e) {
             // Some getters may throw exceptions if not properly initialized.
-            $this->assertTrue(TRUE);
+            $this->assertTrue(true);
           }
         }
       }
@@ -211,10 +225,9 @@ class ResourceExceptionsTest extends TestCase {
             $result = $this->resourceExceptions->$methodName($testValue);
             // Setters typically return $this for chaining.
             $this->assertNotNull($result);
-          }
-          catch (\Exception $e) {
+          } catch (\Exception $e) {
             // Some setters may have type requirements.
-            $this->assertTrue(TRUE);
+            $this->assertTrue(true);
           }
         }
       }
@@ -224,7 +237,8 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * Tests class constants if any.
    */
-  public function testClassConstants() {
+  public function testClassConstants()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -236,17 +250,17 @@ class ResourceExceptionsTest extends TestCase {
       foreach ($constants as $name => $value) {
         $this->assertNotNull($value, "Constant {$name} should have a value");
       }
-    }
-    else {
+    } else {
       // No constants is also valid.
-      $this->assertTrue(TRUE);
+      $this->assertTrue(true);
     }
   }
 
   /**
    * Tests protected methods using reflection.
    */
-  public function testProtectedMethods() {
+  public function testProtectedMethods()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -255,18 +269,17 @@ class ResourceExceptionsTest extends TestCase {
     $methods = $reflection->getMethods(\ReflectionMethod::IS_PROTECTED);
 
     foreach ($methods as $method) {
-      $method->setAccessible(TRUE);
+      $method->setAccessible(true);
 
       // Test that protected methods can be called.
       if ($method->getNumberOfRequiredParameters() === 0) {
         try {
           $result = $method->invoke($this->resourceExceptions);
           // Method executed without error.
-          $this->assertTrue(TRUE);
-        }
-        catch (\Exception $e) {
+          $this->assertTrue(true);
+        } catch (\Exception $e) {
           // Some methods may require specific state.
-          $this->assertTrue(TRUE);
+          $this->assertTrue(true);
         }
       }
     }
@@ -275,17 +288,18 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * Tests error handling.
    */
-  public function testErrorHandling() {
+  public function testErrorHandling()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
 
     // Test with invalid input scenarios.
     $invalidInputs = [
-      NULL,
+      null,
       '',
       [],
-      FALSE,
+      false,
       -1,
     ];
 
@@ -298,15 +312,13 @@ class ResourceExceptionsTest extends TestCase {
           try {
             $method->invoke($this->resourceExceptions, $input);
             // Method handled invalid input gracefully.
-            $this->assertTrue(TRUE);
-          }
-          catch (\TypeError $e) {
+            $this->assertTrue(true);
+          } catch (\TypeError $e) {
             // Type errors are expected for invalid input.
-            $this->assertTrue(TRUE);
-          }
-          catch (\Exception $e) {
+            $this->assertTrue(true);
+          } catch (\Exception $e) {
             // Other exceptions may be validation errors.
-            $this->assertTrue(TRUE);
+            $this->assertTrue(true);
           }
         }
       }
@@ -316,7 +328,8 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * Tests logging functionality.
    */
-  public function testLogging() {
+  public function testLogging()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -332,8 +345,7 @@ class ResourceExceptionsTest extends TestCase {
       if ($method->getNumberOfRequiredParameters() === 0) {
         try {
           $method->invoke($this->resourceExceptions);
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
           // Exceptions may be logged.
         }
       }
@@ -346,7 +358,8 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * Tests property initialization.
    */
-  public function testPropertyInitialization() {
+  public function testPropertyInitialization()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -355,15 +368,14 @@ class ResourceExceptionsTest extends TestCase {
     $properties = $reflection->getProperties();
 
     foreach ($properties as $property) {
-      $property->setAccessible(TRUE);
+      $property->setAccessible(true);
       try {
         $value = $property->getValue($this->resourceExceptions);
         // Property is initialized.
-        $this->assertTrue(TRUE);
-      }
-      catch (\Exception $e) {
+        $this->assertTrue(true);
+      } catch (\Exception $e) {
         // Some properties may not be initialized.
-        $this->assertTrue(TRUE);
+        $this->assertTrue(true);
       }
     }
   }
@@ -371,7 +383,8 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * Tests interface compliance if any.
    */
-  public function testInterfaceCompliance() {
+  public function testInterfaceCompliance()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -382,22 +395,22 @@ class ResourceExceptionsTest extends TestCase {
     if (!empty($interfaces)) {
       foreach ($interfaces as $interface) {
         $this->assertInstanceOf(
-              $interface->getName(),
-              $this->resourceExceptions,
-              'Class should implement ' . $interface->getName()
-          );
+            $interface->getName(),
+            $this->resourceExceptions,
+            'Class should implement ' . $interface->getName()
+        );
       }
-    }
-    else {
+    } else {
       // No interfaces is also valid.
-      $this->assertTrue(TRUE);
+      $this->assertTrue(true);
     }
   }
 
   /**
    * Tests method return types.
    */
-  public function testMethodReturnTypes() {
+  public function testMethodReturnTypes()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -416,7 +429,8 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * Tests for memory leaks in object creation.
    */
-  public function testMemoryManagement() {
+  public function testMemoryManagement()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -428,8 +442,7 @@ class ResourceExceptionsTest extends TestCase {
       try {
         $instance = $this->createInstance();
         unset($instance);
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         // Instance creation may fail.
       }
     }
@@ -444,7 +457,8 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * Tests thread safety for singleton patterns.
    */
-  public function testSingletonPattern() {
+  public function testSingletonPattern()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -455,22 +469,22 @@ class ResourceExceptionsTest extends TestCase {
     if ($reflection->hasMethod('getInstance')) {
       $getInstanceMethod = $reflection->getMethod('getInstance');
       if ($getInstanceMethod->isStatic()) {
-        $instance1 = $getInstanceMethod->invoke(NULL);
-        $instance2 = $getInstanceMethod->invoke(NULL);
+        $instance1 = $getInstanceMethod->invoke(null);
+        $instance2 = $getInstanceMethod->invoke(null);
 
         $this->assertSame($instance1, $instance2, 'Singleton should return same instance');
       }
-    }
-    else {
+    } else {
       // Not a singleton.
-      $this->assertTrue(TRUE);
+      $this->assertTrue(true);
     }
   }
 
   /**
    * Tests configuration handling.
    */
-  public function testConfigurationHandling() {
+  public function testConfigurationHandling()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -488,10 +502,9 @@ class ResourceExceptionsTest extends TestCase {
       $method = $reflection->getMethod('setConfiguration');
       try {
         $method->invoke($this->resourceExceptions, $testConfig);
-        $this->assertTrue(TRUE);
-      }
-      catch (\Exception $e) {
-        $this->assertTrue(TRUE);
+        $this->assertTrue(true);
+      } catch (\Exception $e) {
+        $this->assertTrue(true);
       }
     }
 
@@ -500,9 +513,8 @@ class ResourceExceptionsTest extends TestCase {
       try {
         $config = $method->invoke($this->resourceExceptions);
         $this->assertIsArray($config);
-      }
-      catch (\Exception $e) {
-        $this->assertTrue(TRUE);
+      } catch (\Exception $e) {
+        $this->assertTrue(true);
       }
     }
   }
@@ -510,7 +522,8 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * Tests data validation methods.
    */
-  public function testDataValidation() {
+  public function testDataValidation()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -522,22 +535,20 @@ class ResourceExceptionsTest extends TestCase {
       $methodName = $method->getName();
 
       // Look for validation methods.
-      if (
-            strpos($methodName, 'validate') !== FALSE ||
-            strpos($methodName, 'isValid') !== FALSE ||
-            strpos($methodName, 'check') !== FALSE
+      if (strpos($methodName, 'validate') !== false ||
+            strpos($methodName, 'isValid') !== false ||
+            strpos($methodName, 'check') !== false
         ) {
-        $method->setAccessible(TRUE);
+        $method->setAccessible(true);
 
         if ($method->getNumberOfRequiredParameters() <= 1) {
           try {
             // Test with valid data.
             $result = $method->invoke($this->resourceExceptions, 'test_data');
             $this->assertIsBool($result);
-          }
-          catch (\Exception $e) {
+          } catch (\Exception $e) {
             // Validation methods may throw exceptions.
-            $this->assertTrue(TRUE);
+            $this->assertTrue(true);
           }
         }
       }
@@ -547,7 +558,8 @@ class ResourceExceptionsTest extends TestCase {
   /**
    * Tests performance of key operations.
    */
-  public function testPerformance() {
+  public function testPerformance()
+  {
     if (!$this->resourceExceptions) {
       $this->markTestSkipped('Class not instantiated');
     }
@@ -557,18 +569,17 @@ class ResourceExceptionsTest extends TestCase {
 
     foreach ($methods as $method) {
       if ($method->getNumberOfRequiredParameters() === 0) {
-        $startTime = microtime(TRUE);
+        $startTime = microtime(true);
 
         try {
           for ($i = 0; $i < 100; $i++) {
             $method->invoke($this->resourceExceptions);
           }
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
           // Skip methods that throw exceptions.
         }
 
-        $endTime = microtime(TRUE);
+        $endTime = microtime(true);
         $executionTime = $endTime - $startTime;
 
         // Each method should complete 100 iterations in less than 1 second.
@@ -576,5 +587,4 @@ class ResourceExceptionsTest extends TestCase {
       }
     }
   }
-
 }

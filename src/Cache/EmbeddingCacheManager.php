@@ -8,9 +8,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Manages embedding cache operations and provides utility functions.
  */
-class EmbeddingCacheManager {
+class EmbeddingCacheManager
+{
   /**
    * The embedding cache service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheInterface
    */
@@ -18,6 +20,7 @@ class EmbeddingCacheManager {
 
   /**
    * The logger.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -25,6 +28,7 @@ class EmbeddingCacheManager {
 
   /**
    * The config factory.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Config\ConfigFactoryInterface
    */
@@ -32,6 +36,7 @@ class EmbeddingCacheManager {
 
   /**
    * Constructs an EmbeddingCacheManager.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Cache\EmbeddingCacheInterface $cache
    *   The embedding cache service.
@@ -40,7 +45,11 @@ class EmbeddingCacheManager {
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory.
    */
-  public function __construct(EmbeddingCacheInterface $cache, LoggerInterface $logger, ConfigFactoryInterface $config_factory) {
+  public function __construct(
+      EmbeddingCacheInterface $cache,
+      LoggerInterface $logger,
+      ConfigFactoryInterface $config_factory
+  ) {
     $this->cache = $cache;
     $this->logger = $logger;
     $this->configFactory = $config_factory;
@@ -48,16 +57,19 @@ class EmbeddingCacheManager {
 
   /**
    * Generates a cache key for text content.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text content.
    * @param array $metadata
    *   Optional metadata to include in the hash (model, version, etc.).
+   *   {@inheritdoc}.
    *
    * @return string
    *   SHA-256 hash suitable for use as cache key.
    */
-  public function generateCacheKey($text, array $metadata = []) {
+  public function generateCacheKey($text, array $metadata = [])
+  {
     if (empty($text)) {
       throw new \InvalidArgumentException('Text cannot be empty for cache key generation.');
     }
@@ -76,28 +88,31 @@ class EmbeddingCacheManager {
 
   /**
    * Gets an embedding from cache with automatic key generation.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text content.
    * @param array $metadata
    *   Optional metadata.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   The cached embedding, or NULL if not found.
    */
-  public function getCachedEmbedding($text, array $metadata = []) {
+  public function getCachedEmbedding($text, array $metadata = [])
+  {
     try {
       $cache_key = $this->generateCacheKey($text, $metadata);
       return $this->cache->get($cache_key);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to get cached embedding: @message', ['@message' => $e->getMessage()]);
-      return NULL;
+      return null;
     }
   }
 
   /**
    * Caches an embedding with automatic key generation.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text content.
@@ -107,33 +122,37 @@ class EmbeddingCacheManager {
    *   Optional metadata.
    * @param int $ttl
    *   Time to live in seconds.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if successfully cached.
+   *   true if successfully cached.
    */
-  public function cacheEmbedding($text, array $embedding, array $metadata = [], $ttl = NULL) {
+  public function cacheEmbedding($text, array $embedding, array $metadata = [], $ttl = null)
+  {
     try {
       $cache_key = $this->generateCacheKey($text, $metadata);
       return $this->cache->set($cache_key, $embedding, $ttl);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to cache embedding: @message', ['@message' => $e->getMessage()]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Gets multiple embeddings from cache with automatic key generation.
+   * {@inheritdoc}
    *
    * @param array $texts
    *   Array of text content.
    * @param array $metadata
    *   Optional metadata.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of embeddings keyed by original array index.
    */
-  public function getCachedEmbeddingsBatch(array $texts, array $metadata = []) {
+  public function getCachedEmbeddingsBatch(array $texts, array $metadata = [])
+  {
     if (empty($texts)) {
       return [];
     }
@@ -163,8 +182,7 @@ class EmbeddingCacheManager {
       }
 
       return $result;
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to get cached embeddings batch: @message', ['@message' => $e->getMessage()]);
       return [];
     }
@@ -172,6 +190,7 @@ class EmbeddingCacheManager {
 
   /**
    * Caches multiple embeddings with automatic key generation.
+   * {@inheritdoc}
    *
    * @param array $texts
    *   Array of text content.
@@ -181,13 +200,15 @@ class EmbeddingCacheManager {
    *   Optional metadata.
    * @param int $ttl
    *   Time to live in seconds.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if successfully cached.
+   *   true if successfully cached.
    */
-  public function cacheEmbeddingsBatch(array $texts, array $embeddings, array $metadata = [], $ttl = NULL) {
+  public function cacheEmbeddingsBatch(array $texts, array $embeddings, array $metadata = [], $ttl = null)
+  {
     if (empty($texts) || empty($embeddings) || count($texts) !== count($embeddings)) {
-      return FALSE;
+      return false;
     }
 
     try {
@@ -202,27 +223,29 @@ class EmbeddingCacheManager {
 
       if (empty($cache_items)) {
         // Nothing to cache, but not an error.
-        return TRUE;
+        return true;
       }
 
       return $this->cache->setMultiple($cache_items, $ttl);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to cache embeddings batch: @message', ['@message' => $e->getMessage()]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Invalidates cached embeddings for specific metadata (e.g., when model changes).
+   * {@inheritdoc}
    *
    * @param array $metadata
    *   The metadata to match for invalidation.
+   *   {@inheritdoc}.
    *
    * @return int
    *   Number of cache entries invalidated.
    */
-  public function invalidateByMetadata(array $metadata) {
+  public function invalidateByMetadata(array $metadata)
+  {
     // This is a simplified implementation. For a full implementation,
     // you'd need to store metadata separately or iterate through cache entries.
     $this->logger->info('Invalidating cache entries for metadata: @metadata', [
@@ -241,11 +264,13 @@ class EmbeddingCacheManager {
 
   /**
    * Gets comprehensive cache statistics.
+   * {@inheritdoc}
    *
    * @return array
    *   Detailed cache statistics.
    */
-  public function getCacheStatistics() {
+  public function getCacheStatistics()
+  {
     $stats = $this->cache->getStats();
 
     // Add additional calculated metrics.
@@ -279,6 +304,7 @@ class EmbeddingCacheManager {
 
   /**
    * Performs cache warmup for commonly used content.
+   * {@inheritdoc}
    *
    * @param array $content_items
    *   Array of content items to warm up.
@@ -286,11 +312,13 @@ class EmbeddingCacheManager {
    *   Function to generate embeddings for content.
    * @param array $metadata
    *   Optional metadata.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'cached' and 'failed' counts.
    */
-  public function warmupCache(array $content_items, callable $embedding_generator, array $metadata = []) {
+  public function warmupCache(array $content_items, callable $embedding_generator, array $metadata = [])
+  {
     $results = ['cached' => 0, 'failed' => 0, 'skipped' => 0];
 
     if (empty($content_items)) {
@@ -308,7 +336,7 @@ class EmbeddingCacheManager {
 
         // Check if already cached.
         $cache_key = $this->generateCacheKey($item, $metadata);
-        if ($this->cache->get($cache_key) !== NULL) {
+        if ($this->cache->get($cache_key) !== null) {
           $results['skipped']++;
           continue;
         }
@@ -318,16 +346,13 @@ class EmbeddingCacheManager {
         if (!empty($embedding) && is_array($embedding)) {
           if ($this->cache->set($cache_key, $embedding)) {
             $results['cached']++;
-          }
-          else {
+          } else {
             $results['failed']++;
           }
-        }
-        else {
+        } else {
           $results['failed']++;
         }
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $this->logger->error('Cache warmup failed for item: @message', ['@message' => $e->getMessage()]);
         $results['failed']++;
       }
@@ -340,11 +365,13 @@ class EmbeddingCacheManager {
 
   /**
    * Performs cache maintenance and optimization.
+   * {@inheritdoc}
    *
    * @return array
    *   Maintenance results.
    */
-  public function performMaintenance() {
+  public function performMaintenance()
+  {
     $this->logger->info('Starting embedding cache maintenance');
 
     $stats_before = $this->cache->getStats();
@@ -360,8 +387,7 @@ class EmbeddingCacheManager {
 
     if ($maintenance_success) {
       $this->logger->info('Cache maintenance completed successfully: @results', ['@results' => json_encode($results)]);
-    }
-    else {
+    } else {
       $this->logger->error('Cache maintenance failed');
     }
 
@@ -370,37 +396,41 @@ class EmbeddingCacheManager {
 
   /**
    * Clears all cached embeddings.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if cache was cleared successfully.
+   *   true if cache was cleared successfully.
    */
-  public function clear() {
+  public function clear()
+  {
     try {
       $result = $this->cache->clear();
       if ($result) {
         $this->logger->info('Embedding cache cleared successfully');
       }
       return $result;
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to clear embedding cache: @message', ['@message' => $e->getMessage()]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Clears cached embeddings for a specific index.
-   *
+   * {@inheritdoc}
    * Note: Currently clears ALL cache entries. Future versions will implement
    * index-specific cache tracking for more granular control.
+   * {@inheritdoc}
    *
    * @param string $index_id
    *   The index ID to clear cache for.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if cache was cleared successfully.
+   *   true if cache was cleared successfully.
    */
-  public function clearByIndex($index_id) {
+  public function clearByIndex($index_id)
+  {
     try {
       // @todo Implement index-specific cache tracking in future versions
       // For now, clear all cache but log the specific index for tracking.
@@ -411,51 +441,54 @@ class EmbeddingCacheManager {
         ]);
       }
       return $result;
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to clear cache for index @index: @message', [
         '@index' => $index_id,
         '@message' => $e->getMessage(),
       ]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Sets multiple cache entries.
+   * {@inheritdoc}
    *
    * @param array $items
    *   Array of cache items keyed by cache key.
    * @param int $ttl
    *   Time to live in seconds.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if all items were cached successfully.
+   *   true if all items were cached successfully.
    */
-  public function setMultiple(array $items, $ttl = NULL) {
+  public function setMultiple(array $items, $ttl = null)
+  {
     try {
       return $this->cache->setMultiple($items, $ttl);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to set multiple cache items: @message', ['@message' => $e->getMessage()]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Gets multiple cache entries.
+   * {@inheritdoc}
    *
    * @param array $keys
    *   Array of cache keys.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of cache values keyed by cache key.
    */
-  public function getMultiple(array $keys) {
+  public function getMultiple(array $keys)
+  {
     try {
       return $this->cache->getMultiple($keys);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to get multiple cache items: @message', ['@message' => $e->getMessage()]);
       return [];
     }
@@ -463,36 +496,43 @@ class EmbeddingCacheManager {
 
   /**
    * Gets cache statistics with additional metrics.
+   * {@inheritdoc}
    *
    * @return array
    *   Comprehensive cache statistics.
    */
-  public function getStats() {
+  public function getStats()
+  {
     // Alias for backward compatibility.
     return $this->getCacheStatistics();
   }
 
   /**
    * Performs cache maintenance.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if maintenance was successful.
+   *   true if maintenance was successful.
    */
-  public function maintenance() {
+  public function maintenance()
+  {
     $results = $this->performMaintenance();
-    return $results['success'] ?? FALSE;
+    return $results['success'] ?? false;
   }
 
   /**
    * Normalizes text for consistent caching.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The input text.
+   *   {@inheritdoc}.
    *
    * @return string
    *   Normalized text.
    */
-  protected function normalizeText($text) {
+  protected function normalizeText($text)
+  {
     // Remove excessive whitespace.
     $text = preg_replace('/\s+/', ' ', trim($text));
 
@@ -506,12 +546,13 @@ class EmbeddingCacheManager {
 
   /**
    * Gets the underlying cache implementation.
+   * {@inheritdoc}
    *
    * @return \Drupal\search_api_postgresql\Cache\EmbeddingCacheInterface
    *   The cache implementation.
    */
-  public function getCache() {
+  public function getCache()
+  {
     return $this->cache;
   }
-
 }

@@ -12,11 +12,13 @@ use Drupal\search_api_postgresql\Exception\GracefulDegradationException;
 /**
  * Service for managing user-facing degradation messages and notifications.
  */
-class DegradationMessageService {
+class DegradationMessageService
+{
   use StringTranslationTrait;
 
   /**
    * The messenger service.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Messenger\MessengerInterface
    */
@@ -24,6 +26,7 @@ class DegradationMessageService {
 
   /**
    * The current user.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Session\AccountInterface
    */
@@ -31,6 +34,7 @@ class DegradationMessageService {
 
   /**
    * The config factory.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Config\ConfigFactoryInterface
    */
@@ -38,6 +42,7 @@ class DegradationMessageService {
 
   /**
    * Message display settings.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -45,6 +50,7 @@ class DegradationMessageService {
 
   /**
    * Constructs a DegradationMessageService.
+   * {@inheritdoc}
    *
    * @param \Drupal\Core\Messenger\MessengerInterface $messenger
    *   The messenger service.
@@ -56,10 +62,10 @@ class DegradationMessageService {
    *   The config factory.
    */
   public function __construct(
-    MessengerInterface $messenger,
-    AccountInterface $current_user,
-    TranslationInterface $string_translation,
-    ConfigFactoryInterface $config_factory,
+      MessengerInterface $messenger,
+      AccountInterface $current_user,
+      TranslationInterface $string_translation,
+      ConfigFactoryInterface $config_factory,
   ) {
     $this->messenger = $messenger;
     $this->currentUser = $current_user;
@@ -72,13 +78,15 @@ class DegradationMessageService {
 
   /**
    * Displays a degradation message to the user.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The degradation exception.
    * @param array $context
    *   Additional context for the message.
    */
-  public function displayDegradationMessage(GracefulDegradationException $exception, array $context = []) {
+  public function displayDegradationMessage(GracefulDegradationException $exception, array $context = [])
+  {
     if (!$this->shouldDisplayMessage($exception, $context)) {
       return;
     }
@@ -87,27 +95,30 @@ class DegradationMessageService {
 
     if ($message_info) {
       $this->messenger->addMessage(
-            $message_info['message'],
-            $message_info['type'],
-            $message_info['repeat']
-        );
+          $message_info['message'],
+          $message_info['type'],
+          $message_info['repeat']
+      );
     }
   }
 
   /**
    * Displays a degradation status for search results.
+   * {@inheritdoc}
    *
    * @param array $degradation_state
    *   The degradation state from query builder.
    * @param array $context
    *   Additional context.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   Render array for status display, or NULL if no status to show.
    */
-  public function buildSearchStatusMessage(array $degradation_state, array $context = []) {
+  public function buildSearchStatusMessage(array $degradation_state, array $context = [])
+  {
     if (!$degradation_state['is_degraded']) {
-      return NULL;
+      return null;
     }
 
     $strategy = $degradation_state['fallback_strategy'];
@@ -117,7 +128,7 @@ class DegradationMessageService {
     $status_message = $this->getStatusMessage($strategy, $user_message, $context);
 
     if (!$status_message) {
-      return NULL;
+      return null;
     }
 
     return [
@@ -135,6 +146,7 @@ class DegradationMessageService {
 
   /**
    * Creates an informational banner for degraded functionality.
+   * {@inheritdoc}
    *
    * @param string $service_name
    *   The service that is degraded.
@@ -142,16 +154,18 @@ class DegradationMessageService {
    *   Description of the impact.
    * @param array $options
    *   Additional options.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Render array for the banner.
    */
-  public function createDegradationBanner($service_name, $impact_description, array $options = []) {
+  public function createDegradationBanner($service_name, $impact_description, array $options = [])
+  {
     $default_options = [
-      'show_details' => FALSE,
-      'show_dismiss' => TRUE,
-      'estimated_recovery' => NULL,
-      'workaround_text' => NULL,
+      'show_details' => false,
+      'show_dismiss' => true,
+      'estimated_recovery' => null,
+      'workaround_text' => null,
     ];
     $options = array_merge($default_options, $options);
 
@@ -197,16 +211,19 @@ class DegradationMessageService {
 
   /**
    * Builds an appropriate message for the exception.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The degradation exception.
    * @param array $context
    *   Additional context.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   Message info array or NULL if no message should be shown.
    */
-  protected function buildMessage(GracefulDegradationException $exception, array $context) {
+  protected function buildMessage(GracefulDegradationException $exception, array $context)
+  {
     $strategy = $exception->getFallbackStrategy();
     $user_message = $exception->getUserMessage();
 
@@ -235,12 +252,13 @@ class DegradationMessageService {
       'message' => $final_message,
       'type' => $message_type,
     // Don't repeat the same message multiple times.
-      'repeat' => FALSE,
+      'repeat' => false,
     ];
   }
 
   /**
    * Gets a status message for search results.
+   * {@inheritdoc}
    *
    * @param string $strategy
    *   The fallback strategy.
@@ -248,24 +266,26 @@ class DegradationMessageService {
    *   The user message from degradation.
    * @param array $context
    *   Additional context.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   Status message info or NULL.
    */
-  protected function getStatusMessage($strategy, $user_message, array $context) {
+  protected function getStatusMessage($strategy, $user_message, array $context)
+  {
     $messages = [
       'text_search_fallback' => [
         'text' => $this->t('Search results using traditional text matching'),
         'type' => 'info',
         'icon' => 'info',
-        'dismissible' => TRUE,
+        'dismissible' => true,
         'actions' => [],
       ],
       'circuit_breaker_fallback' => [
         'text' => $this->t('Some search features temporarily unavailable'),
         'type' => 'warning',
         'icon' => 'warning',
-        'dismissible' => TRUE,
+        'dismissible' => true,
         'actions' => [
       [
         'text' => $this->t('Try again'),
@@ -277,7 +297,7 @@ class DegradationMessageService {
         'text' => $this->t('Search processing slower than usual due to high demand'),
         'type' => 'info',
         'icon' => 'clock',
-        'dismissible' => FALSE,
+        'dismissible' => false,
         'actions' => [],
       ],
     ];
@@ -288,10 +308,10 @@ class DegradationMessageService {
       // Add context-specific information.
       if (!empty($context['result_count'])) {
         $message['text'] .= ' ' . $this->formatPlural(
-              $context['result_count'],
-              '(1 result found)',
-              '(@count results found)'
-          );
+            $context['result_count'],
+            '(1 result found)',
+            '(@count results found)'
+        );
       }
 
       return $message;
@@ -302,23 +322,26 @@ class DegradationMessageService {
       'text' => $user_message ?: $this->t('Search functionality is running in limited mode'),
       'type' => 'info',
       'icon' => 'info',
-      'dismissible' => TRUE,
+      'dismissible' => true,
       'actions' => [],
     ];
   }
 
   /**
    * Determines the appropriate message type for an exception.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The exception.
    * @param array $context
    *   Additional context.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The message type (status, warning, error).
    */
-  protected function determineMessageType(GracefulDegradationException $exception, array $context) {
+  protected function determineMessageType(GracefulDegradationException $exception, array $context)
+  {
     $strategy = $exception->getFallbackStrategy();
 
     // High impact degradations are warnings.
@@ -343,16 +366,19 @@ class DegradationMessageService {
 
   /**
    * Gets a custom message for a strategy if configured.
+   * {@inheritdoc}
    *
    * @param string $strategy
    *   The fallback strategy.
    * @param array $context
    *   Additional context.
+   *   {@inheritdoc}.
    *
    * @return string|null
    *   Custom message or NULL.
    */
-  protected function getCustomMessage($strategy, array $context) {
+  protected function getCustomMessage($strategy, array $context)
+  {
     $custom_messages = $this->settings['custom_messages'] ?? [];
 
     if (isset($custom_messages[$strategy])) {
@@ -366,29 +392,32 @@ class DegradationMessageService {
       return $message;
     }
 
-    return NULL;
+    return null;
   }
 
   /**
    * Determines if a message should be displayed.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The exception.
    * @param array $context
    *   Additional context.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if message should be displayed.
+   *   true if message should be displayed.
    */
-  protected function shouldDisplayMessage(GracefulDegradationException $exception, array $context) {
+  protected function shouldDisplayMessage(GracefulDegradationException $exception, array $context)
+  {
     // Check global setting.
     if (!$this->settings['enabled']) {
-      return FALSE;
+      return false;
     }
 
     // Check if user wants to see degradation messages.
     if (!$this->settings['show_to_anonymous'] && $this->currentUser->isAnonymous()) {
-      return FALSE;
+      return false;
     }
 
     // Check strategy-specific settings.
@@ -396,34 +425,37 @@ class DegradationMessageService {
     $strategy_settings = $this->settings['strategies'][$strategy] ?? [];
 
     if (isset($strategy_settings['enabled']) && !$strategy_settings['enabled']) {
-      return FALSE;
+      return false;
     }
 
     // Don't show messages for low-impact degradations in search contexts.
     if (!empty($context['is_search_result']) && $strategy === 'text_search_fallback') {
-      return $this->settings['show_search_fallback_messages'] ?? FALSE;
+      return $this->settings['show_search_fallback_messages'] ?? false;
     }
 
-    return TRUE;
+    return true;
   }
 
   /**
    * Creates a helpful message for administrators about degradation.
+   * {@inheritdoc}
    *
    * @param array $degradation_stats
    *   Statistics about current degradation.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Render array for admin message.
    */
-  public function createAdminDegradationSummary(array $degradation_stats) {
+  public function createAdminDegradationSummary(array $degradation_stats)
+  {
     if (!$this->currentUser->hasPermission('administer search_api')) {
       return [];
     }
 
     $total_services = count($degradation_stats);
     $degraded_services = array_filter($degradation_stats, function ($stats) {
-        return $stats['is_degraded'] ?? FALSE;
+        return $stats['is_degraded'] ?? false;
     });
 
     if (empty($degraded_services)) {
@@ -432,10 +464,10 @@ class DegradationMessageService {
 
     $degraded_count = count($degraded_services);
     $message = $this->formatPlural(
-          $degraded_count,
-          '1 search service is currently degraded',
-          '@count search services are currently degraded'
-      );
+        $degraded_count,
+        '1 search service is currently degraded',
+        '@count search services are currently degraded'
+    );
 
     $service_list = [];
     foreach ($degraded_services as $service_name => $stats) {
@@ -469,11 +501,13 @@ class DegradationMessageService {
 
   /**
    * Updates user message settings.
+   * {@inheritdoc}
    *
    * @param array $new_settings
    *   New settings to save.
    */
-  public function updateSettings(array $new_settings) {
+  public function updateSettings(array $new_settings)
+  {
     $config = $this->configFactory->getEditable('search_api_postgresql.degradation_messages');
     $current_settings = $config->get() ?: [];
     $updated_settings = array_merge($current_settings, $new_settings);
@@ -484,21 +518,23 @@ class DegradationMessageService {
 
   /**
    * Gets the default message settings.
+   * {@inheritdoc}
    *
    * @return array
    *   Default settings.
    */
-  protected function getDefaultSettings() {
+  protected function getDefaultSettings()
+  {
     return [
-      'enabled' => TRUE,
-      'show_to_anonymous' => TRUE,
-      'show_admin_details' => TRUE,
-      'show_search_fallback_messages' => FALSE,
+      'enabled' => true,
+      'show_to_anonymous' => true,
+      'show_admin_details' => true,
+      'show_search_fallback_messages' => false,
       'strategies' => [
-        'text_search_fallback' => ['enabled' => TRUE],
-        'circuit_breaker_fallback' => ['enabled' => TRUE],
-        'rate_limit_backoff' => ['enabled' => TRUE],
-        'continue_with_partial_results' => ['enabled' => TRUE],
+        'text_search_fallback' => ['enabled' => true],
+        'circuit_breaker_fallback' => ['enabled' => true],
+        'rate_limit_backoff' => ['enabled' => true],
+        'continue_with_partial_results' => ['enabled' => true],
       ],
       'custom_messages' => [],
     ];
@@ -506,16 +542,19 @@ class DegradationMessageService {
 
   /**
    * Creates a degradation help message with actionable suggestions.
+   * {@inheritdoc}
    *
    * @param string $degradation_type
    *   The type of degradation.
    * @param array $context
    *   Additional context.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   Render array for help message or NULL.
    */
-  public function createHelpMessage($degradation_type, array $context = []) {
+  public function createHelpMessage($degradation_type, array $context = [])
+  {
     $help_messages = [
       'embedding_service_down' => [
         'message' => $this->t('AI-powered semantic search is temporarily unavailable.'),
@@ -547,7 +586,7 @@ class DegradationMessageService {
     ];
 
     if (!isset($help_messages[$degradation_type])) {
-      return NULL;
+      return null;
     }
 
     $info = $help_messages[$degradation_type];
@@ -563,5 +602,4 @@ class DegradationMessageService {
       ],
     ];
   }
-
 }

@@ -12,7 +12,8 @@ use Drupal\search_api_postgresql\Service\AzureOpenAIEmbeddingService;
  *
  * @group search_api_postgresql
  */
-class VectorSearchTest extends KernelTestBase {
+class VectorSearchTest extends KernelTestBase
+{
   /**
    * {@inheritdoc}
    */
@@ -50,7 +51,8 @@ class VectorSearchTest extends KernelTestBase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Create test server with UNIFIED backend.
@@ -72,11 +74,11 @@ class VectorSearchTest extends KernelTestBase {
           'index_prefix' => 'test_',
           'fts_configuration' => 'english',
           'batch_size' => 50,
-          'debug' => TRUE,
+          'debug' => true,
         ],
         // Test AI features.
         'ai_features' => [
-          'enabled' => TRUE,
+          'enabled' => true,
           'provider' => 'azure_openai',
           'azure_openai' => [
             'endpoint' => 'https://test.openai.azure.com/',
@@ -89,26 +91,26 @@ class VectorSearchTest extends KernelTestBase {
           'rate_limit_delay' => 100,
           'max_retries' => 3,
           'timeout' => 30,
-          'enable_cache' => TRUE,
+          'enable_cache' => true,
           'cache_ttl' => 3600,
         ],
         'vector_index' => [
-          'enabled' => TRUE,
+          'enabled' => true,
           'method' => 'ivfflat',
           'ivfflat_lists' => 100,
           'distance' => 'cosine',
           'probes' => 10,
         ],
         'hybrid_search' => [
-          'enabled' => TRUE,
+          'enabled' => true,
           'text_weight' => 0.6,
           'vector_weight' => 0.4,
           'similarity_threshold' => 0.15,
           'max_results' => 1000,
-          'boost_exact_matches' => TRUE,
+          'boost_exact_matches' => true,
         ],
         'performance' => [
-          'azure_optimized' => TRUE,
+          'azure_optimized' => true,
           'connection_pool_size' => 10,
           'statement_timeout' => 30000,
           'work_mem' => '256MB',
@@ -132,7 +134,8 @@ class VectorSearchTest extends KernelTestBase {
   /**
    * Tests unified PostgreSQL backend instantiation.
    */
-  public function testUnifiedBackendInstantiation() {
+  public function testUnifiedBackendInstantiation()
+  {
     $backend = $this->server->getBackend();
     $this->assertInstanceOf('Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend', $backend);
     $this->assertEquals('postgresql', $backend->getPluginId());
@@ -141,7 +144,8 @@ class VectorSearchTest extends KernelTestBase {
   /**
    * Tests all features are available in unified backend.
    */
-  public function testUnifiedBackendFeatures() {
+  public function testUnifiedBackendFeatures()
+  {
     $backend = $this->server->getBackend();
     $features = $backend->getSupportedFeatures();
 
@@ -167,7 +171,8 @@ class VectorSearchTest extends KernelTestBase {
   /**
    * Tests AI provider switching in unified backend.
    */
-  public function testAiProviderSwitching() {
+  public function testAiProviderSwitching()
+  {
     $backend = $this->server->getBackend();
     $config = $backend->getConfiguration();
 
@@ -184,17 +189,18 @@ class VectorSearchTest extends KernelTestBase {
   /**
    * Tests text preprocessing for embeddings.
    */
-  public function testTextPreprocessing() {
+  public function testTextPreprocessing()
+  {
     $service = new AzureOpenAIEmbeddingService(
-          'https://test.openai.azure.com/',
-          'test-key',
-          'test-deployment'
-      );
+        'https://test.openai.azure.com/',
+        'test-key',
+        'test-deployment'
+    );
 
     // Use reflection to access protected method.
     $reflection = new \ReflectionClass($service);
     $method = $reflection->getMethod('preprocessText');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     // Test whitespace normalization.
     $input = "This  has   multiple    spaces\n\nand\tlines";
@@ -211,7 +217,8 @@ class VectorSearchTest extends KernelTestBase {
   /**
    * Tests query mode detection and handling.
    */
-  public function testQueryModeHandling() {
+  public function testQueryModeHandling()
+  {
     $query = $this->index->query();
 
     // Test default mode (should be hybrid)
@@ -231,7 +238,8 @@ class VectorSearchTest extends KernelTestBase {
   /**
    * Tests configuration validation.
    */
-  public function testConfigurationValidation() {
+  public function testConfigurationValidation()
+  {
     $backend = $this->server->getBackend();
 
     // Test valid configuration.
@@ -249,7 +257,8 @@ class VectorSearchTest extends KernelTestBase {
   /**
    * Tests vector statistics collection.
    */
-  public function testVectorStatistics() {
+  public function testVectorStatistics()
+  {
     $backend = $this->server->getBackend();
 
     // Get stats for empty index.
@@ -263,5 +272,4 @@ class VectorSearchTest extends KernelTestBase {
     $this->assertEquals('azure_openai', $stats['azure_service']);
     $this->assertEquals(1536, $stats['vector_dimension']);
   }
-
 }

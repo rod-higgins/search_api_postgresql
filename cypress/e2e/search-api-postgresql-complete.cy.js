@@ -152,7 +152,7 @@ describe('Search API PostgreSQL - Complete End-to-End Test', () => {
       ]
 
       processors.forEach(processor => {
-        cy.get(`input[name="status[${processor}]"]`).then(($checkbox) => {
+        cy.get(`input[name = "status[${processor}]"]`).then(($checkbox) => {
           if ($checkbox.length > 0) {
             cy.wrap($checkbox).check()
           }

@@ -5,11 +5,17 @@ This directory contains comprehensive documentation for the Search API PostgreSQ
 ## Documentation Structure
 
 ### Installation and Setup
-- **installation.md** - Complete installation guide including system requirements, PostgreSQL extensions, and module setup
+- **[installation.md](installation.md)** - Complete installation guide including system requirements, PostgreSQL extensions, and module setup
+- **[complete_setup_guide.md](complete_setup_guide.md)** - Comprehensive step-by-step setup guide with DDEV integration
+- **[autocomplete_setup.md](autocomplete_setup.md)** - Configure search autocomplete functionality
 
-### For Site Builders
-- **installation.md** covers module installation and requirements
-- Focus on the installation sections relevant to your use case
+### Configuration and Usage
+- **[configuration.md](configuration.md)** - Detailed configuration options for PostgreSQL backend and search features
+- **[search_modes_config.md](search_modes_config.md)** - Search modes configuration and optimization
+- **[api.md](api.md)** - API reference and integration guide
+
+### Development
+- **[development.md](development.md)** - Development guidelines, testing, and contribution instructions
 
 ## Key Topics Covered
 

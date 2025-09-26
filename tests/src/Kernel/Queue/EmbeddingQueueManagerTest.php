@@ -10,7 +10,8 @@ use Drupal\KernelTests\KernelTestBase;
  *
  * @group search_api_postgresql
  */
-class EmbeddingQueueManagerTest extends KernelTestBase {
+class EmbeddingQueueManagerTest extends KernelTestBase
+{
   /**
    * {@inheritdoc}
    */
@@ -34,7 +35,8 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->installSchema('system', ['sequences']);
@@ -48,12 +50,11 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
 
     try {
       $this->queueManager = new EmbeddingQueueManager(
-            $this->queueFactory,
-            $this->container->get('config.factory'),
-            $this->container->get('logger.factory')->get('search_api_postgresql')
-        );
-    }
-    catch (\Error $e) {
+          $this->queueFactory,
+          $this->container->get('config.factory'),
+          $this->container->get('logger.factory')->get('search_api_postgresql')
+      );
+    } catch (\Error $e) {
       $this->markTestSkipped('Could not instantiate queue manager: ' . $e->getMessage());
     }
   }
@@ -61,11 +62,11 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * Tests queue manager instantiation.
    */
-  public function testQueueManagerInstantiation() {
+  public function testQueueManagerInstantiation()
+  {
     if ($this->queueManager) {
       $this->assertInstanceOf('\Drupal\search_api_postgresql\Queue\EmbeddingQueueManager', $this->queueManager);
-    }
-    else {
+    } else {
       $this->markTestSkipped('Queue manager not instantiated');
     }
   }
@@ -73,7 +74,8 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * Tests basic queue operations.
    */
-  public function testBasicQueueOperations() {
+  public function testBasicQueueOperations()
+  {
     if (!$this->queueManager) {
       $this->markTestSkipped('Queue manager not instantiated');
     }
@@ -101,7 +103,8 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * Tests queue processing workflow.
    */
-  public function testQueueProcessingWorkflow() {
+  public function testQueueProcessingWorkflow()
+  {
     if (!$this->queueManager) {
       $this->markTestSkipped('Queue manager not instantiated');
     }
@@ -145,7 +148,8 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * Tests queue priority handling.
    */
-  public function testQueuePriorityHandling() {
+  public function testQueuePriorityHandling()
+  {
     if (!$this->queueManager) {
       $this->markTestSkipped('Queue manager not instantiated');
     }
@@ -178,7 +182,8 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * Tests batch processing capabilities.
    */
-  public function testBatchProcessing() {
+  public function testBatchProcessing()
+  {
     if (!$this->queueManager) {
       $this->markTestSkipped('Queue manager not instantiated');
     }
@@ -205,7 +210,8 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * Tests queue error handling.
    */
-  public function testQueueErrorHandling() {
+  public function testQueueErrorHandling()
+  {
     if (!$this->queueManager) {
       $this->markTestSkipped('Queue manager not instantiated');
     }
@@ -230,14 +236,15 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
       // Simulate processing failure by releasing item.
       $queue->releaseItem($item);
       // Test that error handling works.
-      $this->assertTrue(TRUE);
+      $this->assertTrue(true);
     }
   }
 
   /**
    * Tests queue statistics and monitoring.
    */
-  public function testQueueStatistics() {
+  public function testQueueStatistics()
+  {
     if (!$this->queueManager) {
       $this->markTestSkipped('Queue manager not instantiated');
     }
@@ -265,7 +272,8 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * Tests queue cleanup operations.
    */
-  public function testQueueCleanup() {
+  public function testQueueCleanup()
+  {
     if (!$this->queueManager) {
       $this->markTestSkipped('Queue manager not instantiated');
     }
@@ -296,7 +304,8 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * Tests queue configuration and settings.
    */
-  public function testQueueConfiguration() {
+  public function testQueueConfiguration()
+  {
     if (!$this->queueManager) {
       $this->markTestSkipped('Queue manager not instantiated');
     }
@@ -321,7 +330,8 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * Tests queue worker integration.
    */
-  public function testQueueWorkerIntegration() {
+  public function testQueueWorkerIntegration()
+  {
     if (!$this->queueManager) {
       $this->markTestSkipped('Queue manager not instantiated');
     }
@@ -350,7 +360,8 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
   /**
    * Tests queue performance under load.
    */
-  public function testQueuePerformance() {
+  public function testQueuePerformance()
+  {
     if (!$this->queueManager) {
       $this->markTestSkipped('Queue manager not instantiated');
     }
@@ -358,7 +369,7 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
     $queue = $this->queueFactory->get('search_api_postgresql_embeddings');
 
     // Test adding many items quickly.
-    $start_time = microtime(TRUE);
+    $start_time = microtime(true);
     $item_count = 100;
 
     for ($i = 1; $i <= $item_count; $i++) {
@@ -371,7 +382,7 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
       ]);
     }
 
-    $end_time = microtime(TRUE);
+    $end_time = microtime(true);
     $processing_time = $end_time - $start_time;
 
     // Should be able to add 100 items in reasonable time (less than 10 seconds)
@@ -381,5 +392,4 @@ class EmbeddingQueueManagerTest extends KernelTestBase {
     $final_count = $queue->numberOfItems();
     $this->assertGreaterThanOrEqual($item_count, $final_count);
   }
-
 }

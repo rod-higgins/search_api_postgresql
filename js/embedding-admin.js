@@ -47,16 +47,16 @@
   function initializeDashboard(context) {
     // Auto-refresh stats every 30 seconds
     if (drupalSettings.searchApiPostgreSQL && drupalSettings.searchApiPostgreSQL.autoRefresh) {
-      refreshIntervals.dashboard = setInterval(function() {
+      refreshIntervals.dashboard = setInterval(function () {
         refreshDashboardStats();
       }, 30000);
     }
 
     // Initialize stat card interactions
-    $('.stat-card', context).each(function() {
+    $('.stat-card', context).each(function () {
       var $card = $(this);
-      
-      $card.on('click', function() {
+
+      $card.on('click', function () {
         var link = $card.data('link');
         if (link) {
           window.location.href = link;
@@ -65,17 +65,17 @@
 
       // Add hover effects
       $card.hover(
-        function() {
+        function () {
           $(this).addClass('stat-card-hover');
         },
-        function() {
+        function () {
           $(this).removeClass('stat-card-hover');
         }
       );
     });
 
     // Initialize health check refresh
-    $('.health-checks .refresh-button', context).on('click', function(e) {
+    $('.health-checks .refresh-button', context).on('click', function (e) {
       e.preventDefault();
       refreshHealthChecks();
     });
@@ -86,13 +86,13 @@
    */
   function initializeEmbeddingManagement(context) {
     var $form = $('#search-api-postgresql-embedding-management', context);
-    
+
     if (!$form.length) {
       return;
     }
 
     // Handle operation changes
-    $form.find('input[name="operation"]').on('change', function() {
+    $form.find('input[name="operation"]').on('change', function () {
       var operation = $(this).val();
       updateOperationDescription(operation);
       updateCostEstimation();
@@ -100,25 +100,25 @@
     });
 
     // Handle server/index selection changes
-    $form.find('select[name="server_id"], select[name="index_id"]').on('change', function() {
+    $form.find('select[name="server_id"], select[name="index_id"]').on('change', function () {
       updateCostEstimation();
       updatePreview();
     });
 
     // Handle batch size changes
-    $form.find('input[name="batch_size"]').on('input', debounce(function() {
+    $form.find('input[name="batch_size"]').on('input', debounce(function () {
       updateCostEstimation();
     }, 500));
 
     // Handle queue option changes
-    $form.find('input[name="use_queue"]').on('change', function() {
+    $form.find('input[name="use_queue"]').on('change', function () {
       var useQueue = $(this).is(':checked');
       $form.find('.queue-options').toggle(useQueue);
       updateFormSubmitText(useQueue);
     });
 
     // Initialize preview button
-    $form.find('input[value="Preview Changes"]').on('click', function(e) {
+    $form.find('input[value="Preview Changes"]').on('click', function (e) {
       e.preventDefault();
       showPreviewModal();
     });
@@ -132,7 +132,7 @@
    */
   function initializeAnalytics(context) {
     // Handle date range changes
-    $('#analytics-date-range', context).on('change', function() {
+    $('#analytics-date-range', context).on('change', function () {
       var range = $(this).val();
       updateAnalytics(range);
     });
@@ -142,7 +142,7 @@
 
     // Auto-refresh analytics every 60 seconds
     if (drupalSettings.searchApiPostgreSQL && drupalSettings.searchApiPostgreSQL.analyticsAutoRefresh) {
-      refreshIntervals.analytics = setInterval(function() {
+      refreshIntervals.analytics = setInterval(function () {
         var currentRange = $('#analytics-date-range').val() || '7d';
         updateAnalytics(currentRange);
       }, 60000);
@@ -154,12 +154,12 @@
    */
   function initializeRealTimeUpdates(context) {
     // Update embedding progress bars
-    $('.progress-bar', context).each(function() {
+    $('.progress-bar', context).each(function () {
       var $bar = $(this);
       var indexId = $bar.data('index-id');
-      
+
       if (indexId) {
-        updateTimers[indexId] = setInterval(function() {
+        updateTimers[indexId] = setInterval(function () {
           updateEmbeddingProgress(indexId, $bar);
         }, 5000);
       }
@@ -167,18 +167,18 @@
 
     // Update queue statistics
     if ($('.queue-stats', context).length) {
-      refreshIntervals.queue = setInterval(function() {
+      refreshIntervals.queue = setInterval(function () {
         updateQueueStats();
       }, 10000);
     }
 
     // Update server status indicators
-    $('.server-status-indicator', context).each(function() {
+    $('.server-status-indicator', context).each(function () {
       var $indicator = $(this);
       var serverId = $indicator.data('server-id');
-      
+
       if (serverId) {
-        setInterval(function() {
+        setInterval(function () {
           updateServerStatus(serverId, $indicator);
         }, 15000);
       }
@@ -190,19 +190,19 @@
    */
   function initializeTooltips(context) {
     // Add tooltips to elements with data-tooltip attribute
-    $('[data-tooltip]', context).each(function() {
+    $('[data-tooltip]', context).each(function () {
       var $element = $(this);
       var tooltip = $element.data('tooltip');
-      
-      $element.on('mouseenter', function(e) {
+
+      $element.on('mouseenter', function (e) {
         showTooltip(e, tooltip);
-      }).on('mouseleave', function() {
+      }).on('mouseleave', function () {
         hideTooltip();
       });
     });
 
     // Initialize help toggles
-    $('.help-toggle', context).on('click', function(e) {
+    $('.help-toggle', context).on('click', function (e) {
       e.preventDefault();
       var $help = $(this).siblings('.help-text');
       $help.slideToggle(200);
@@ -214,17 +214,17 @@
    */
   function initializeFormValidation(context) {
     // Real-time validation for embedding management form
-    $('#search-api-postgresql-embedding-management', context).on('input change', 'input, select', function() {
+    $('#search-api-postgresql-embedding-management', context).on('input change', 'input, select', function () {
       var $field = $(this);
       validateField($field);
     });
 
     // Confirmation dialogs for destructive operations
-    $('input[value*="Clear"], input[value*="Delete"], input[value*="Remove"]', context).on('click', function(e) {
+    $('input[value*="Clear"], input[value*="Delete"], input[value*="Remove"]', context).on('click', function (e) {
       var operation = $(this).val();
       if (!confirm('Are you sure you want to ' + operation.toLowerCase() + '? This action cannot be undone.')) {
         e.preventDefault();
-        return false;
+        return FALSE;
       }
     });
   }
@@ -237,12 +237,12 @@
       url: drupalSettings.path.baseUrl + 'admin/config/search/search-api-postgresql/ajax/dashboard-stats',
       type: 'GET',
       dataType: 'json',
-      success: function(data) {
+      success: function (data) {
         updateDashboardCards(data.stats);
         updateServerStatusTable(data.servers);
         updateIndexStatusTable(data.indexes);
       },
-      error: function() {
+      error: function () {
         console.log('Failed to refresh dashboard stats');
       }
     });
@@ -252,19 +252,20 @@
    * Update dashboard stat cards.
    */
   function updateDashboardCards(stats) {
-    if (!stats) return;
+    if (!stats) { return;
+    }
 
     for (var key in stats) {
       var $card = $('.stat-card[data-stat="' + key + '"]');
       if ($card.length) {
         var $value = $card.find('.stat-card-value');
         var $subtitle = $card.find('.stat-card-subtitle');
-        
+
         // Animate value change
         if (stats[key].value !== undefined) {
           animateValue($value, stats[key].value);
         }
-        
+
         if (stats[key].subtitle !== undefined) {
           $subtitle.text(stats[key].subtitle);
         }
@@ -282,7 +283,8 @@
    */
   function updateCostEstimation() {
     var $form = $('#search-api-postgresql-embedding-management');
-    if (!$form.length) return;
+    if (!$form.length) { return;
+    }
 
     var formData = {
       operation: $form.find('input[name="operation"]:checked').val(),
@@ -300,10 +302,10 @@
       type: 'POST',
       data: formData,
       dataType: 'json',
-      success: function(data) {
+      success: function (data) {
         displayCostEstimation(data);
       },
-      error: function() {
+      error: function () {
         $('#cost-estimation-content').html('<div class="error">Failed to calculate cost estimation.</div>');
       }
     });
@@ -314,7 +316,7 @@
    */
   function displayCostEstimation(data) {
     var html = '<div class="cost-estimation-results">';
-    
+
     html += '<div class="cost-summary">';
     html += '<strong>Estimated Cost: $' + parseFloat(data.total_cost).toFixed(4) + '</strong>';
     html += '</div>';
@@ -322,14 +324,14 @@
     if (data.breakdown && data.breakdown.length > 0) {
       html += '<div class="cost-breakdown">';
       html += '<h4>Breakdown:</h4>';
-      
-      data.breakdown.forEach(function(item) {
+
+      data.breakdown.forEach(function (item) {
         html += '<div class="cost-breakdown-item">';
         html += '<span>' + item.description + '</span>';
         html += '<span>$' + parseFloat(item.cost).toFixed(4) + '</span>';
         html += '</div>';
       });
-      
+
       html += '</div>';
     }
 
@@ -362,13 +364,13 @@
       type: 'GET',
       data: { range: range },
       dataType: 'json',
-      success: function(data) {
+      success: function (data) {
         updateCostCards(data.cost);
         updatePerformanceCharts(data.performance);
         updateUsageCharts(data.usage);
         $container.removeClass('loading');
       },
-      error: function() {
+      error: function () {
         console.log('Failed to update analytics');
         $container.removeClass('loading');
       }
@@ -383,13 +385,13 @@
       url: drupalSettings.path.baseUrl + 'admin/config/search/search-api-postgresql/ajax/embedding-progress/' + indexId,
       type: 'GET',
       dataType: 'json',
-      success: function(data) {
+      success: function (data) {
         if (data.progress && data.progress.embedding_coverage !== undefined) {
           var percentage = Math.round(data.progress.embedding_coverage);
-          
+
           $progressBar.find('.progress-bar-fill').css('width', percentage + '%');
           $progressBar.find('.progress-text').text(percentage + '%');
-          
+
           // Update related statistics
           var $statsContainer = $progressBar.closest('.embedding-stats-container');
           if ($statsContainer.length) {
@@ -397,7 +399,7 @@
           }
         }
       },
-      error: function() {
+      error: function () {
         // Silently handle errors for real-time updates
       }
     });
@@ -429,9 +431,9 @@
     // Create modal overlay
     var $overlay = $('<div class="modal-overlay"></div>');
     var $modal = $('<div class="preview-modal"></div>');
-    
+
     $modal.html('<div class="modal-header"><h3>Operation Preview</h3><button class="modal-close">×</button></div><div class="modal-body"><div class="loading">Generating preview...</div></div><div class="modal-footer"><button class="button button--primary confirm-operation">Confirm & Execute</button><button class="button cancel-operation">Cancel</button></div>');
-    
+
     $overlay.append($modal);
     $('body').append($overlay);
 
@@ -441,25 +443,25 @@
       type: 'POST',
       data: formData,
       dataType: 'json',
-      success: function(data) {
+      success: function (data) {
         displayPreviewResults($modal, data);
       },
-      error: function() {
+      error: function () {
         $modal.find('.modal-body').html('<div class="error">Failed to generate preview.</div>');
       }
     });
 
     // Handle modal interactions
-    $overlay.on('click', '.modal-close, .cancel-operation', function() {
+    $overlay.on('click', '.modal-close, .cancel-operation', function () {
       $overlay.remove();
     });
 
-    $overlay.on('click', '.confirm-operation', function() {
+    $overlay.on('click', '.confirm-operation', function () {
       $overlay.remove();
       $form.find('input[type="submit"]').click();
     });
 
-    $overlay.on('click', function(e) {
+    $overlay.on('click', function (e) {
       if (e.target === $overlay[0]) {
         $overlay.remove();
       }
@@ -471,7 +473,7 @@
    */
   function displayPreviewResults($modal, data) {
     var html = '<div class="preview-results">';
-    
+
     html += '<div class="preview-summary">';
     html += '<h4>Operation Summary</h4>';
     html += '<p><strong>Operation:</strong> ' + data.operation + '</p>';
@@ -484,7 +486,7 @@
       html += '<div class="preview-warnings">';
       html += '<h4>Warnings</h4>';
       html += '<ul>';
-      data.warnings.forEach(function(warning) {
+      data.warnings.forEach(function (warning) {
         html += '<li>' + warning + '</li>';
       });
       html += '</ul>';
@@ -497,8 +499,8 @@
       html += '<table>';
       html += '<thead><tr><th>Server</th><th>Index</th><th>Items</th><th>Cost</th></tr></thead>';
       html += '<tbody>';
-      
-      data.breakdown.forEach(function(item) {
+
+      data.breakdown.forEach(function (item) {
         html += '<tr>';
         html += '<td>' + item.server_name + '</td>';
         html += '<td>' + item.index_name + '</td>';
@@ -506,7 +508,7 @@
         html += '<td>$' + parseFloat(item.cost).toFixed(4) + '</td>';
         html += '</tr>';
       });
-      
+
       html += '</tbody></table>';
       html += '</div>';
     }
@@ -522,11 +524,11 @@
   function initializeCharts(context) {
     // This would integrate with a charting library like Chart.js or D3.js
     // For now, we'll implement basic chart placeholders
-    $('.metric-chart', context).each(function() {
+    $('.metric-chart', context).each(function () {
       var $chart = $(this);
       var chartType = $chart.data('chart-type') || 'line';
       var chartData = $chart.data('chart-data') || [];
-      
+
       // Initialize chart based on type
       initializeChart($chart, chartType, chartData);
     });
@@ -540,9 +542,9 @@
     // In a real implementation, this would use Chart.js or similar
     var $canvas = $('<canvas width="400" height="200"></canvas>');
     $container.append($canvas);
-    
+
     // Store chart reference for updates
-    $container.data('chart-initialized', true);
+    $container.data('chart-initialized', TRUE);
   }
 
   /**
@@ -557,8 +559,8 @@
     return function executedFunction() {
       var context = this;
       var args = arguments;
-      var later = function() {
-        timeout = null;
+      var later = function () {
+        timeout = NULL;
         func.apply(context, args);
       };
       clearTimeout(timeout);
@@ -577,13 +579,13 @@
     function updateValue() {
       var elapsed = Date.now() - startTime;
       var progress = Math.min(elapsed / duration, 1);
-      
+
       // Easing function
       var easedProgress = 1 - Math.pow(1 - progress, 3);
       var currentValue = Math.round(startValue + (endValue - startValue) * easedProgress);
-      
+
       $element.text(currentValue.toLocaleString());
-      
+
       if (progress < 1) {
         requestAnimationFrame(updateValue);
       }
@@ -597,7 +599,7 @@
    */
   function serializeFormData($form) {
     var data = {};
-    $form.serializeArray().forEach(function(item) {
+    $form.serializeArray().forEach(function (item) {
       data[item.name] = item.value;
     });
     return data;
@@ -609,7 +611,7 @@
   function showTooltip(event, text) {
     var $tooltip = $('<div class="admin-tooltip">' + text + '</div>');
     $('body').append($tooltip);
-    
+
     $tooltip.css({
       position: 'absolute',
       top: event.pageY + 10,
@@ -631,24 +633,24 @@
   function validateField($field) {
     var value = $field.val();
     var fieldName = $field.attr('name');
-    var isValid = true;
+    var isValid = TRUE;
     var errorMessage = '';
 
     // Field-specific validation
     switch (fieldName) {
       case 'batch_size':
         if (value < 1 || value > 1000) {
-          isValid = false;
+          isValid = FALSE;
           errorMessage = 'Batch size must be between 1 and 1000.';
         }
         break;
-      
+
       // Add more field validations as needed
     }
 
     // Update field styling
     $field.toggleClass('error', !isValid);
-    
+
     // Show/hide error message
     var $errorElement = $field.siblings('.field-error');
     if (!isValid) {
@@ -688,7 +690,7 @@
   function toggleAdvancedOptions(operation) {
     var $forceOverwrite = $('.form-item-force-overwrite');
     var showForceOverwrite = ['regenerate_all', 'regenerate_missing'].includes(operation);
-    
+
     $forceOverwrite.toggle(showForceOverwrite);
   }
 
@@ -714,7 +716,7 @@
     }
 
     $indicator.removeClass('trend-up trend-down trend-neutral');
-    
+
     if (trend > 0) {
       $indicator.addClass('trend-up').text('↗');
     } else if (trend < 0) {
@@ -727,19 +729,19 @@
   /**
    * Cleanup function for when leaving pages.
    */
-  $(window).on('beforeunload', function() {
+  $(window).on('beforeunload', function () {
     // Clear all intervals
     for (var key in refreshIntervals) {
       clearInterval(refreshIntervals[key]);
     }
-    
+
     for (var key in updateTimers) {
       clearInterval(updateTimers[key]);
     }
   });
 
   // Global function for analytics date range updates
-  window.updateAnalytics = function(range) {
+  window.updateAnalytics = function (range) {
     updateAnalytics(range);
   };
 

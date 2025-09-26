@@ -11,7 +11,11 @@ This project includes a complete DDEV setup for local development:
 git clone <repository-url>
 cd search_api_postgresql
 ddev start
-ddev drush php:script scripts/local-setup.php
+# Setup PostgreSQL extensions
+ddev psql -c "CREATE EXTENSION IF NOT EXISTS vector;"
+ddev psql -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+ddev psql -c "CREATE EXTENSION IF NOT EXISTS btree_gin;"
+ddev psql -c "CREATE EXTENSION IF NOT EXISTS unaccent;"
 ```
 
 **Environment Features:**

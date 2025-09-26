@@ -13,9 +13,11 @@ use Drupal\search_api_postgresql\Service\CircuitBreakerService;
 /**
  * Enhanced QueryBuilder with graceful degradation for vector search.
  */
-class EnhancedVectorQueryBuilder extends QueryBuilder {
+class EnhancedVectorQueryBuilder extends QueryBuilder
+{
   /**
    * The embedding service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface
    */
@@ -23,6 +25,7 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * The circuit breaker service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\CircuitBreakerService
    */
@@ -30,20 +33,27 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Degradation state for current query.
+   * {@inheritdoc}
    *
    * @var array
    */
   protected $degradationState = [
-    'is_degraded' => FALSE,
-    'degradation_reason' => NULL,
-    'fallback_strategy' => NULL,
-    'user_message' => NULL,
+    'is_degraded' => false,
+    'degradation_reason' => null,
+    'fallback_strategy' => null,
+    'user_message' => null,
   ];
 
   /**
    * {@inheritdoc}
    */
-  public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config, $embedding_service = NULL, ?CircuitBreakerService $circuit_breaker = NULL) {
+  public function __construct(
+      PostgreSQLConnector $connector,
+      FieldMapper $field_mapper,
+      array $config,
+      $embedding_service = null,
+      ?CircuitBreakerService $circuit_breaker = null
+  ) {
     parent::__construct($connector, $field_mapper, $config);
     $this->embeddingService = $embedding_service;
     $this->circuitBreaker = $circuit_breaker ?: \Drupal::service('search_api_postgresql.circuit_breaker');
@@ -52,16 +62,15 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
   /**
    * {@inheritdoc}
    */
-  public function buildSearchQuery(QueryInterface $query) {
+  public function buildSearchQuery(QueryInterface $query)
+  {
     try {
       return $this->buildQueryWithDegradation($query);
-    }
-    catch (GracefulDegradationException $e) {
+    } catch (GracefulDegradationException $e) {
       // Handle graceful degradation.
       $this->handleDegradation($e);
       return $this->buildFallbackQuery($query, $e->getFallbackStrategy());
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       // Unexpected error - degrade gracefully.
       $degradation_exception = DegradationExceptionFactory::createFromException($e);
       $this->handleDegradation($degradation_exception);
@@ -71,24 +80,28 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds query with degradation handling.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
+   *   {@inheritdoc}
    *
    * @throws \Drupal\search_api_postgresql\Exception\GracefulDegradationException
    *   When degradation is needed.
    */
-  protected function buildQueryWithDegradation(QueryInterface $query) {
+  protected function buildQueryWithDegradation(QueryInterface $query)
+  {
     // Check circuit breaker status.
     if ($this->circuitBreaker && !$this->circuitBreaker->canProceed('vector_search')) {
       throw new VectorSearchDegradedException(
-            'Vector search circuit breaker is open',
-            'text_only',
-            'Circuit breaker protection is active due to recent failures.'
-        );
+          'Vector search circuit breaker is open',
+          'text_only',
+          'Circuit breaker protection is active due to recent failures.'
+      );
     }
 
     // Check if vector search is enabled and available.
@@ -100,37 +113,41 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
     switch ($search_mode) {
       case 'vector_only':
-        return $this->buildVectorSearchQueryWithDegradation($query);
+          return $this->buildVectorSearchQueryWithDegradation($query);
 
       case 'text_only':
-        return parent::buildSearchQuery($query);
+          return parent::buildSearchQuery($query);
 
       case 'hybrid':
       default:
-        return $this->buildHybridSearchQueryWithDegradation($query);
+          return $this->buildHybridSearchQueryWithDegradation($query);
     }
   }
 
   /**
    * Builds vector search query with degradation handling.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
+   *   {@inheritdoc}
    *
    * @throws \Drupal\search_api_postgresql\Exception\GracefulDegradationException
    *   When degradation is needed.
    */
-  protected function buildVectorSearchQueryWithDegradation(QueryInterface $query) {
+  protected function buildVectorSearchQueryWithDegradation(QueryInterface $query)
+  {
     $keys = $query->getKeys();
     if (!$keys || !$this->embeddingService) {
       throw new EmbeddingServiceUnavailableException(
-            'Embedding service unavailable for vector search',
-            'text_only',
-            'AI search is temporarily unavailable. Switching to text search.'
-        );
+          'Embedding service unavailable for vector search',
+          'text_only',
+          'AI search is temporarily unavailable. Switching to text search.'
+      );
     }
 
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
@@ -142,26 +159,25 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
       if ($this->circuitBreaker) {
         $this->circuitBreaker->recordSuccess('vector_search');
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       // Record failure with circuit breaker.
       if ($this->circuitBreaker) {
         $this->circuitBreaker->recordFailure('vector_search');
       }
 
       throw new EmbeddingServiceUnavailableException(
-            'Failed to generate embedding: ' . $e->getMessage(),
-            'text_only',
-            'AI search encountered an error. Using traditional text search instead.'
-            );
+          'Failed to generate embedding: ' . $e->getMessage(),
+          'text_only',
+          'AI search encountered an error. Using traditional text search instead.'
+      );
     }
 
     if (!$query_embedding) {
       throw new EmbeddingServiceUnavailableException(
-            'Empty embedding returned',
-            'text_only',
-            'AI search returned no results. Trying text search instead.'
-        );
+          'Empty embedding returned',
+          'text_only',
+          'AI search returned no results. Trying text search instead.'
+      );
     }
 
     $index = $query->getIndex();
@@ -184,24 +200,28 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds hybrid search query with degradation handling.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
+   *   {@inheritdoc}
    *
    * @throws \Drupal\search_api_postgresql\Exception\GracefulDegradationException
    *   When degradation is needed.
    */
-  protected function buildHybridSearchQueryWithDegradation(QueryInterface $query) {
+  protected function buildHybridSearchQueryWithDegradation(QueryInterface $query)
+  {
     $keys = $query->getKeys();
     if (!$keys) {
       return parent::buildSearchQuery($query);
     }
 
     $search_text = is_string($keys) ? $keys : $this->extractTextFromKeys($keys);
-    $query_embedding = NULL;
+    $query_embedding = null;
 
     // Try to get embedding, but don't fail if it's unavailable.
     if ($this->embeddingService) {
@@ -212,20 +232,22 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
         if ($this->circuitBreaker) {
           $this->circuitBreaker->recordSuccess('vector_search');
         }
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         // Record failure but continue with text-only search.
         if ($this->circuitBreaker) {
           $this->circuitBreaker->recordFailure('vector_search');
         }
 
-        \Drupal::logger('search_api_postgresql')->warning('Embedding failed in hybrid search, continuing with text only: @message', [
-          '@message' => $e->getMessage(),
-        ]);
+        \Drupal::logger('search_api_postgresql')->warning(
+            'Embedding failed in hybrid search, continuing with text only: @message',
+            [
+            '@message' => $e->getMessage(),
+            ]
+        );
 
         // Set degradation state but don't throw exception.
         $this->degradationState = [
-          'is_degraded' => TRUE,
+          'is_degraded' => true,
           'degradation_reason' => 'embedding_service_partial_failure',
           'fallback_strategy' => 'text_only',
           'user_message' => 'AI search features are temporarily limited. Results are using traditional text search.',
@@ -262,13 +284,15 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Handles degradation by setting state and logging.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The degradation exception.
    */
-  protected function handleDegradation(GracefulDegradationException $exception) {
+  protected function handleDegradation(GracefulDegradationException $exception)
+  {
     $this->degradationState = [
-      'is_degraded' => TRUE,
+      'is_degraded' => true,
       'degradation_reason' => $exception->getDegradationReason(),
       'fallback_strategy' => $exception->getFallbackStrategy(),
       'user_message' => $exception->getUserMessage(),
@@ -283,43 +307,49 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds fallback query based on strategy.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
    * @param string $strategy
    *   The fallback strategy.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
    */
-  protected function buildFallbackQuery(QueryInterface $query, $strategy) {
+  protected function buildFallbackQuery(QueryInterface $query, $strategy)
+  {
     switch ($strategy) {
       case 'text_only':
-        return parent::buildSearchQuery($query);
+          return parent::buildSearchQuery($query);
 
       case 'cached_results':
         // Try to get cached results, fallback to text if unavailable.
-        return $this->buildCachedFallbackQuery($query);
+          return $this->buildCachedFallbackQuery($query);
 
       case 'simplified_vector':
         // Use a simplified vector approach.
-        return $this->buildSimplifiedVectorQuery($query);
+          return $this->buildSimplifiedVectorQuery($query);
 
       default:
-        return parent::buildSearchQuery($query);
+          return parent::buildSearchQuery($query);
     }
   }
 
   /**
    * Builds SELECT clause for vector search.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The SELECT clause.
    */
-  protected function buildVectorSelectClause(QueryInterface $query) {
+  protected function buildVectorSelectClause(QueryInterface $query)
+  {
     $fields = [];
 
     // Add system fields (properly quoted)
@@ -334,21 +364,25 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
     }
 
     // Add vector similarity score.
-    $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS " . $this->connector->quoteColumnName('search_api_relevance');
+    $fields[] = "(1 - (content_embedding <=> :query_embedding)) AS " .
+               $this->connector->quoteColumnName('search_api_relevance');
 
     return implode(', ', $fields);
   }
 
   /**
    * Builds WHERE clause for vector search.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The WHERE clause.
    */
-  protected function buildVectorWhereClause(QueryInterface $query) {
+  protected function buildVectorWhereClause(QueryInterface $query)
+  {
     $conditions = ['content_embedding IS NOT NULL'];
 
     // Add minimum similarity threshold.
@@ -365,7 +399,7 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
     // Handle language filtering (properly quoted)
     if ($languages = $query->getLanguages()) {
-      if ($languages !== [NULL]) {
+      if ($languages !== [null]) {
         $language_placeholders = [];
         foreach ($languages as $i => $language) {
           $language_placeholders[] = ":language_{$i}";
@@ -380,6 +414,7 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds SELECT clause for hybrid search.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
@@ -387,11 +422,13 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
    *   Weight for text search scores.
    * @param float $vector_weight
    *   Weight for vector search scores.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The SELECT clause.
    */
-  protected function buildHybridSelectClause(QueryInterface $query, $text_weight, $vector_weight) {
+  protected function buildHybridSelectClause(QueryInterface $query, $text_weight, $vector_weight)
+  {
     $fields = [];
 
     // Add system fields (properly quoted)
@@ -442,14 +479,17 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds WHERE clause for hybrid search.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The WHERE clause.
    */
-  protected function buildHybridWhereClause(QueryInterface $query) {
+  protected function buildHybridWhereClause(QueryInterface $query)
+  {
     $conditions = ['1=1'];
     $search_vector_field = $this->connector->quoteColumnName('search_vector');
 
@@ -473,7 +513,7 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
     // Handle language filtering (properly quoted)
     if ($languages = $query->getLanguages()) {
-      if ($languages !== [NULL]) {
+      if ($languages !== [null]) {
         $language_placeholders = [];
         foreach ($languages as $i => $language) {
           $language_placeholders[] = ":language_{$i}";
@@ -488,62 +528,75 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Builds cached fallback query.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
    */
-  protected function buildCachedFallbackQuery(QueryInterface $query) {
+  protected function buildCachedFallbackQuery(QueryInterface $query)
+  {
     // For now, just return text search - could be enhanced with actual caching.
     return parent::buildSearchQuery($query);
   }
 
   /**
    * Builds simplified vector query.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
    */
-  protected function buildSimplifiedVectorQuery(QueryInterface $query) {
+  protected function buildSimplifiedVectorQuery(QueryInterface $query)
+  {
     // For now, just return text search - could be enhanced with cached embeddings.
     return parent::buildSearchQuery($query);
   }
 
   /**
    * Gets degradation state.
+   * {@inheritdoc}
    *
    * @return array
    *   The degradation state.
    */
-  public function getDegradationState() {
+  public function getDegradationState()
+  {
     return $this->degradationState;
   }
 
   /**
    * Checks if query is degraded.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if degraded, FALSE otherwise.
+   *   true if degraded, false otherwise.
    */
-  public function isDegraded() {
+  public function isDegraded()
+  {
     return $this->degradationState['is_degraded'];
   }
 
   /**
    * Extracts text from complex search keys structure.
+   * {@inheritdoc}
    *
    * @param mixed $keys
    *   The search keys.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The extracted text.
    */
-  protected function extractTextFromKeys($keys) {
+  protected function extractTextFromKeys($keys)
+  {
     if (is_string($keys)) {
       return $keys;
     }
@@ -556,8 +609,7 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
       if (is_array($value)) {
         $text_parts[] = $this->extractTextFromKeys($value);
-      }
-      else {
+      } else {
         $text_parts[] = $value;
       }
     }
@@ -567,60 +619,72 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Checks if vector search is enabled.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE if vector search is enabled, FALSE otherwise.
+   *   true if vector search is enabled, false otherwise.
    */
-  protected function isVectorSearchEnabled() {
+  protected function isVectorSearchEnabled()
+  {
     return !empty($this->config['vector_search']['enabled']) ||
            !empty($this->config['ai_embeddings']['enabled']);
   }
 
   /**
    * Gets the text search weight from configuration.
+   * {@inheritdoc}
    *
    * @return float
    *   The text search weight.
    */
-  protected function getTextWeight() {
+  protected function getTextWeight()
+  {
     return $this->config['hybrid_search']['text_weight'] ?? 0.7;
   }
 
   /**
    * Gets the vector search weight from configuration.
+   * {@inheritdoc}
    *
    * @return float
    *   The vector search weight.
    */
-  protected function getVectorWeight() {
+  protected function getVectorWeight()
+  {
     return $this->config['hybrid_search']['vector_weight'] ?? 0.3;
   }
 
   /**
    * Gets the similarity threshold from configuration.
+   * {@inheritdoc}
    *
    * @return float
    *   The similarity threshold.
    */
-  protected function getSimilarityThreshold() {
+  protected function getSimilarityThreshold()
+  {
     return $this->config['hybrid_search']['similarity_threshold'] ?? 0.1;
   }
 
   /**
    * Validates an index field and returns the quoted field name.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    * @param string $field_id
    *   The field ID to validate.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The quoted field name.
+   *   {@inheritdoc}
    *
    * @throws \InvalidArgumentException
    *   If the field is invalid.
    */
-  protected function validateIndexField(IndexInterface $index, $field_id) {
+  protected function validateIndexField(IndexInterface $index, $field_id)
+  {
     // Validate that the field exists in the index.
     if (!$index->getField($field_id)) {
       throw new \InvalidArgumentException("Field '{$field_id}' does not exist in index '{$index->id()}'");
@@ -631,25 +695,26 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
   /**
    * Assembles SQL parts into a complete query.
+   * {@inheritdoc}
    *
    * @param array $parts
    *   Array of SQL parts.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The assembled SQL query.
    */
-  protected function assembleSqlQuery(array $parts) {
+  protected function assembleSqlQuery(array $parts)
+  {
     $sql = [];
 
     foreach (['SELECT', 'FROM', 'WHERE', 'ORDER', 'LIMIT'] as $clause) {
       if (!empty($parts[$clause])) {
         if ($clause === 'SELECT') {
           $sql[] = 'SELECT ' . $parts[$clause];
-        }
-        elseif ($clause === 'FROM' || $clause === 'WHERE') {
+        } elseif ($clause === 'FROM' || $clause === 'WHERE') {
           $sql[] = $clause . ' ' . $parts[$clause];
-        }
-        else {
+        } else {
           $sql[] = $parts[$clause];
         }
       }
@@ -657,5 +722,4 @@ class EnhancedVectorQueryBuilder extends QueryBuilder {
 
     return implode("\n", $sql);
   }
-
 }

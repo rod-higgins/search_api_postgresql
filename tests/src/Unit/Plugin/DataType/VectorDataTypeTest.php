@@ -10,7 +10,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class VectorDataTypeTest extends TestCase {
+class VectorDataTypeTest extends TestCase
+{
   /**
    * The Vector data type plugin under test.
    *
@@ -21,7 +22,8 @@ class VectorDataTypeTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load the actual module files.
@@ -43,7 +45,8 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::getValue
    */
-  public function testGetValueWithArray() {
+  public function testGetValueWithArray()
+  {
     $vector = [1.0, 2.5, -3.7, 0.0];
     $result = $this->dataType->getValue($vector);
 
@@ -57,7 +60,8 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::getValue
    */
-  public function testGetValueWithString() {
+  public function testGetValueWithString()
+  {
     $vector = '[1.0, 2.5, -3.7, 0.0]';
     $result = $this->dataType->getValue($vector);
 
@@ -70,7 +74,8 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::getValue
    */
-  public function testGetValueWithCommaSeparated() {
+  public function testGetValueWithCommaSeparated()
+  {
     $vector = '1.0,2.5,-3.7,0.0';
     $result = $this->dataType->getValue($vector);
 
@@ -84,14 +89,15 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::getValue
    */
-  public function testGetValueWithEmpty() {
+  public function testGetValueWithEmpty()
+  {
     $result = $this->dataType->getValue('');
     $this->assertNull($result);
 
     $result = $this->dataType->getValue([]);
     $this->assertNull($result);
 
-    $result = $this->dataType->getValue(NULL);
+    $result = $this->dataType->getValue(null);
     $this->assertNull($result);
   }
 
@@ -100,7 +106,8 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::validateValue
    */
-  public function testValidateValueValid() {
+  public function testValidateValueValid()
+  {
     $validVectors = [
       [1.0, 2.0, 3.0],
       '[1.0, 2.0, 3.0]',
@@ -117,7 +124,8 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::validateValue
    */
-  public function testValidateValueInvalid() {
+  public function testValidateValueInvalid()
+  {
     $invalidVectors = [
       'not a vector',
       ['not', 'numeric', 'values'],
@@ -134,7 +142,8 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::validateDimensions
    */
-  public function testValidateDimensions() {
+  public function testValidateDimensions()
+  {
     // Test valid dimensions.
     $validVector = array_fill(0, 1536, 1.0);
     $this->assertTrue($this->dataType->validateDimensions($validVector));
@@ -152,7 +161,8 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::normalizeVector
    */
-  public function testNormalizeVector() {
+  public function testNormalizeVector()
+  {
     $vector = [3.0, 4.0, 0.0];
     $normalized = $this->dataType->normalizeVector($vector);
 
@@ -171,7 +181,8 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::calculateSimilarity
    */
-  public function testCalculateSimilarity() {
+  public function testCalculateSimilarity()
+  {
     $vector1 = [1.0, 0.0, 0.0];
     $vector2 = [1.0, 0.0, 0.0];
     $vector3 = [0.0, 1.0, 0.0];
@@ -190,7 +201,8 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::getFallbackType
    */
-  public function testGetFallbackType() {
+  public function testGetFallbackType()
+  {
     $fallback = $this->dataType->getFallbackType();
     $this->assertEquals('string', $fallback);
   }
@@ -200,9 +212,9 @@ class VectorDataTypeTest extends TestCase {
    *
    * @covers ::getDefaultValue
    */
-  public function testGetDefaultValue() {
+  public function testGetDefaultValue()
+  {
     $default = $this->dataType->getDefaultValue();
     $this->assertNull($default);
   }
-
 }

@@ -11,7 +11,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class AzureOpenAIEmbeddingServiceTest extends TestCase {
+class AzureOpenAIEmbeddingServiceTest extends TestCase
+{
   /**
    * The Azure OpenAI embedding service under test.
    */
@@ -25,7 +26,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load actual service.
@@ -56,65 +58,74 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
       public $logs = [];
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function emergency($message, array $context = []) {
+      public function emergency($message, array $context = [])
+      {
         $this->log('emergency', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function alert($message, array $context = []) {
+      public function alert($message, array $context = [])
+      {
         $this->log('alert', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function critical($message, array $context = []) {
+      public function critical($message, array $context = [])
+      {
         $this->log('critical', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function error($message, array $context = []) {
+      public function error($message, array $context = [])
+      {
         $this->log('error', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function warning($message, array $context = []) {
+      public function warning($message, array $context = [])
+      {
         $this->log('warning', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function notice($message, array $context = []) {
+      public function notice($message, array $context = [])
+      {
         $this->log('notice', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function info($message, array $context = []) {
+      public function info($message, array $context = [])
+      {
         $this->log('info', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function debug($message, array $context = []) {
+      public function debug($message, array $context = [])
+      {
         $this->log('debug', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function log($level, $message, array $context = []) {
+      public function log($level, $message, array $context = [])
+      {
         $this->logs[] = ['level' => $level, 'message' => $message, 'context' => $context];
       }
 
@@ -124,29 +135,33 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
     $httpClient = new class {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function request($method, $uri, array $options = []) {
+      public function request($method, $uri, array $options = [])
+      {
         // Mock successful embedding response.
         return new class {
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function getStatusCode() {
+          public function getStatusCode()
+          {
             return 200;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function getBody() {
+          public function getBody()
+          {
             return new class {
 
               /**
-               *
+               * {@inheritdoc}
                */
-              public function getContents() {
+              public function getContents()
+              {
                 return json_encode([
                   'data' => [
                   [
@@ -174,15 +189,17 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
     $configFactory = new class {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function get($name) {
+      public function get($name)
+      {
         return new class {
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function get($key = '') {
+          public function get($key = '')
+          {
             $config = [
               'azure_endpoint' => 'https://test.openai.azure.com/',
               'api_key' => 'test_api_key',
@@ -192,7 +209,7 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
               'max_retries' => 3,
               'rate_limit' => 60,
             ];
-            return $key ? ($config[$key] ?? NULL) : $config;
+            return $key ? ($config[$key] ?? null) : $config;
           }
 
         };
@@ -205,30 +222,34 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
       private $cache = [];
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function get($cid, $allow_invalid = FALSE) {
-        return isset($this->cache[$cid]) ? (object) ['data' => $this->cache[$cid]] : FALSE;
+      public function get($cid, $allow_invalid = false)
+      {
+        return isset($this->cache[$cid]) ? (object) ['data' => $this->cache[$cid]] : false;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function set($cid, $data, $expire = NULL, array $tags = []) {
+      public function set($cid, $data, $expire = null, array $tags = [])
+      {
         $this->cache[$cid] = $data;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function delete($cid) {
+      public function delete($cid)
+      {
         unset($this->cache[$cid]);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function invalidate($cid) {
+      public function invalidate($cid)
+      {
         unset($this->cache[$cid]);
       }
 
@@ -236,13 +257,12 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
 
     try {
       $this->embeddingService = new AzureOpenAIEmbeddingService(
-            $httpClient,
-            $configFactory,
-            $cache,
-            $this->logger
-        );
-    }
-    catch (TypeError $e) {
+          $httpClient,
+          $configFactory,
+          $cache,
+          $this->logger
+      );
+    } catch (TypeError $e) {
       // Skip if we can't instantiate due to type constraints.
       $this->markTestSkipped('Cannot instantiate service due to type constraints: ' . $e->getMessage());
     }
@@ -251,14 +271,16 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests service instantiation.
    */
-  public function testServiceInstantiation() {
+  public function testServiceInstantiation()
+  {
     $this->assertNotNull($this->embeddingService);
   }
 
   /**
    * Tests service interface compliance.
    */
-  public function testServiceInterface() {
+  public function testServiceInterface()
+  {
     if (!$this->embeddingService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -279,7 +301,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests configuration validation.
    */
-  public function testConfigurationValidation() {
+  public function testConfigurationValidation()
+  {
     if (!$this->embeddingService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -294,7 +317,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests API endpoint configuration.
    */
-  public function testApiEndpointConfiguration() {
+  public function testApiEndpointConfiguration()
+  {
     $validEndpoints = [
       'https://test.openai.azure.com/',
       'https://myservice.openai.azure.com/',
@@ -311,7 +335,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests API key validation patterns.
    */
-  public function testApiKeyValidation() {
+  public function testApiKeyValidation()
+  {
     $validApiKeys = [
       'abcdef1234567890abcdef1234567890',
       '1234567890abcdef1234567890abcdef',
@@ -328,7 +353,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests deployment name configuration.
    */
-  public function testDeploymentNameConfiguration() {
+  public function testDeploymentNameConfiguration()
+  {
     $validDeployments = [
       'text-embedding-ada-002',
       'text-embedding-3-small',
@@ -346,7 +372,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests API version handling.
    */
-  public function testApiVersionHandling() {
+  public function testApiVersionHandling()
+  {
     $supportedVersions = [
       '2023-05-15',
       '2023-12-01-preview',
@@ -363,7 +390,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests embedding request structure.
    */
-  public function testEmbeddingRequestStructure() {
+  public function testEmbeddingRequestStructure()
+  {
     $requestData = [
       'input' => 'Test text for embedding generation',
       'model' => 'text-embedding-ada-002',
@@ -382,7 +410,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests embedding response validation.
    */
-  public function testEmbeddingResponseValidation() {
+  public function testEmbeddingResponseValidation()
+  {
     $validResponse = [
       'data' => [
       [
@@ -410,7 +439,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests error response handling.
    */
-  public function testErrorResponseHandling() {
+  public function testErrorResponseHandling()
+  {
     $errorResponses = [
       [
         'error' => [
@@ -449,7 +479,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests rate limiting configuration.
    */
-  public function testRateLimitingConfiguration() {
+  public function testRateLimitingConfiguration()
+  {
     $rateLimitConfig = [
       'requests_per_minute' => 60,
       'tokens_per_minute' => 60000,
@@ -462,8 +493,7 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
       $this->assertIsString($key);
       if (is_int($value)) {
         $this->assertGreaterThan(0, $value);
-      }
-      else {
+      } else {
         $this->assertIsString($value);
         $this->assertNotEmpty($value);
       }
@@ -473,7 +503,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests batch processing capabilities.
    */
-  public function testBatchProcessingCapabilities() {
+  public function testBatchProcessingCapabilities()
+  {
     $batchConfig = [
       'max_batch_size' => 100,
       'max_input_length' => 8192,
@@ -491,9 +522,10 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests caching integration.
    */
-  public function testCachingIntegration() {
+  public function testCachingIntegration()
+  {
     $cacheConfig = [
-      'enable_caching' => TRUE,
+      'enable_caching' => true,
       'cache_ttl' => 3600,
       'cache_key_prefix' => 'azure_embedding',
       'max_cache_size' => 1000,
@@ -509,7 +541,8 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests logging during service operations.
    */
-  public function testServiceLogging() {
+  public function testServiceLogging()
+  {
     // Clear previous logs.
     $this->logger->logs = [];
 
@@ -534,12 +567,13 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests security and authentication.
    */
-  public function testSecurityAndAuthentication() {
+  public function testSecurityAndAuthentication()
+  {
     $securityConfig = [
-      'use_https' => TRUE,
-      'verify_ssl' => TRUE,
-      'api_key_rotation' => TRUE,
-      'request_signing' => FALSE,
+      'use_https' => true,
+      'verify_ssl' => true,
+      'api_key_rotation' => true,
+      'request_signing' => false,
       'ip_whitelist' => [],
     ];
 
@@ -552,13 +586,14 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
   /**
    * Tests service health monitoring.
    */
-  public function testServiceHealthMonitoring() {
+  public function testServiceHealthMonitoring()
+  {
     $healthMetrics = [
       'total_requests' => 0,
       'successful_requests' => 0,
       'failed_requests' => 0,
       'average_response_time' => 0.0,
-      'last_successful_request' => NULL,
+      'last_successful_request' => null,
       'service_availability' => 100.0,
     ];
 
@@ -569,5 +604,4 @@ class AzureOpenAIEmbeddingServiceTest extends TestCase {
       }
     }
   }
-
 }

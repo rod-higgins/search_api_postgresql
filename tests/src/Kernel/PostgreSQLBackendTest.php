@@ -11,7 +11,8 @@ use Drupal\search_api\Entity\Server;
  *
  * @group search_api_postgresql
  */
-class PostgreSQLBackendTest extends KernelTestBase {
+class PostgreSQLBackendTest extends KernelTestBase
+{
   /**
    * {@inheritdoc}
    */
@@ -39,7 +40,8 @@ class PostgreSQLBackendTest extends KernelTestBase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->installSchema('search_api', ['search_api_item']);
@@ -62,7 +64,7 @@ class PostgreSQLBackendTest extends KernelTestBase {
         ],
         'index_prefix' => 'test_search_api_',
         'fts_configuration' => 'english',
-        'debug' => TRUE,
+        'debug' => true,
       ],
     ]);
     $this->server->save();
@@ -82,7 +84,8 @@ class PostgreSQLBackendTest extends KernelTestBase {
   /**
    * Tests server backend retrieval.
    */
-  public function testServerBackend() {
+  public function testServerBackend()
+  {
     $backend = $this->server->getBackend();
     $this->assertInstanceOf('Drupal\search_api_postgresql\Plugin\search_api\backend\PostgreSQLBackend', $backend);
   }
@@ -90,7 +93,8 @@ class PostgreSQLBackendTest extends KernelTestBase {
   /**
    * Tests supported features.
    */
-  public function testSupportedFeatures() {
+  public function testSupportedFeatures()
+  {
     $backend = $this->server->getBackend();
     $features = $backend->getSupportedFeatures();
 
@@ -111,7 +115,8 @@ class PostgreSQLBackendTest extends KernelTestBase {
   /**
    * Tests supported data types.
    */
-  public function testSupportedDataTypes() {
+  public function testSupportedDataTypes()
+  {
     $backend = $this->server->getBackend();
 
     $supported_types = [
@@ -130,5 +135,4 @@ class PostgreSQLBackendTest extends KernelTestBase {
 
     $this->assertFalse($backend->supportsDataType('unsupported_type'));
   }
-
 }

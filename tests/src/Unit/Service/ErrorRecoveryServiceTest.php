@@ -11,7 +11,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class ErrorRecoveryServiceTest extends TestCase {
+class ErrorRecoveryServiceTest extends TestCase
+{
   /**
    * The error recovery service under test.
    */
@@ -25,7 +26,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load actual service and exceptions.
@@ -59,65 +61,74 @@ class ErrorRecoveryServiceTest extends TestCase {
       public $logs = [];
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function emergency($message, array $context = []) {
+      public function emergency($message, array $context = [])
+      {
         $this->log('emergency', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function alert($message, array $context = []) {
+      public function alert($message, array $context = [])
+      {
         $this->log('alert', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function critical($message, array $context = []) {
+      public function critical($message, array $context = [])
+      {
         $this->log('critical', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function error($message, array $context = []) {
+      public function error($message, array $context = [])
+      {
         $this->log('error', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function warning($message, array $context = []) {
+      public function warning($message, array $context = [])
+      {
         $this->log('warning', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function notice($message, array $context = []) {
+      public function notice($message, array $context = [])
+      {
         $this->log('notice', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function info($message, array $context = []) {
+      public function info($message, array $context = [])
+      {
         $this->log('info', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function debug($message, array $context = []) {
+      public function debug($message, array $context = [])
+      {
         $this->log('debug', $message, $context);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function log($level, $message, array $context = []) {
+      public function log($level, $message, array $context = [])
+      {
         $this->logs[] = ['level' => $level, 'message' => $message, 'context' => $context];
       }
 
@@ -127,24 +138,27 @@ class ErrorRecoveryServiceTest extends TestCase {
     $database = new class {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function query($query, array $args = [], array $options = []) {
-        return TRUE;
+      public function query($query, array $args = [], array $options = [])
+      {
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function isConnected() {
-        return TRUE;
+      public function isConnected()
+      {
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function ping() {
-        return TRUE;
+      public function ping()
+      {
+        return true;
       }
 
     };
@@ -154,57 +168,65 @@ class ErrorRecoveryServiceTest extends TestCase {
       private $cache = [];
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function get($cid, $allow_invalid = FALSE) {
-        return isset($this->cache[$cid]) ? (object) ['data' => $this->cache[$cid]] : FALSE;
+      public function get($cid, $allow_invalid = false)
+      {
+        return isset($this->cache[$cid]) ? (object) ['data' => $this->cache[$cid]] : false;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function set($cid, $data, $expire = NULL, array $tags = []) {
+      public function set($cid, $data, $expire = null, array $tags = [])
+      {
         $this->cache[$cid] = $data;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function delete($cid) {
+      public function delete($cid)
+      {
         unset($this->cache[$cid]);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function deleteAll() {
+      public function deleteAll()
+      {
         $this->cache = [];
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function invalidate($cid) {
+      public function invalidate($cid)
+      {
         unset($this->cache[$cid]);
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function invalidateAll() {
+      public function invalidateAll()
+      {
         $this->cache = [];
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function garbageCollection() {
+      public function garbageCollection()
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function removeBin() {
+      public function removeBin()
+      {
       }
 
     };
@@ -213,45 +235,51 @@ class ErrorRecoveryServiceTest extends TestCase {
     $queueFactory = new class {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function get($name) {
+      public function get($name)
+      {
         return new class {
           private $items = [];
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function createItem($data) {
+          public function createItem($data)
+          {
             $this->items[] = $data;
-            return TRUE;
+            return true;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function numberOfItems() {
+          public function numberOfItems()
+          {
             return count($this->items);
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function claimItem($lease_time = 30) {
+          public function claimItem($lease_time = 30)
+          {
             return array_shift($this->items);
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function deleteItem($item) {
-            return TRUE;
+          public function deleteItem($item)
+          {
+            return true;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function releaseItem($item) {
+          public function releaseItem($item)
+          {
             $this->items[] = $item;
           }
 
@@ -264,15 +292,17 @@ class ErrorRecoveryServiceTest extends TestCase {
     $configFactory = new class {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function get($name) {
+      public function get($name)
+      {
         return new class {
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function get($key = '') {
+          public function get($key = '')
+          {
             $config = [
               'error_recovery' => [
                 'max_retries' => 3,
@@ -281,7 +311,7 @@ class ErrorRecoveryServiceTest extends TestCase {
                 'recovery_strategies' => ['cache_fallback', 'queue_retry', 'graceful_degradation'],
               ],
             ];
-            return $key ? ($config[$key] ?? NULL) : $config;
+            return $key ? ($config[$key] ?? null) : $config;
           }
 
         };
@@ -291,14 +321,13 @@ class ErrorRecoveryServiceTest extends TestCase {
 
     try {
       $this->errorRecoveryService = new ErrorRecoveryService(
-            $database,
-            $cache,
-            $queueFactory,
-            $configFactory,
-            $this->logger
-        );
-    }
-    catch (TypeError $e) {
+          $database,
+          $cache,
+          $queueFactory,
+          $configFactory,
+          $this->logger
+      );
+    } catch (TypeError $e) {
       // Skip if we can't instantiate due to type constraints.
       $this->markTestSkipped('Cannot instantiate service due to type constraints: ' . $e->getMessage());
     }
@@ -307,14 +336,16 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests service instantiation.
    */
-  public function testServiceInstantiation() {
+  public function testServiceInstantiation()
+  {
     $this->assertNotNull($this->errorRecoveryService);
   }
 
   /**
    * Tests error recovery methods exist.
    */
-  public function testErrorRecoveryMethods() {
+  public function testErrorRecoveryMethods()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -336,7 +367,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests database connection error recovery.
    */
-  public function testDatabaseConnectionErrorRecovery() {
+  public function testDatabaseConnectionErrorRecovery()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -355,7 +387,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests memory exhaustion error recovery.
    */
-  public function testMemoryExhaustionRecovery() {
+  public function testMemoryExhaustionRecovery()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -372,7 +405,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests API key expiration recovery.
    */
-  public function testApiKeyExpirationRecovery() {
+  public function testApiKeyExpirationRecovery()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -393,7 +427,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests rate limiting recovery strategies.
    */
-  public function testRateLimitingRecovery() {
+  public function testRateLimitingRecovery()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -415,7 +450,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests vector index corruption recovery.
    */
-  public function testVectorIndexCorruptionRecovery() {
+  public function testVectorIndexCorruptionRecovery()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -438,7 +474,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests circuit breaker functionality.
    */
-  public function testCircuitBreakerFunctionality() {
+  public function testCircuitBreakerFunctionality()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -455,7 +492,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests graceful degradation strategies.
    */
-  public function testGracefulDegradationStrategies() {
+  public function testGracefulDegradationStrategies()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -478,7 +516,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests recovery metrics and monitoring.
    */
-  public function testRecoveryMetrics() {
+  public function testRecoveryMetrics()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -489,7 +528,7 @@ class ErrorRecoveryServiceTest extends TestCase {
       'successful_recoveries' => 0,
       'failed_recoveries' => 0,
       'average_recovery_time' => 0.0,
-      'last_recovery_timestamp' => NULL,
+      'last_recovery_timestamp' => null,
     ];
 
     $this->assertIsInt($metrics['recovery_attempts']);
@@ -501,7 +540,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests logging during error recovery.
    */
-  public function testErrorRecoveryLogging() {
+  public function testErrorRecoveryLogging()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -519,7 +559,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests retry mechanisms with exponential backoff.
    */
-  public function testRetryMechanisms() {
+  public function testRetryMechanisms()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -540,7 +581,8 @@ class ErrorRecoveryServiceTest extends TestCase {
   /**
    * Tests recovery strategy selection logic.
    */
-  public function testRecoveryStrategySelection() {
+  public function testRecoveryStrategySelection()
+  {
     if (!$this->errorRecoveryService) {
       $this->markTestSkipped('Service not instantiated');
     }
@@ -559,5 +601,4 @@ class ErrorRecoveryServiceTest extends TestCase {
       $this->assertNotEmpty($strategies);
     }
   }
-
 }

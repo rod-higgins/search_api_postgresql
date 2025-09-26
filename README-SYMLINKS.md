@@ -1,6 +1,7 @@
 # Development Symlinks for search_api_postgresql
 
-This DDEV environment is configured to automatically create symlinks between your module source code and the Drupal test installation.
+This DDEV environment is configured to automatically create symlinks between the
+ module source code and the Drupal test installation.
 
 ## How it works
 

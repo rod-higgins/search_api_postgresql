@@ -7,15 +7,17 @@ use Drupal\Tests\UnitTestCase;
 /**
  * Tests the PostgreSQL connector.
  *
- * @group search_api_postgresql
+ * @group              search_api_postgresql
  * @coversDefaultClass \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector
  */
-class PostgreSQLConnectorTest extends UnitTestCase {
+class PostgreSQLConnectorTest extends UnitTestCase
+{
 
   /**
    * Tests connection configuration validation.
    */
-  public function testConnectionConfigValidation() {
+  public function testConnectionConfigValidation()
+  {
     $config = [
       'host' => 'localhost',
       'port' => 5432,
@@ -37,12 +39,13 @@ class PostgreSQLConnectorTest extends UnitTestCase {
   /**
    * Tests query parameter binding logic.
    */
-  public function testQueryParameterBinding() {
+  public function testQueryParameterBinding()
+  {
     // Test parameter validation.
     $params = [
       ':name' => 'test_value',
       ':id' => 123,
-      ':active' => TRUE,
+      ':active' => true,
     ];
 
     $this->assertIsArray($params);
@@ -51,5 +54,4 @@ class PostgreSQLConnectorTest extends UnitTestCase {
     $this->assertEquals(123, $params[':id']);
     $this->assertTrue($params[':active']);
   }
-
 }

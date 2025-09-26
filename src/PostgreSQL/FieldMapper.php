@@ -10,7 +10,8 @@ use Drupal\search_api\SearchApiException;
 /**
  * Maps Search API fields to PostgreSQL columns with vector support and data type validation.
  */
-class FieldMapper {
+class FieldMapper
+{
   /**
    * The backend configuration.
    *
@@ -68,7 +69,8 @@ class FieldMapper {
   /**
    * Constructs a FieldMapper object.
    */
-  public function __construct(array $config) {
+  public function __construct(array $config)
+  {
     $this->config = $config;
     $this->logger = \Drupal::logger('search_api_postgresql');
   }
@@ -82,7 +84,8 @@ class FieldMapper {
    * @return array
    *   Field definitions keyed by field ID.
    */
-  public function getFieldDefinitions(IndexInterface $index) {
+  public function getFieldDefinitions(IndexInterface $index)
+  {
     $definitions = [];
 
     foreach ($index->getFields() as $field_id => $field) {
@@ -99,13 +102,10 @@ class FieldMapper {
       if (in_array($type, ['integer', 'entity_reference'])) {
         if ($is_multi_value) {
           $pg_type = 'INTEGER[]';
-        }
-        else {
+        } else {
           $pg_type = 'INTEGER';
         }
-      }
-      // Handle text and string fields that can be multi-value.
-      elseif (in_array($type, ['text', 'string'])) {
+      } elseif (in_array($type, ['text', 'string'])) {
         if ($is_multi_value) {
           // Use text array for multi-value text fields.
           $pg_type = 'TEXT[]';
@@ -113,12 +113,10 @@ class FieldMapper {
             '@field' => $field_id,
             '@type' => $type,
           ]);
-        }
-        else {
+        } else {
           $pg_type = $this->mapSearchApiTypeToPostgreSql($type);
         }
-      }
-      else {
+      } else {
         $pg_type = $this->mapSearchApiTypeToPostgreSql($type);
       }
 
@@ -131,7 +129,7 @@ class FieldMapper {
 
       $definitions[$field_id] = [
         'type' => $pg_type,
-        'null' => TRUE,
+        'null' => true,
         'searchable' => $this->isSearchableType($type),
         'facetable' => $this->isFacetableType($type),
         'sortable' => $this->isSortableType($type),
@@ -147,12 +145,12 @@ class FieldMapper {
 
       $definitions['embedding_vector'] = [
         'type' => "VECTOR({$dimensions})",
-        'null' => TRUE,
-        'searchable' => FALSE,
-        'facetable' => FALSE,
-        'sortable' => FALSE,
-        'vector' => TRUE,
-        'multi_value' => FALSE,
+        'null' => true,
+        'searchable' => false,
+        'facetable' => false,
+        'sortable' => false,
+        'vector' => true,
+        'multi_value' => false,
       ];
     }
 
@@ -172,12 +170,15 @@ class FieldMapper {
    * @return mixed
    *   The prepared field value.
    */
-  public function prepareFieldValue($field_values, $field_type, $field = NULL) {
-    $field_id = $field ? (method_exists($field, 'getFieldIdentifier') ? $field->getFieldIdentifier() : 'unknown') : 'null';
+  public function prepareFieldValue($field_values, $field_type, $field = null)
+  {
+    $field_id = $field ?
+      (method_exists($field, 'getFieldIdentifier') ?
+        $field->getFieldIdentifier() : 'unknown') : 'null';
 
     // Handle empty values.
     if (empty($field_values)) {
-      return NULL;
+      return null;
     }
 
     // Handle multi-value fields that should use arrays.
@@ -197,10 +198,7 @@ class FieldMapper {
           if (!empty($integer_values)) {
             return '{' . implode(',', $integer_values) . '}';
           }
-        }
-
-        // Handle text/string arrays.
-        elseif (in_array($field_type, ['text', 'string'])) {
+        } elseif (in_array($field_type, ['text', 'string'])) {
           $text_values = [];
 
           foreach ($field_values as $value) {
@@ -233,29 +231,29 @@ class FieldMapper {
 
     switch ($field_type) {
       case 'text':
-        return $this->prepareTextValue($scalar_value);
+          return $this->prepareTextValue($scalar_value);
 
       case 'string':
-        return $this->prepareStringValue($scalar_value);
+          return $this->prepareStringValue($scalar_value);
 
       case 'integer':
       case 'entity_reference':
-        return $this->prepareIntegerValue($scalar_value);
+          return $this->prepareIntegerValue($scalar_value);
 
       case 'decimal':
-        return $this->prepareDecimalValue($scalar_value);
+          return $this->prepareDecimalValue($scalar_value);
 
       case 'boolean':
-        return $this->prepareBooleanValue($scalar_value);
+          return $this->prepareBooleanValue($scalar_value);
 
       case 'date':
-        return $this->prepareDateValue($scalar_value);
+          return $this->prepareDateValue($scalar_value);
 
       case 'vector':
-        return $this->prepareVectorValue($scalar_value);
+          return $this->prepareVectorValue($scalar_value);
 
       default:
-        return $this->prepareTextValue($scalar_value);
+          return $this->prepareTextValue($scalar_value);
     }
   }
 
@@ -268,9 +266,12 @@ class FieldMapper {
    * @return bool
    *   TRUE if field is multi-value, FALSE otherwise.
    */
-  public function isFieldMultiValue($field) {
+  public function isFieldMultiValue($field)
+  {
     try {
-      $field_id = $field ? (method_exists($field, 'getFieldIdentifier') ? $field->getFieldIdentifier() : 'unknown') : 'null';
+      $field_id = $field ?
+        (method_exists($field, 'getFieldIdentifier') ?
+          $field->getFieldIdentifier() : 'unknown') : 'null';
 
       // First check field configuration for cardinality.
       $field_config = $field->getConfiguration();
@@ -289,21 +290,21 @@ class FieldMapper {
         return $result;
       }
 
-      return FALSE;
-    }
-    catch (\Exception $e) {
+      return false;
+    } catch (\Exception $e) {
       $this->logger->error('Error detecting multi-value status for @field: @error', [
         '@field' => $field_id ?? 'unknown',
         '@error' => $e->getMessage(),
       ]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Check entity field cardinality through field storage definition - WITH SAFE LOGGING.
    */
-  protected function checkEntityFieldCardinality($field) {
+  protected function checkEntityFieldCardinality($field)
+  {
     try {
       $property_path = $field->getPropertyPath();
 
@@ -330,11 +331,10 @@ class FieldMapper {
         }
       }
 
-      return FALSE;
-    }
-    catch (\Exception $e) {
+      return false;
+    } catch (\Exception $e) {
       $this->logger->error('Error checking entity field cardinality: @error', ['@error' => $e->getMessage()]);
-      return FALSE;
+      return false;
     }
   }
 
@@ -352,7 +352,8 @@ class FieldMapper {
    * @throws \Drupal\search_api\SearchApiException
    *   If the field name is invalid.
    */
-  public function getColumnName($field_name, $field_type = NULL) {
+  public function getColumnName($field_name, $field_type = null)
+  {
     // Validate the field ID first.
     $this->validateFieldId($field_name);
 
@@ -375,7 +376,8 @@ class FieldMapper {
    * @return string
    *   The actual storage column name.
    */
-  public function getStorageColumnName($field_name, IndexInterface $index) {
+  public function getStorageColumnName($field_name, IndexInterface $index)
+  {
     $fields = $index->getFields();
 
     if (isset($fields[$field_name])) {
@@ -403,9 +405,10 @@ class FieldMapper {
    * @return int|null
    *   The entity ID or NULL.
    */
-  protected function prepareEntityReferenceValue($value) {
-    if ($value === NULL || $value === '') {
-      return NULL;
+  protected function prepareEntityReferenceValue($value)
+  {
+    if ($value === null || $value === '') {
+      return null;
     }
 
     // Handle direct entity ID values.
@@ -457,7 +460,7 @@ class FieldMapper {
     // Handle string representations of entity IDs.
     if (is_string($value)) {
       // Try to parse as JSON first (in case it's serialized)
-      $decoded = json_decode($value, TRUE);
+      $decoded = json_decode($value, true);
       if (is_array($decoded) && isset($decoded['target_id'])) {
         return (int) $decoded['target_id'];
       }
@@ -470,20 +473,21 @@ class FieldMapper {
 
     // Log warning for unhandled entity reference format.
     \Drupal::logger('search_api_postgresql')->warning(
-          'Could not extract entity ID from entity reference value: @value (@type)',
-          [
-            '@value' => print_r($value, TRUE),
+        'Could not extract entity ID from entity reference value: @value (@type)',
+        [
+            '@value' => print_r($value, true),
             '@type' => is_object($value) ? get_class($value) : gettype($value),
           ]
-      );
+    );
 
-    return NULL;
+    return null;
   }
 
   /**
    * Enhanced extractScalarValue with better entity reference handling.
    */
-  public function extractScalarValue($field_value, $field_type) {
+  public function extractScalarValue($field_value, $field_type)
+  {
     // Handle different field value types.
     if (is_scalar($field_value)) {
       return $field_value;
@@ -546,10 +550,13 @@ class FieldMapper {
     // Last resort - try to convert to string.
     if (is_object($field_value) || is_array($field_value)) {
       // Log a warning for debugging.
-      \Drupal::logger('search_api_postgresql')->warning('Could not extract scalar value from field type @type: @value', [
-        '@type' => $field_type,
-        '@value' => is_object($field_value) ? get_class($field_value) : gettype($field_value),
-      ]);
+      \Drupal::logger('search_api_postgresql')->warning(
+          'Could not extract scalar value from field type @type: @value',
+          [
+          '@type' => $field_type,
+          '@value' => is_object($field_value) ? get_class($field_value) : gettype($field_value),
+          ]
+      );
 
       // Return empty string to prevent indexing failure.
       return '';
@@ -561,7 +568,8 @@ class FieldMapper {
   /**
    * Extract entity ID from various entity reference formats.
    */
-  protected function extractEntityReferenceId($field_value) {
+  protected function extractEntityReferenceId($field_value)
+  {
     if (is_numeric($field_value)) {
       return (int) $field_value;
     }
@@ -590,20 +598,22 @@ class FieldMapper {
       return (int) $field_value['target_id'];
     }
 
-    return NULL;
+    return null;
   }
 
   /**
    * Update isFacetableType to include entity_reference.
    */
-  protected function isFacetableType($type) {
+  protected function isFacetableType($type)
+  {
     return in_array($type, ['string', 'integer', 'boolean', 'date', 'entity_reference']);
   }
 
   /**
    * Update isSortableType to include entity_reference.
    */
-  protected function isSortableType($type) {
+  protected function isSortableType($type)
+  {
     return in_array($type, ['string', 'integer', 'decimal', 'date', 'boolean', 'entity_reference']);
   }
 
@@ -616,7 +626,8 @@ class FieldMapper {
    * @return array
    *   Array of searchable field IDs.
    */
-  public function getSearchableFields(IndexInterface $index) {
+  public function getSearchableFields(IndexInterface $index)
+  {
     $searchable_fields = [];
 
     foreach ($index->getFields() as $field_id => $field) {
@@ -638,7 +649,8 @@ class FieldMapper {
    * @return array
    *   Array of vector searchable field IDs.
    */
-  public function getVectorSearchableFields(IndexInterface $index) {
+  public function getVectorSearchableFields(IndexInterface $index)
+  {
     $vector_fields = [];
 
     foreach ($index->getFields() as $field_id => $field) {
@@ -649,7 +661,7 @@ class FieldMapper {
     }
 
     // Add automatic embedding field if enabled.
-    if ($this->config['ai_embeddings']['enabled'] ?? FALSE) {
+    if ($this->config['ai_embeddings']['enabled'] ?? false) {
       $vector_fields[] = 'embedding_vector';
     }
 
@@ -665,7 +677,8 @@ class FieldMapper {
    * @return array
    *   Array of facetable field IDs.
    */
-  public function getFacetableFields(IndexInterface $index) {
+  public function getFacetableFields(IndexInterface $index)
+  {
     $facetable_fields = [];
 
     foreach ($index->getFields() as $field_id => $field) {
@@ -687,7 +700,8 @@ class FieldMapper {
    * @return array
    *   Array of field IDs that should have embeddings.
    */
-  public function getEmbeddingSourceFields(IndexInterface $index) {
+  public function getEmbeddingSourceFields(IndexInterface $index)
+  {
     $embedding_fields = [];
 
     foreach ($index->getFields() as $field_id => $field) {
@@ -697,7 +711,7 @@ class FieldMapper {
 
       // Include text fields that are marked for embedding or all text fields if auto-embedding is enabled.
       if (in_array($type, ['text', 'postgresql_fulltext'])) {
-        if (!empty($configuration['generate_embedding']) || ($this->config['ai_embeddings']['enabled'] ?? FALSE)) {
+        if (!empty($configuration['generate_embedding']) || ($this->config['ai_embeddings']['enabled'] ?? false)) {
           $embedding_fields[] = $field_id;
         }
       }
@@ -717,7 +731,8 @@ class FieldMapper {
    * @return string
    *   The combined searchable text.
    */
-  public function extractSearchableText(array $fields, IndexInterface $index) {
+  public function extractSearchableText(array $fields, IndexInterface $index)
+  {
     $searchable_fields = $this->getSearchableFields($index);
     $text_parts = [];
 
@@ -746,7 +761,8 @@ class FieldMapper {
    * @return string
    *   Combined text for embedding generation.
    */
-  public function generateEmbeddingText(array $field_values, IndexInterface $index) {
+  public function generateEmbeddingText(array $field_values, IndexInterface $index)
+  {
     $embedding_source_fields = $this->getEmbeddingSourceFields($index);
     $text_parts = [];
 
@@ -773,15 +789,15 @@ class FieldMapper {
    * @return bool
    *   TRUE if vector extensions are available.
    */
-  public function checkVectorSupport(PostgreSQLConnector $connector) {
+  public function checkVectorSupport(PostgreSQLConnector $connector)
+  {
     try {
       // Check for pgvector extension.
       $sql = "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')";
       $stmt = $connector->executeQuery($sql);
       return (bool) $stmt->fetchColumn();
-    }
-    catch (\Exception $e) {
-      return FALSE;
+    } catch (\Exception $e) {
+      return false;
     }
   }
 
@@ -796,7 +812,8 @@ class FieldMapper {
    * @return \Drupal\search_api\Item\ItemInterface
    *   The result item.
    */
-  public function createResultItem(IndexInterface $index, array $row) {
+  public function createResultItem(IndexInterface $index, array $row)
+  {
     if (!isset($row['search_api_id'])) {
       throw new SearchApiException("Row missing required 'search_api_id' field.");
     }
@@ -836,14 +853,18 @@ class FieldMapper {
    * @throws \Drupal\search_api\SearchApiException
    *   If the field ID is invalid.
    */
-  protected function validateFieldId($field_id) {
+  protected function validateFieldId($field_id)
+  {
     if (empty($field_id) || !is_string($field_id)) {
       throw new SearchApiException("Field ID cannot be empty.");
     }
 
     // Field IDs should follow Drupal naming conventions.
     if (!preg_match('/^[a-z][a-z0-9_]*$/', $field_id)) {
-      throw new SearchApiException("Invalid field ID: '{$field_id}'. Must start with lowercase letter and contain only lowercase letters, numbers, and underscores.");
+      throw new SearchApiException(
+          "Invalid field ID: '{$field_id}'. Must start with lowercase letter and " .
+          "contain only lowercase letters, numbers, and underscores."
+      );
     }
 
     // Check length limit.
@@ -861,9 +882,13 @@ class FieldMapper {
    * @throws \Drupal\search_api\SearchApiException
    *   If the type is invalid.
    */
-  protected function validateSearchApiType($type) {
+  protected function validateSearchApiType($type)
+  {
     if (!in_array($type, self::$validSearchApiTypes)) {
-      throw new SearchApiException("Invalid Search API data type: '{$type}'. Allowed types: " . implode(', ', self::$validSearchApiTypes));
+      throw new SearchApiException(
+          "Invalid Search API data type: '{$type}'. Allowed types: " .
+          implode(', ', self::$validSearchApiTypes)
+      );
     }
   }
 
@@ -879,7 +904,8 @@ class FieldMapper {
    * @throws \Drupal\search_api\SearchApiException
    *   If mapping fails.
    */
-  public function mapSearchApiTypeToPostgreSql($search_api_type) {
+  public function mapSearchApiTypeToPostgreSql($search_api_type)
+  {
     if (!isset($this->typeMapping[$search_api_type])) {
       throw new SearchApiException("No PostgreSQL mapping found for Search API type: '{$search_api_type}'");
     }
@@ -898,7 +924,8 @@ class FieldMapper {
    * @throws \Drupal\search_api\SearchApiException
    *   If dimensions are invalid.
    */
-  protected function validateVectorDimensions($dimensions) {
+  protected function validateVectorDimensions($dimensions)
+  {
     if (!is_int($dimensions) || $dimensions < 1 || $dimensions > 16000) {
       throw new SearchApiException("Invalid vector dimensions: {$dimensions}. Must be an integer between 1 and 16000.");
     }
@@ -913,18 +940,17 @@ class FieldMapper {
    * @return string
    *   The prepared date string.
    */
-  protected function prepareDateValue($value) {
+  protected function prepareDateValue($value)
+  {
     if (is_numeric($value)) {
       // Assume Unix timestamp.
       $timestamp = (int) $value;
-    }
-    elseif (is_string($value)) {
+    } elseif (is_string($value)) {
       $timestamp = strtotime($value);
-      if ($timestamp === FALSE) {
+      if ($timestamp === false) {
         throw new SearchApiException("Invalid date value: {$value}");
       }
-    }
-    else {
+    } else {
       throw new SearchApiException("Date value must be numeric timestamp or date string, got: " . gettype($value));
     }
 
@@ -941,7 +967,8 @@ class FieldMapper {
    * @return string
    *   The prepared boolean string.
    */
-  protected function prepareBooleanValue($value) {
+  protected function prepareBooleanValue($value)
+  {
     if (is_bool($value)) {
       return $value ? 'true' : 'false';
     }
@@ -960,7 +987,7 @@ class FieldMapper {
       }
     }
 
-    throw new SearchApiException("Invalid boolean value: " . var_export($value, TRUE));
+    throw new SearchApiException("Invalid boolean value: " . var_export($value, true));
   }
 
   /**
@@ -972,7 +999,8 @@ class FieldMapper {
    * @return int
    *   The prepared integer.
    */
-  protected function prepareIntegerValue($value) {
+  protected function prepareIntegerValue($value)
+  {
     if (is_int($value)) {
       return $value;
     }
@@ -986,7 +1014,7 @@ class FieldMapper {
       return $int_value;
     }
 
-    throw new SearchApiException("Invalid integer value: " . var_export($value, TRUE));
+    throw new SearchApiException("Invalid integer value: " . var_export($value, true));
   }
 
   /**
@@ -998,7 +1026,8 @@ class FieldMapper {
    * @return float
    *   The prepared decimal.
    */
-  protected function prepareDecimalValue($value) {
+  protected function prepareDecimalValue($value)
+  {
     if (is_float($value) || is_int($value)) {
       return (float) $value;
     }
@@ -1012,7 +1041,7 @@ class FieldMapper {
       return $float_value;
     }
 
-    throw new SearchApiException("Invalid decimal value: " . var_export($value, TRUE));
+    throw new SearchApiException("Invalid decimal value: " . var_export($value, true));
   }
 
   /**
@@ -1024,7 +1053,8 @@ class FieldMapper {
    * @return string
    *   The prepared text.
    */
-  protected function prepareTextValue($value) {
+  protected function prepareTextValue($value)
+  {
     if (is_array($value)) {
       $value = implode(' ', array_filter($value, 'is_scalar'));
     }
@@ -1059,7 +1089,8 @@ class FieldMapper {
    * @return string
    *   The prepared string.
    */
-  protected function prepareStringValue($value) {
+  protected function prepareStringValue($value)
+  {
     if (!is_scalar($value)) {
       throw new SearchApiException("String value must be scalar.");
     }
@@ -1087,7 +1118,8 @@ class FieldMapper {
    * @throws \Drupal\search_api\SearchApiException
    *   If vector preparation fails.
    */
-  protected function prepareVectorValue($value) {
+  protected function prepareVectorValue($value)
+  {
     if (is_string($value)) {
       // Already in PostgreSQL vector format - validate it.
       if (preg_match('/^\[[\d\.,\-\s]+\]$/', $value)) {
@@ -1115,7 +1147,8 @@ class FieldMapper {
    * @throws \Drupal\search_api\SearchApiException
    *   If validation fails.
    */
-  protected function validateVectorArray(array $vector) {
+  protected function validateVectorArray(array $vector)
+  {
     if (empty($vector)) {
       throw new SearchApiException("Vector cannot be empty.");
     }
@@ -1126,7 +1159,7 @@ class FieldMapper {
 
     foreach ($vector as $index => $value) {
       if (!is_numeric($value)) {
-        throw new SearchApiException("Vector component at index {$index} is not numeric: " . var_export($value, TRUE));
+        throw new SearchApiException("Vector component at index {$index} is not numeric: " . var_export($value, true));
       }
 
       $float_val = (float) $value;
@@ -1145,7 +1178,8 @@ class FieldMapper {
    * @throws \Drupal\search_api\SearchApiException
    *   If validation fails.
    */
-  protected function validateVectorString($vector_string) {
+  protected function validateVectorString($vector_string)
+  {
     $vector_string = trim($vector_string, '[]');
     if (empty($vector_string)) {
       throw new SearchApiException("Vector string cannot be empty.");
@@ -1180,32 +1214,33 @@ class FieldMapper {
    * @return mixed
    *   The converted value.
    */
-  protected function convertFieldValue($value, $type) {
-    if ($value === NULL) {
-      return NULL;
+  protected function convertFieldValue($value, $type)
+  {
+    if ($value === null) {
+      return null;
     }
 
     $this->validateSearchApiType($type);
 
     switch ($type) {
       case 'date':
-        return strtotime($value);
+          return strtotime($value);
 
       case 'boolean':
-        return $value === 'true' || $value === TRUE;
+          return $value === 'true' || $value === true;
 
       case 'integer':
       case 'entity_reference':
-        return $this->prepareIntegerValue($value);
+          return $this->prepareIntegerValue($value);
 
       case 'decimal':
-        return $this->prepareDecimalValue($value);
+          return $this->prepareDecimalValue($value);
 
       case 'vector':
-        return $this->convertVectorValue($value);
+          return $this->convertVectorValue($value);
 
       default:
-        return $value;
+          return $value;
     }
   }
 
@@ -1218,7 +1253,8 @@ class FieldMapper {
    * @return array
    *   The vector as array.
    */
-  protected function convertVectorValue($value) {
+  protected function convertVectorValue($value)
+  {
     if (is_array($value)) {
       $this->validateVectorArray($value);
       return $value;
@@ -1242,7 +1278,8 @@ class FieldMapper {
    * @return bool
    *   TRUE if searchable, FALSE otherwise.
    */
-  protected function isSearchableType($type) {
+  protected function isSearchableType($type)
+  {
     return in_array($type, ['text', 'postgresql_fulltext', 'string']);
   }
 
@@ -1255,8 +1292,8 @@ class FieldMapper {
    * @return bool
    *   TRUE if vector searchable, FALSE otherwise.
    */
-  protected function isVectorSearchableType($type) {
+  protected function isVectorSearchableType($type)
+  {
     return $type === 'vector';
   }
-
 }

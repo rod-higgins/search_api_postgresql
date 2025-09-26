@@ -24,7 +24,8 @@ use Drupal\Core\Database\Connection;
  *
  * @group search_api_postgresql
  */
-class ErrorRecoveryIntegrationTest extends KernelTestBase {
+class ErrorRecoveryIntegrationTest extends KernelTestBase
+{
   /**
    * {@inheritdoc}
    */
@@ -97,7 +98,8 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->installSchema('search_api', ['search_api_item']);
@@ -121,9 +123,9 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
         ],
         'index_prefix' => 'test_recovery_',
         'fts_configuration' => 'english',
-        'debug' => TRUE,
+        'debug' => true,
         'azure_embedding' => [
-          'enabled' => TRUE,
+          'enabled' => true,
           'service_type' => 'azure_openai',
           'endpoint' => 'https://test.openai.azure.com/',
           'api_key' => 'test-key',
@@ -167,7 +169,8 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * Tests automatic recovery workflow for database connection failures.
    */
-  public function testDatabaseConnectionRecoveryWorkflow() {
+  public function testDatabaseConnectionRecoveryWorkflow()
+  {
     // Simulate database connection failure.
     $exception = new DatabaseConnectionException([
       'host' => 'localhost',
@@ -207,7 +210,8 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * Tests graceful degradation chain for embedding service failures.
    */
-  public function testEmbeddingServiceDegradationChain() {
+  public function testEmbeddingServiceDegradationChain()
+  {
     // Primary failure: Embedding service unavailable.
     $primary_exception = new EmbeddingServiceUnavailableException('Azure OpenAI');
 
@@ -248,7 +252,8 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * Tests cascading failure prevention and recovery.
    */
-  public function testCascadingFailurePrevention() {
+  public function testCascadingFailurePrevention()
+  {
     // Simulate multiple related failures.
     $failures = [
       new DatabaseConnectionException(['host' => 'localhost', 'port' => 5432]),
@@ -296,7 +301,8 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * Tests rate limiting recovery with exponential backoff.
    */
-  public function testRateLimitingRecoveryWorkflow() {
+  public function testRateLimitingRecoveryWorkflow()
+  {
     // Simulate rate limiting from external API.
     $exception = new RateLimitException(120, 'Azure OpenAI API');
 
@@ -333,14 +339,15 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * Tests memory exhaustion recovery with batch size reduction.
    */
-  public function testMemoryExhaustionRecoveryWorkflow() {
+  public function testMemoryExhaustionRecoveryWorkflow()
+  {
     // Simulate memory exhaustion during large batch processing.
     $exception = new MemoryExhaustedException(
     // 512MB current usage
-          512 * 1024 * 1024,
-          // 256MB limit
+        512 * 1024 * 1024,
+        // 256MB limit
           256 * 1024 * 1024
-      );
+    );
 
     $context = [
       'operation' => 'batch_embedding_generation',
@@ -371,7 +378,8 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * Tests health check and proactive error prevention.
    */
-  public function testHealthCheckAndProactiveErrorPrevention() {
+  public function testHealthCheckAndProactiveErrorPrevention()
+  {
     // Perform comprehensive health check.
     $health_check_results = $this->recoveryService->performHealthCheck();
 
@@ -393,7 +401,8 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * Tests circuit breaker functionality.
    */
-  public function testCircuitBreakerFunctionality() {
+  public function testCircuitBreakerFunctionality()
+  {
     // Simulate multiple consecutive failures to trigger circuit breaker.
     $failures = [];
     // Above threshold of 5.
@@ -425,7 +434,8 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * Tests recovery success tracking and learning.
    */
-  public function testRecoverySuccessTrackingAndLearning() {
+  public function testRecoverySuccessTrackingAndLearning()
+  {
     $exception = new EmbeddingServiceUnavailableException('Azure OpenAI');
 
     $context = [
@@ -455,25 +465,26 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * Tests user notification levels and escalation.
    */
-  public function testUserNotificationLevelsAndEscalation() {
+  public function testUserNotificationLevelsAndEscalation()
+  {
     $test_scenarios = [
       // Low impact - minimal notification.
       [
         'exception' => new VectorSearchDegradedException('Routine maintenance'),
         'expected_notification_level' => 'minimal',
-        'should_escalate' => FALSE,
+        'should_escalate' => false,
       ],
       // Medium impact - user notification.
       [
         'exception' => new EmbeddingServiceUnavailableException('Azure OpenAI'),
         'expected_notification_level' => 'user',
-        'should_escalate' => FALSE,
+        'should_escalate' => false,
       ],
       // High impact - admin notification and escalation.
       [
         'exception' => new DatabaseConnectionException(['host' => 'localhost', 'port' => 5432]),
         'expected_notification_level' => 'admin',
-        'should_escalate' => TRUE,
+        'should_escalate' => true,
       ],
     ];
 
@@ -481,22 +492,21 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
       $classification = $this->classificationService->classifyError($scenario['exception']);
 
       $this->assertEquals(
-            $scenario['expected_notification_level'],
-            $classification['user_notification_level']
-        );
+          $scenario['expected_notification_level'],
+          $classification['user_notification_level']
+      );
 
       $this->assertEquals(
-            $scenario['should_escalate'],
-            $classification['escalation_required']
-        );
+          $scenario['should_escalate'],
+          $classification['escalation_required']
+      );
 
       // Test message generation adapts to notification level.
       $message = $this->messageService->generateMessage($scenario['exception']);
 
       if ($scenario['expected_notification_level'] === 'minimal') {
         $this->assertEquals('info', $message['icon']);
-      }
-      elseif ($scenario['expected_notification_level'] === 'admin') {
+      } elseif ($scenario['expected_notification_level'] === 'admin') {
         $this->assertEquals('error', $message['icon']);
       }
     }
@@ -505,7 +515,8 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
   /**
    * Tests end-to-end recovery workflow simulation.
    */
-  public function testEndToEndRecoveryWorkflowSimulation() {
+  public function testEndToEndRecoveryWorkflowSimulation()
+  {
     // Simulate complete workflow: failure detection -> classification -> recovery -> messaging.
     // Step 1: Failure occurs during search operation.
     $original_exception = new \Exception('Connection timeout', 504);
@@ -518,14 +529,14 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
 
     // Step 2: Exception classification and wrapping.
     $classified_exception = ComprehensiveExceptionFactory::createFromException(
-          $original_exception,
-          $operation_context
-      );
+        $original_exception,
+        $operation_context
+    );
 
     $this->assertInstanceOf(
-          TemporaryApiException::class,
-          $classified_exception
-      );
+        TemporaryApiException::class,
+        $classified_exception
+    );
 
     // Step 3: Error classification.
     $classification = $this->classificationService->classifyError($classified_exception, $operation_context);
@@ -544,7 +555,6 @@ class ErrorRecoveryIntegrationTest extends KernelTestBase {
     $this->assertArrayHasKey('alternatives', $user_message);
 
     // Step 6: Verify workflow completed without additional failures.
-    $this->assertTrue(TRUE, 'End-to-end workflow completed successfully');
+    $this->assertTrue(true, 'End-to-end workflow completed successfully');
   }
-
 }

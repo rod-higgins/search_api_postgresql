@@ -7,9 +7,11 @@ use Drupal\Core\Form\FormStateInterface;
 /**
  * Trait for managing secure credentials in Search API PostgreSQL backends.
  */
-trait SecurityManagementTrait {
+trait SecurityManagementTrait
+{
   /**
    * The key repository service.
+   * {@inheritdoc}
    *
    * @var \Drupal\key\KeyRepositoryInterface
    */
@@ -17,11 +19,13 @@ trait SecurityManagementTrait {
 
   /**
    * Adds key-based credential fields to a form if the Key module is available.
+   * {@inheritdoc}
    *
    * @param array $form
    *   The form array to modify.
    */
-  protected function addKeyFieldsToForm(array &$form) {
+  protected function addKeyFieldsToForm(array &$form)
+  {
     // Only add key fields if Key module is available.
     if (!$this->keyRepository) {
       return;
@@ -38,7 +42,8 @@ trait SecurityManagementTrait {
           '#options' => $key_options,
           '#empty_option' => $this->t('- Select a key -'),
           '#default_value' => $this->configuration['connection']['password_key'] ?? '',
-          '#description' => $this->t('Use a key from the Key module instead of entering password directly. More secure for production.'),
+          '#description' => $this->t('Use a key from the Key module instead of \n' .
+            'entering password directly. More secure for production.'),
         ];
 
         // Azure OpenAI API key field.
@@ -65,20 +70,24 @@ trait SecurityManagementTrait {
           ];
         }
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       // Key module might not be properly configured, continue without it.
-      \Drupal::logger('search_api_postgresql')->notice('Key module available but not configured properly: @error', ['@error' => $e->getMessage()]);
+      \Drupal::logger('search_api_postgresql')->notice(
+          'Key module available but not configured properly: @error',
+          ['@error' => $e->getMessage()]
+      );
     }
   }
 
   /**
    * Gets available key options for form select elements.
+   * {@inheritdoc}
    *
    * @return array
    *   Array of key options suitable for form select elements.
    */
-  protected function getKeyOptions() {
+  protected function getKeyOptions()
+  {
     if (!$this->keyRepository) {
       return [];
     }
@@ -92,8 +101,7 @@ trait SecurityManagementTrait {
       }
 
       return $options;
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       \Drupal::logger('search_api_postgresql')->error('Failed to load keys: @error', ['@error' => $e->getMessage()]);
       return [];
     }
@@ -101,41 +109,47 @@ trait SecurityManagementTrait {
 
   /**
    * Retrieves a credential value, either from direct configuration or Key module.
+   * {@inheritdoc}
    *
    * @param string $credential_type
    *   The type of credential ('database_password', 'azure_api_key', 'openai_api_key').
    * @param array $config
    *   The configuration array containing credential info.
+   *   {@inheritdoc}.
    *
    * @return string|null
    *   The credential value or NULL if not found.
    */
-  protected function getCredential($credential_type, array $config) {
+  protected function getCredential($credential_type, array $config)
+  {
     switch ($credential_type) {
       case 'database_password':
-        return $this->getPasswordCredential($config['connection'] ?? []);
+          return $this->getPasswordCredential($config['connection'] ?? []);
 
       case 'azure_api_key':
-        return $this->getAzureApiKeyCredential($config['ai_embeddings']['azure'] ?? []);
+          return $this->getAzureApiKeyCredential($config['ai_embeddings']['azure'] ?? []);
 
       case 'openai_api_key':
-        return $this->getOpenAiApiKeyCredential($config['ai_embeddings']['openai'] ?? []);
+          return $this->getOpenAiApiKeyCredential($config['ai_embeddings']['openai'] ?? []);
 
       default:
-        return NULL;
+          return null;
     }
   }
 
   /**
    * Gets the database password from configuration or Key module.
+   * {@inheritdoc}
    *
    * @param array $connection_config
    *   The connection configuration.
+   *   {@inheritdoc}.
    *
    * @return string|null
    *   The password value or NULL if not found.
    */
-  protected function getPasswordCredential(array $connection_config) {
+  protected function getPasswordCredential(array $connection_config)
+  {
     // Try key first.
     if (!empty($connection_config['password_key']) && $this->keyRepository) {
       try {
@@ -143,8 +157,7 @@ trait SecurityManagementTrait {
         if ($key) {
           return $key->getKeyValue();
         }
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         \Drupal::logger('search_api_postgresql')->warning('Failed to retrieve password key @key: @error', [
           '@key' => $connection_config['password_key'],
           '@error' => $e->getMessage(),
@@ -153,19 +166,22 @@ trait SecurityManagementTrait {
     }
 
     // Fall back to direct password.
-    return $connection_config['password'] ?? NULL;
+    return $connection_config['password'] ?? null;
   }
 
   /**
    * Gets the Azure OpenAI API key from configuration or Key module.
+   * {@inheritdoc}
    *
    * @param array $azure_config
    *   The Azure configuration.
+   *   {@inheritdoc}.
    *
    * @return string|null
    *   The API key value or NULL if not found.
    */
-  protected function getAzureApiKeyCredential(array $azure_config) {
+  protected function getAzureApiKeyCredential(array $azure_config)
+  {
     // Try key first.
     if (!empty($azure_config['api_key_key']) && $this->keyRepository) {
       try {
@@ -173,8 +189,7 @@ trait SecurityManagementTrait {
         if ($key) {
           return $key->getKeyValue();
         }
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         \Drupal::logger('search_api_postgresql')->warning('Failed to retrieve Azure API key @key: @error', [
           '@key' => $azure_config['api_key_key'],
           '@error' => $e->getMessage(),
@@ -183,19 +198,22 @@ trait SecurityManagementTrait {
     }
 
     // Fall back to direct API key.
-    return $azure_config['api_key'] ?? NULL;
+    return $azure_config['api_key'] ?? null;
   }
 
   /**
    * Gets the OpenAI API key from configuration or Key module.
+   * {@inheritdoc}
    *
    * @param array $openai_config
    *   The OpenAI configuration.
+   *   {@inheritdoc}.
    *
    * @return string|null
    *   The API key value or NULL if not found.
    */
-  protected function getOpenAiApiKeyCredential(array $openai_config) {
+  protected function getOpenAiApiKeyCredential(array $openai_config)
+  {
     // Try key first.
     if (!empty($openai_config['api_key_key']) && $this->keyRepository) {
       try {
@@ -203,8 +221,7 @@ trait SecurityManagementTrait {
         if ($key) {
           return $key->getKeyValue();
         }
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         \Drupal::logger('search_api_postgresql')->warning('Failed to retrieve OpenAI API key @key: @error', [
           '@key' => $openai_config['api_key_key'],
           '@error' => $e->getMessage(),
@@ -213,11 +230,12 @@ trait SecurityManagementTrait {
     }
 
     // Fall back to direct API key.
-    return $openai_config['api_key'] ?? NULL;
+    return $openai_config['api_key'] ?? null;
   }
 
   /**
    * Validates credential configuration.
+   * {@inheritdoc}
    *
    * @param array $form
    *   The form array.
@@ -226,28 +244,30 @@ trait SecurityManagementTrait {
    * @param string $credential_type
    *   The type of credential to validate.
    */
-  protected function validateCredentials(array &$form, FormStateInterface $form_state, $credential_type) {
+  protected function validateCredentials(array &$form, FormStateInterface $form_state, $credential_type)
+  {
     $values = $form_state->getValues();
 
     switch ($credential_type) {
       case 'database_password':
         $this->validateDatabasePasswordCredentials($form, $form_state, $values);
-        break;
+          break;
 
       case 'azure_api_key':
         $this->validateAzureApiKeyCredentials($form, $form_state, $values);
-        break;
+          break;
 
       case 'openai_api_key':
         $this->validateOpenAiApiKeyCredentials($form, $form_state, $values);
-        break;
+          break;
     }
   }
 
   /**
    * Validates database password credentials.
    */
-  protected function validateDatabasePasswordCredentials(array &$form, FormStateInterface $form_state, array $values) {
+  protected function validateDatabasePasswordCredentials(array &$form, FormStateInterface $form_state, array $values)
+  {
     $connection = $values['connection'] ?? [];
     $password_key = $connection['password_key'] ?? '';
     $direct_password = $connection['password'] ?? '';
@@ -258,11 +278,19 @@ trait SecurityManagementTrait {
       try {
         $key = $this->keyRepository->getKey($password_key);
         if (!$key) {
-          $form_state->setErrorByName('connection][password_key', $this->t('The specified password key does not exist.'));
+          $form_state->setErrorByName(
+              'connection][password_key',
+              $this->t('The specified password key does not exist.')
+          );
         }
-      }
-      catch (\Exception $e) {
-        $form_state->setErrorByName('connection][password_key', $this->t('Failed to validate password key: @error', ['@error' => $e->getMessage()]));
+      } catch (\Exception $e) {
+        $form_state->setErrorByName(
+            'connection][password_key',
+            $this->t(
+                'Failed to validate password key: @error',
+                ['@error' => $e->getMessage()]
+            )
+        );
       }
     }
   }
@@ -270,7 +298,8 @@ trait SecurityManagementTrait {
   /**
    * Validates Azure API key credentials.
    */
-  protected function validateAzureApiKeyCredentials(array &$form, FormStateInterface $form_state, array $values) {
+  protected function validateAzureApiKeyCredentials(array &$form, FormStateInterface $form_state, array $values)
+  {
     if (empty($values['ai_embeddings']['enabled'])) {
       // AI embeddings not enabled, skip validation.
       return;
@@ -288,7 +317,10 @@ trait SecurityManagementTrait {
 
     // Require API key if Azure is enabled.
     if (empty($api_key_key) && empty($direct_api_key) && empty($existing_api_key)) {
-      $form_state->setErrorByName('ai_embeddings][azure][api_key', $this->t('Azure OpenAI API key is required when Azure provider is enabled.'));
+      $form_state->setErrorByName(
+          'ai_embeddings][azure][api_key',
+          $this->t('Azure OpenAI API key is required when Azure provider is enabled.')
+      );
     }
 
     // Validate key exists if specified.
@@ -296,11 +328,19 @@ trait SecurityManagementTrait {
       try {
         $key = $this->keyRepository->getKey($api_key_key);
         if (!$key) {
-          $form_state->setErrorByName('ai_embeddings][azure][api_key_key', $this->t('The specified Azure API key does not exist.'));
+          $form_state->setErrorByName(
+              'ai_embeddings][azure][api_key_key',
+              $this->t('The specified Azure API key does not exist.')
+          );
         }
-      }
-      catch (\Exception $e) {
-        $form_state->setErrorByName('ai_embeddings][azure][api_key_key', $this->t('Failed to validate Azure API key: @error', ['@error' => $e->getMessage()]));
+      } catch (\Exception $e) {
+        $form_state->setErrorByName(
+            'ai_embeddings][azure][api_key_key',
+            $this->t(
+                'Failed to validate Azure API key: @error',
+                ['@error' => $e->getMessage()]
+            )
+        );
       }
     }
   }
@@ -308,7 +348,8 @@ trait SecurityManagementTrait {
   /**
    * Validates OpenAI API key credentials.
    */
-  protected function validateOpenAiApiKeyCredentials(array &$form, FormStateInterface $form_state, array $values) {
+  protected function validateOpenAiApiKeyCredentials(array &$form, FormStateInterface $form_state, array $values)
+  {
     if (empty($values['ai_embeddings']['enabled'])) {
       // AI embeddings not enabled, skip validation.
       return;
@@ -326,7 +367,10 @@ trait SecurityManagementTrait {
 
     // Require API key if OpenAI is enabled.
     if (empty($api_key_key) && empty($direct_api_key) && empty($existing_api_key)) {
-      $form_state->setErrorByName('ai_embeddings][openai][api_key', $this->t('OpenAI API key is required when OpenAI provider is enabled.'));
+      $form_state->setErrorByName(
+          'ai_embeddings][openai][api_key',
+          $this->t('OpenAI API key is required when OpenAI provider is enabled.')
+      );
     }
 
     // Validate key exists if specified.
@@ -334,25 +378,36 @@ trait SecurityManagementTrait {
       try {
         $key = $this->keyRepository->getKey($api_key_key);
         if (!$key) {
-          $form_state->setErrorByName('ai_embeddings][openai][api_key_key', $this->t('The specified OpenAI API key does not exist.'));
+          $form_state->setErrorByName(
+              'ai_embeddings][openai][api_key_key',
+              $this->t('The specified OpenAI API key does not exist.')
+          );
         }
-      }
-      catch (\Exception $e) {
-        $form_state->setErrorByName('ai_embeddings][openai][api_key_key', $this->t('Failed to validate OpenAI API key: @error', ['@error' => $e->getMessage()]));
+      } catch (\Exception $e) {
+        $form_state->setErrorByName(
+            'ai_embeddings][openai][api_key_key',
+            $this->t(
+                'Failed to validate OpenAI API key: @error',
+                ['@error' => $e->getMessage()]
+            )
+        );
       }
     }
   }
 
   /**
    * Processes credential submission during form submission.
+   * {@inheritdoc}
    *
    * @param array $values
    *   The submitted form values.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Processed configuration array.
    */
-  protected function processCredentialSubmission(array $values) {
+  protected function processCredentialSubmission(array $values)
+  {
     $processed_config = [];
 
     // Process database password.
@@ -389,18 +444,20 @@ trait SecurityManagementTrait {
 
   /**
    * Checks if a credential is available (either direct or via key).
+   * {@inheritdoc}
    *
    * @param string $credential_type
    *   The credential type to check.
    * @param array $config
    *   The configuration array.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if credential is available, FALSE otherwise.
+   *   true if credential is available, false otherwise.
    */
-  protected function hasCredential($credential_type, array $config) {
+  protected function hasCredential($credential_type, array $config)
+  {
     $credential = $this->getCredential($credential_type, $config);
     return !empty($credential);
   }
-
 }

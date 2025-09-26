@@ -10,9 +10,11 @@ use Drupal\search_api\Query\ConditionGroupInterface;
 /**
  * Builds PostgreSQL queries for Search API with SQL injection prevention.
  */
-class QueryBuilder {
+class QueryBuilder
+{
   /**
    * The PostgreSQL connector.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector
    */
@@ -20,6 +22,7 @@ class QueryBuilder {
 
   /**
    * The field mapper.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\PostgreSQL\FieldMapper
    */
@@ -27,6 +30,7 @@ class QueryBuilder {
 
   /**
    * The backend configuration.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -34,6 +38,7 @@ class QueryBuilder {
 
   /**
    * Valid system field names that are always safe.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -47,6 +52,7 @@ class QueryBuilder {
 
   /**
    * Valid comparison operators.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -59,6 +65,7 @@ class QueryBuilder {
 
   /**
    * Constructs a QueryBuilder object.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector $connector
    *   The PostgreSQL connector.
@@ -67,7 +74,8 @@ class QueryBuilder {
    * @param array $config
    *   The backend configuration.
    */
-  public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config) {
+  public function __construct(PostgreSQLConnector $connector, FieldMapper $field_mapper, array $config)
+  {
     $this->connector = $connector;
     $this->fieldMapper = $field_mapper;
     $this->config = $config;
@@ -75,14 +83,17 @@ class QueryBuilder {
 
   /**
    * Builds a search query.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
    */
-  public function buildSearchQuery(QueryInterface $query) {
+  public function buildSearchQuery(QueryInterface $query)
+  {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
 
@@ -102,14 +113,17 @@ class QueryBuilder {
 
   /**
    * Builds a count query.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array with 'sql' and 'params' keys.
    */
-  public function buildCountQuery(QueryInterface $query) {
+  public function buildCountQuery(QueryInterface $query)
+  {
     $index = $query->getIndex();
     $table_name = $this->getIndexTableName($index);
 
@@ -127,14 +141,17 @@ class QueryBuilder {
 
   /**
    * Builds the SELECT clause.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The SELECT clause.
    */
-  protected function buildSelectClause(QueryInterface $query) {
+  protected function buildSelectClause(QueryInterface $query)
+  {
     $fields = [];
 
     // Add system fields (always safe)
@@ -155,8 +172,7 @@ class QueryBuilder {
       $fields[] = "ts_rank(" . $this->connector->quoteColumnName('search_vector') .
         ", to_tsquery('{$fts_config}', :ts_query)) AS " .
         $this->connector->quoteColumnName('search_api_relevance');
-    }
-    else {
+    } else {
       // Without search keys: provide default relevance value.
       $fields[] = "1.0 AS " . $this->connector->quoteColumnName('search_api_relevance');
     }
@@ -166,14 +182,17 @@ class QueryBuilder {
 
   /**
    * Builds the WHERE clause.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The WHERE clause.
    */
-  protected function buildWhereClause(QueryInterface $query) {
+  protected function buildWhereClause(QueryInterface $query)
+  {
     $conditions = [];
 
     // Add full-text search condition.
@@ -194,16 +213,19 @@ class QueryBuilder {
 
   /**
    * Builds SQL for a condition group.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\ConditionGroupInterface $condition_group
    *   The condition group.
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The SQL string for the condition group.
    */
-  protected function buildConditionGroupSql(ConditionGroupInterface $condition_group, IndexInterface $index) {
+  protected function buildConditionGroupSql(ConditionGroupInterface $condition_group, IndexInterface $index)
+  {
     $conditions = [];
 
     foreach ($condition_group->getConditions() as $condition) {
@@ -211,8 +233,7 @@ class QueryBuilder {
         if ($sql = $this->buildConditionGroupSql($condition, $index)) {
           $conditions[] = '(' . $sql . ')';
         }
-      }
-      else {
+      } else {
         if ($sql = $this->buildConditionSql($condition, $index)) {
           $conditions[] = $sql;
         }
@@ -229,16 +250,19 @@ class QueryBuilder {
 
   /**
    * Builds SQL for a single condition.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\ConditionInterface $condition
    *   The condition.
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The SQL string for the condition.
    */
-  protected function buildConditionSql(ConditionInterface $condition, IndexInterface $index) {
+  protected function buildConditionSql(ConditionInterface $condition, IndexInterface $index)
+  {
     $field = $condition->getField();
     $value = $condition->getValue();
     $operator = strtoupper($condition->getOperator());
@@ -260,23 +284,23 @@ class QueryBuilder {
     // Build SQL based on operator.
     switch ($operator) {
       case '=':
-        return "{$safe_field} = {$parameter_ref}";
+          return "{$safe_field} = {$parameter_ref}";
 
       case '<>':
       case '!=':
-        return "{$safe_field} <> {$parameter_ref}";
+          return "{$safe_field} <> {$parameter_ref}";
 
       case '<':
-        return "{$safe_field} < {$parameter_ref}";
+          return "{$safe_field} < {$parameter_ref}";
 
       case '<=':
-        return "{$safe_field} <= {$parameter_ref}";
+          return "{$safe_field} <= {$parameter_ref}";
 
       case '>':
-        return "{$safe_field} > {$parameter_ref}";
+          return "{$safe_field} > {$parameter_ref}";
 
       case '>=':
-        return "{$safe_field} >= {$parameter_ref}";
+          return "{$safe_field} >= {$parameter_ref}";
 
       case 'IN':
         if (is_array($value) && !empty($value)) {
@@ -292,7 +316,7 @@ class QueryBuilder {
           return "{$safe_field} IN (" . implode(', ', $placeholders) . ")";
         }
         // Empty IN should match nothing.
-        return '1=0';
+          return '1=0';
 
       case 'NOT IN':
         if (is_array($value) && !empty($value)) {
@@ -308,55 +332,58 @@ class QueryBuilder {
           return "{$safe_field} NOT IN (" . implode(', ', $placeholders) . ")";
         }
         // Empty NOT IN should match everything.
-        return '1=1';
+          return '1=1';
 
       case 'BETWEEN':
         if (is_array($value) && count($value) === 2) {
           return "{$safe_field} BETWEEN :{$field}_min AND :{$field}_max";
         }
-        throw new \InvalidArgumentException('BETWEEN operator requires array with exactly 2 values');
+          throw new \InvalidArgumentException('BETWEEN operator requires array with exactly 2 values');
 
       case 'NOT BETWEEN':
         if (is_array($value) && count($value) === 2) {
           return "{$safe_field} NOT BETWEEN :{$field}_not_between_min AND :{$field}_not_between_max";
         }
-        throw new \InvalidArgumentException('NOT BETWEEN operator requires array with exactly 2 values');
+          throw new \InvalidArgumentException('NOT BETWEEN operator requires array with exactly 2 values');
 
       case 'CONTAINS':
-        return "{$safe_field} LIKE :{$field}_contains";
+          return "{$safe_field} LIKE :{$field}_contains";
 
       case 'STARTS_WITH':
-        return "{$safe_field} LIKE :{$field}_starts_with";
+          return "{$safe_field} LIKE :{$field}_starts_with";
 
       case 'ENDS_WITH':
-        return "{$safe_field} LIKE :{$field}_ends_with";
+          return "{$safe_field} LIKE :{$field}_ends_with";
 
       case 'LIKE':
       case 'NOT LIKE':
         $like_operator = $operator === 'LIKE' ? 'LIKE' : 'NOT LIKE';
-        return "{$safe_field} {$like_operator} {$parameter_ref}";
+          return "{$safe_field} {$like_operator} {$parameter_ref}";
 
       case 'IS NULL':
-        return "{$safe_field} IS NULL";
+          return "{$safe_field} IS NULL";
 
       case 'IS NOT NULL':
-        return "{$safe_field} IS NOT NULL";
+          return "{$safe_field} IS NOT NULL";
 
       default:
-        throw new \InvalidArgumentException("Unsupported operator: {$operator}");
+          throw new \InvalidArgumentException("Unsupported operator: {$operator}");
     }
   }
 
   /**
    * Builds the ORDER BY clause.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The ORDER BY clause.
    */
-  protected function buildOrderClause(QueryInterface $query) {
+  protected function buildOrderClause(QueryInterface $query)
+  {
     $sorts = $query->getSorts();
 
     if (empty($sorts)) {
@@ -375,14 +402,17 @@ class QueryBuilder {
 
   /**
    * Builds the LIMIT clause.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The LIMIT clause.
    */
-  protected function buildLimitClause(QueryInterface $query) {
+  protected function buildLimitClause(QueryInterface $query)
+  {
     $limit = $query->getOption('limit');
     $offset = $query->getOption('offset', 0);
 
@@ -400,25 +430,26 @@ class QueryBuilder {
 
   /**
    * Assembles SQL parts into a complete query.
+   * {@inheritdoc}
    *
    * @param array $parts
    *   Array of SQL parts.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The assembled SQL query.
    */
-  protected function assembleSqlQuery(array $parts) {
+  protected function assembleSqlQuery(array $parts)
+  {
     $sql = [];
 
     foreach (['SELECT', 'FROM', 'WHERE', 'ORDER', 'LIMIT'] as $clause) {
       if (!empty($parts[$clause])) {
         if ($clause === 'SELECT') {
           $sql[] = 'SELECT ' . $parts[$clause];
-        }
-        elseif ($clause === 'FROM' || $clause === 'WHERE') {
+        } elseif ($clause === 'FROM' || $clause === 'WHERE') {
           $sql[] = $clause . ' ' . $parts[$clause];
-        }
-        else {
+        } else {
           $sql[] = $parts[$clause];
         }
       }
@@ -429,14 +460,17 @@ class QueryBuilder {
 
   /**
    * Gets query parameters.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of parameters for the query.
    */
-  protected function getQueryParameters(QueryInterface $query) {
+  protected function getQueryParameters(QueryInterface $query)
+  {
     $params = [];
 
     // Add full-text search parameter.
@@ -452,14 +486,17 @@ class QueryBuilder {
 
   /**
    * Processes search keys for PostgreSQL full-text search.
+   * {@inheritdoc}
    *
    * @param mixed $keys
    *   The search keys.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The processed search query string.
    */
-  protected function processSearchKeys($keys) {
+  protected function processSearchKeys($keys)
+  {
     if (is_string($keys)) {
       // Simple string search.
       return $this->escapeSearchString($keys);
@@ -475,14 +512,17 @@ class QueryBuilder {
 
   /**
    * Escapes a search string for PostgreSQL ts_query.
+   * {@inheritdoc}
    *
    * @param string $string
    *   The search string.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The escaped string.
    */
-  protected function escapeSearchString($string) {
+  protected function escapeSearchString($string)
+  {
     // Remove special characters that have meaning in tsquery.
     $string = preg_replace('/[&|!():*]/', ' ', $string);
 
@@ -500,14 +540,17 @@ class QueryBuilder {
 
   /**
    * Processes complex search keys.
+   * {@inheritdoc}
    *
    * @param array $keys
    *   The complex keys array.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The processed search query string.
    */
-  protected function processComplexKeys(array $keys) {
+  protected function processComplexKeys(array $keys)
+  {
     $conjunction = $keys['#conjunction'] ?? 'AND';
     $processed = [];
 
@@ -519,15 +562,12 @@ class QueryBuilder {
 
       if (is_string($value)) {
         $processed[] = $this->escapeSearchString($value);
-      }
-      elseif (is_array($value)) {
+      } elseif (is_array($value)) {
         $sub_query = $this->processComplexKeys($value);
         if ($sub_query) {
           $processed[] = '(' . $sub_query . ')';
         }
-      }
-      // Handle other types (integers, etc.) by converting to string.
-      elseif (is_scalar($value)) {
+      } elseif (is_scalar($value)) {
         $processed[] = $this->escapeSearchString((string) $value);
       }
     }
@@ -538,18 +578,19 @@ class QueryBuilder {
 
   /**
    * Adds condition group parameters to the params array.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\ConditionGroupInterface $condition_group
    *   The condition group.
    * @param array $params
    *   The parameters array to modify.
    */
-  protected function addConditionGroupParameters(ConditionGroupInterface $condition_group, array &$params) {
+  protected function addConditionGroupParameters(ConditionGroupInterface $condition_group, array &$params)
+  {
     foreach ($condition_group->getConditions() as $condition) {
       if ($condition instanceof ConditionGroupInterface) {
         $this->addConditionGroupParameters($condition, $params);
-      }
-      else {
+      } else {
         $this->addConditionParameters($condition, $params);
       }
     }
@@ -557,13 +598,15 @@ class QueryBuilder {
 
   /**
    * Adds parameters for a single condition.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\ConditionInterface $condition
    *   The condition.
    * @param array $params
    *   The parameters array to modify.
    */
-  protected function addConditionParameters(ConditionInterface $condition, array &$params) {
+  protected function addConditionParameters(ConditionInterface $condition, array &$params)
+  {
     $field = $condition->getField();
     $value = $condition->getValue();
     $operator = strtoupper($condition->getOperator());
@@ -593,7 +636,7 @@ class QueryBuilder {
             $params[":{$field}_in_{$i}"] = $val;
           }
         }
-        break;
+          break;
 
       case 'NOT IN':
         if (is_array($value)) {
@@ -604,38 +647,38 @@ class QueryBuilder {
             $params[":{$field}_not_in_{$i}"] = $val;
           }
         }
-        break;
+          break;
 
       case 'BETWEEN':
         if (is_array($value) && count($value) === 2) {
           $params[":{$field}_min"] = $value[0];
           $params[":{$field}_max"] = $value[1];
         }
-        break;
+          break;
 
       case 'NOT BETWEEN':
         if (is_array($value) && count($value) === 2) {
           $params[":{$field}_not_between_min"] = $value[0];
           $params[":{$field}_not_between_max"] = $value[1];
         }
-        break;
+          break;
 
       case 'CONTAINS':
         $params[":{$field}_contains"] = '%' . $this->connector->escapeLikePattern($value) . '%';
-        break;
+          break;
 
       case 'STARTS_WITH':
         $params[":{$field}_starts_with"] = $this->connector->escapeLikePattern($value) . '%';
-        break;
+          break;
 
       case 'ENDS_WITH':
         $params[":{$field}_ends_with"] = '%' . $this->connector->escapeLikePattern($value);
-        break;
+          break;
 
       case 'IS NULL':
       case 'IS NOT NULL':
         // No parameters needed for NULL checks.
-        break;
+          break;
 
       default:
         // For boolean fields that need casting, ensure we bind as integer
@@ -644,24 +687,26 @@ class QueryBuilder {
           // Convert PHP boolean back to integer for PostgreSQL parameter binding
           // The SQL will use ::boolean cast to convert it properly.
           $params[":{$field}"] = $value ? 1 : 0;
-        }
-        else {
+        } else {
           $params[":{$field}"] = $value;
         }
-        break;
+          break;
     }
   }
 
   /**
    * Gets the table name for an index.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The safely quoted table name.
    */
-  protected function getIndexTableName(IndexInterface $index) {
+  protected function getIndexTableName(IndexInterface $index)
+  {
     $index_id = $index->id();
 
     // Validate index ID.
@@ -675,19 +720,23 @@ class QueryBuilder {
 
   /**
    * Validates that a field exists in the index and returns safe field name.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    * @param string $field_id
    *   The field ID to validate.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The safely quoted field name.
+   *   {@inheritdoc}
    *
    * @throws \InvalidArgumentException
    *   If the field is not valid for the index.
    */
-  protected function validateIndexField(IndexInterface $index, $field_id) {
+  protected function validateIndexField(IndexInterface $index, $field_id)
+  {
     // System fields are always allowed.
     if (in_array($field_id, self::$systemFields)) {
       return $this->connector->quoteColumnName($field_id);
@@ -703,26 +752,31 @@ class QueryBuilder {
 
   /**
    * Validates a field for use in conditions.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\IndexInterface $index
    *   The search index.
    * @param string $field_id
    *   The field ID to validate.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The safely quoted field name.
    */
-  protected function validateConditionField(IndexInterface $index, $field_id) {
+  protected function validateConditionField(IndexInterface $index, $field_id)
+  {
     return $this->validateIndexField($index, $field_id);
   }
 
   /**
    * Validates the FTS configuration.
+   * {@inheritdoc}
    *
    * @return string
    *   The validated FTS configuration.
    */
-  protected function validateFtsConfiguration() {
+  protected function validateFtsConfiguration()
+  {
     $fts_config = $this->config['fts_configuration'] ?? 'english';
 
     // Allowed PostgreSQL text search configurations.
@@ -738,5 +792,4 @@ class QueryBuilder {
 
     return $fts_config;
   }
-
 }

@@ -18,7 +18,7 @@ Cypress.Commands.add('testDatabaseConnection', () => {
 
 // Command to index content
 Cypress.Commands.add('indexContent', (indexId) => {
-  cy.visit(`/admin/config/search/search-api/index/${indexId}`)
+  cy.visit(` / admin / config / search / search - api / index / ${indexId}`)
   cy.get('#edit-index-now').click()
   cy.contains('Successfully indexed', { timeout: 30000 })
 })
@@ -33,7 +33,7 @@ Cypress.Commands.add('createTestContent', (contentData) => {
 
   const config = { ...defaults, ...contentData }
 
-  cy.visit(`/node/add/${config.type}`)
+  cy.visit(` / node / add / ${config.type}`)
 
   cy.get('#edit-title-0-value').clear().type(config.title)
 
@@ -56,7 +56,7 @@ Cypress.Commands.add('createTestContent', (contentData) => {
 })
 
 // Command to perform search
-Cypress.Commands.add('performSearch', (searchTerm, expectedResults = null) => {
+Cypress.Commands.add('performSearch', (searchTerm, expectedResults = NULL) => {
   cy.get('input[name="search"]').clear().type(searchTerm)
   cy.get('input[type="submit"]').click()
 
@@ -89,13 +89,13 @@ Cypress.Commands.add('verifySearchResults', (expectations) => {
 // Command to check module status
 Cypress.Commands.add('verifyModuleEnabled', (moduleName) => {
   cy.visit('/admin/modules')
-  cy.get(`input[name="modules[${moduleName}][enable]"]`).should('be.checked')
+  cy.get(`input[name = "modules[${moduleName}][enable]"]`).should('be.checked')
 })
 
 // Command to enable module if not enabled
 Cypress.Commands.add('enableModule', (moduleName) => {
   cy.visit('/admin/modules')
-  cy.get(`input[name="modules[${moduleName}][enable]"]`).then(($checkbox) => {
+  cy.get(`input[name = "modules[${moduleName}][enable]"]`).then(($checkbox) => {
     if (!$checkbox.prop('checked')) {
       cy.wrap($checkbox).check()
       cy.get('#edit-submit').click()
@@ -126,7 +126,7 @@ Cypress.Commands.add('testVectorSearch', (query, expectedResults) => {
 // Command to verify faceted search
 Cypress.Commands.add('testFacetedSearch', (facets) => {
   Object.keys(facets).forEach(facetName => {
-    cy.get(`[data-drupal-facet-id="${facetName}"]`).within(() => {
+    cy.get(`[data - drupal - facet - id = "${facetName}"]`).within(() => {
       facets[facetName].forEach(value => {
         cy.contains(value).click()
       })

@@ -5,7 +5,8 @@ namespace Drupal\search_api_postgresql\Exception;
 /**
  * Comprehensive exception factory with intelligent error classification.
  */
-class ComprehensiveExceptionFactory extends DegradationExceptionFactory {
+class ComprehensiveExceptionFactory extends DegradationExceptionFactory
+{
   /**
    * Error pattern matching for intelligent classification.
    */
@@ -34,7 +35,8 @@ class ComprehensiveExceptionFactory extends DegradationExceptionFactory {
   /**
    * Creates exception with context-aware classification.
    */
-  public static function createFromException(\Exception $original_exception, array $context = []) {
+  public static function createFromException(\Exception $original_exception, array $context = [])
+  {
     $message = $original_exception->getMessage();
     $code = $original_exception->getCode();
 
@@ -52,27 +54,27 @@ class ComprehensiveExceptionFactory extends DegradationExceptionFactory {
   /**
    * Creates specific exception with context.
    */
-  protected static function createSpecificException($exception_class, \Exception $original, array $context) {
+  protected static function createSpecificException($exception_class, \Exception $original, array $context)
+  {
     switch ($exception_class) {
       case DatabaseConnectionException::class:
-        return new DatabaseConnectionException($context['connection_params'] ?? [], $original);
+          return new DatabaseConnectionException($context['connection_params'] ?? [], $original);
 
       case QueryPerformanceDegradedException::class:
-        return new QueryPerformanceDegradedException(
-                $context['query_time'] ?? 0,
-                $context['threshold'] ?? 5000
-            );
+          return new QueryPerformanceDegradedException(
+              $context['query_time'] ?? 0,
+              $context['threshold'] ?? 5000
+          );
 
       case MemoryExhaustedException::class:
-        return new MemoryExhaustedException(
-                $context['memory_usage'] ?? 0,
-                $context['memory_limit'] ?? 0,
-                $original
-            );
+          return new MemoryExhaustedException(
+              $context['memory_usage'] ?? 0,
+              $context['memory_limit'] ?? 0,
+              $original
+          );
 
       default:
-        return parent::createFromException($original, $context);
+          return parent::createFromException($original, $context);
     }
   }
-
 }

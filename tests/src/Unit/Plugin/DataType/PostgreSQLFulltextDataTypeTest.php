@@ -8,10 +8,11 @@ use Drupal\search_api_postgresql\Plugin\search_api\data_type\PostgreSQLFulltext;
 /**
  * Tests for the PostgreSQL Fulltext data type plugin.
  *
- * @group search_api_postgresql
+ * @group              search_api_postgresql
  * @coversDefaultClass \Drupal\search_api_postgresql\Plugin\search_api\data_type\PostgreSQLFulltext
  */
-class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
+class PostgreSQLFulltextDataTypeTest extends UnitTestCase
+{
   /**
    * The PostgreSQL Fulltext data type plugin under test.
    *
@@ -22,7 +23,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $configuration = [];
@@ -41,7 +43,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::getValue
    */
-  public function testGetValueWithSimpleText() {
+  public function testGetValueWithSimpleText()
+  {
     $text = 'This is a simple test text.';
     $result = $this->dataType->getValue($text);
 
@@ -54,7 +57,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::getValue
    */
-  public function testGetValueWithHtmlContent() {
+  public function testGetValueWithHtmlContent()
+  {
     $html = '<p>This is <strong>HTML</strong> content with <em>formatting</em>.</p>';
     $result = $this->dataType->getValue($html);
 
@@ -70,7 +74,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::getValue
    */
-  public function testGetValueWithSpecialCharacters() {
+  public function testGetValueWithSpecialCharacters()
+  {
     $text = 'Text with special chars: &amp; &lt; &gt; "quotes" \'apostrophes\'';
     $result = $this->dataType->getValue($text);
 
@@ -85,9 +90,10 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::getValue
    */
-  public function testGetValueWithEmpty() {
+  public function testGetValueWithEmpty()
+  {
     $this->assertEmpty($this->dataType->getValue(''));
-    $this->assertEmpty($this->dataType->getValue(NULL));
+    $this->assertEmpty($this->dataType->getValue(null));
     $this->assertEmpty($this->dataType->getValue(0));
   }
 
@@ -96,7 +102,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::getValue
    */
-  public function testGetValueWithNumeric() {
+  public function testGetValueWithNumeric()
+  {
     $result = $this->dataType->getValue(12345);
     $this->assertEquals('12345', $result);
 
@@ -109,7 +116,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::getValue
    */
-  public function testGetValueWithArray() {
+  public function testGetValueWithArray()
+  {
     $array = ['First item', 'Second item', 'Third item'];
     $result = $this->dataType->getValue($array);
 
@@ -124,7 +132,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::getLanguageConfiguration
    */
-  public function testGetLanguageConfiguration() {
+  public function testGetLanguageConfiguration()
+  {
     $languages = ['english', 'spanish', 'french', 'german'];
 
     foreach ($languages as $language) {
@@ -139,7 +148,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::validateSearchConfiguration
    */
-  public function testValidateSearchConfiguration() {
+  public function testValidateSearchConfiguration()
+  {
     $validConfigs = ['english', 'simple', 'spanish'];
     $invalidConfigs = ['invalid_lang', 'nonexistent'];
 
@@ -157,7 +167,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::preprocessText
    */
-  public function testPreprocessText() {
+  public function testPreprocessText()
+  {
     $text = '  This   has   multiple   spaces   ';
     $result = $this->dataType->preprocessText($text);
 
@@ -171,7 +182,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::getStemmingConfiguration
    */
-  public function testGetStemmingConfiguration() {
+  public function testGetStemmingConfiguration()
+  {
     $config = $this->dataType->getStemmingConfiguration();
 
     $this->assertIsArray($config);
@@ -184,7 +196,8 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::getWeightConfiguration
    */
-  public function testGetWeightConfiguration() {
+  public function testGetWeightConfiguration()
+  {
     $weights = ['A', 'B', 'C', 'D'];
 
     foreach ($weights as $weight) {
@@ -199,9 +212,9 @@ class PostgreSQLFulltextDataTypeTest extends UnitTestCase {
    *
    * @covers ::getFallbackType
    */
-  public function testGetFallbackType() {
+  public function testGetFallbackType()
+  {
     $fallback = $this->dataType->getFallbackType();
     $this->assertEquals('text', $fallback);
   }
-
 }

@@ -12,9 +12,11 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Form for bulk regeneration of embeddings.
  */
-class BulkRegenerateForm extends FormBase {
+class BulkRegenerateForm extends FormBase
+{
   /**
    * The entity type manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
@@ -22,6 +24,7 @@ class BulkRegenerateForm extends FormBase {
 
   /**
    * The messenger service.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Messenger\MessengerInterface
    */
@@ -29,6 +32,7 @@ class BulkRegenerateForm extends FormBase {
 
   /**
    * The embedding queue manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager
    */
@@ -36,6 +40,7 @@ class BulkRegenerateForm extends FormBase {
 
   /**
    * Constructs a BulkRegenerateForm.
+   * {@inheritdoc}
    *
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity type manager.
@@ -45,9 +50,9 @@ class BulkRegenerateForm extends FormBase {
    *   The embedding queue manager.
    */
   public function __construct(
-    EntityTypeManagerInterface $entity_type_manager,
-    MessengerInterface $messenger,
-    EmbeddingQueueManager $queue_manager,
+      EntityTypeManagerInterface $entity_type_manager,
+      MessengerInterface $messenger,
+      EmbeddingQueueManager $queue_manager,
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->messenger = $messenger;
@@ -57,28 +62,34 @@ class BulkRegenerateForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
+  public static function create(ContainerInterface $container)
+  {
     return new static(
-          $container->get('entity_type.manager'),
-          $container->get('messenger'),
-          $container->get('search_api_postgresql.embedding_queue_manager')
-      );
+        $container->get('entity_type.manager'),
+        $container->get('messenger'),
+        $container->get('search_api_postgresql.embedding_queue_manager')
+    );
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getFormId() {
+  public function getFormId()
+  {
     return 'search_api_postgresql_bulk_regenerate';
   }
 
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state) {
+  public function buildForm(array $form, FormStateInterface $form_state)
+  {
     $form['description'] = [
       '#type' => 'markup',
-      '#markup' => '<p>' . $this->t('This form allows you to regenerate embeddings for all items in selected indexes. This is useful after changing embedding models or fixing corrupted data.') . '</p>',
+      '#markup' => '<p>' . $this->t(
+          'This form allows you to regenerate embeddings for all items in selected ' .
+          'indexes. This is useful after changing embedding models or fixing corrupted data.'
+      ) . '</p>',
     ];
 
     // Get all PostgreSQL servers with AI enabled.
@@ -98,7 +109,7 @@ class BulkRegenerateForm extends FormBase {
       '#type' => 'select',
       '#title' => $this->t('Server'),
       '#options' => $this->getServerOptions($servers),
-      '#required' => TRUE,
+      '#required' => true,
       '#ajax' => [
         'callback' => '::updateIndexOptions',
         'wrapper' => 'index-wrapper',
@@ -118,7 +129,7 @@ class BulkRegenerateForm extends FormBase {
           '#type' => 'checkboxes',
           '#title' => $this->t('Indexes'),
           '#options' => $this->getIndexOptions($indexes),
-          '#required' => TRUE,
+          '#required' => true,
           '#description' => $this->t('Select the indexes to regenerate embeddings for.'),
         ];
       }
@@ -127,7 +138,7 @@ class BulkRegenerateForm extends FormBase {
     $form['options'] = [
       '#type' => 'details',
       '#title' => $this->t('Regeneration Options'),
-      '#open' => TRUE,
+      '#open' => true,
     ];
 
     $form['options']['mode'] = [
@@ -158,7 +169,10 @@ class BulkRegenerateForm extends FormBase {
     $form['options']['force'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Force regeneration'),
-      '#description' => $this->t('Regenerate embeddings even if they already exist. This will overwrite existing embeddings.'),
+      '#description' => $this->t(
+          'Regenerate embeddings even if they already exist. This will ' .
+          'overwrite existing embeddings.'
+      ),
     ];
 
     $form['actions'] = [
@@ -177,14 +191,16 @@ class BulkRegenerateForm extends FormBase {
   /**
    * Ajax callback to update index options.
    */
-  public function updateIndexOptions(array &$form, FormStateInterface $form_state) {
+  public function updateIndexOptions(array &$form, FormStateInterface $form_state)
+  {
     return $form['index_wrapper'];
   }
 
   /**
    * {@inheritdoc}
    */
-  public function validateForm(array &$form, FormStateInterface $form_state) {
+  public function validateForm(array &$form, FormStateInterface $form_state)
+  {
     $indexes = $form_state->getValue('indexes', []);
     $selected = array_filter($indexes);
 
@@ -196,18 +212,18 @@ class BulkRegenerateForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function submitForm(array &$form, FormStateInterface $form_state) {
+  public function submitForm(array &$form, FormStateInterface $form_state)
+  {
     $server_id = $form_state->getValue('server');
     $indexes = array_filter($form_state->getValue('indexes', []));
     $mode = $form_state->getValue('mode');
     $batch_size = $form_state->getValue('batch_size', 50);
-    $force = $form_state->getValue('force', FALSE);
+    $force = $form_state->getValue('force', false);
 
     if ($mode === 'queue') {
       // Queue mode - add items to queue for background processing.
       $this->processViaQueue($server_id, $indexes, $force);
-    }
-    else {
+    } else {
       // Batch mode - process immediately using Batch API.
       $this->processViaBatch($server_id, $indexes, $batch_size, $force);
     }
@@ -216,7 +232,8 @@ class BulkRegenerateForm extends FormBase {
   /**
    * Process regeneration via queue.
    */
-  protected function processViaQueue($server_id, array $index_ids, $force) {
+  protected function processViaQueue($server_id, array $index_ids, $force)
+  {
     $total_items = 0;
 
     foreach ($index_ids as $index_id) {
@@ -228,11 +245,16 @@ class BulkRegenerateForm extends FormBase {
     }
 
     if ($total_items > 0) {
-      $this->messenger->addStatus($this->t('@count items have been queued for embedding regeneration. They will be processed in the background via cron.', [
-        '@count' => $total_items,
-      ]));
-    }
-    else {
+      $this->messenger->addStatus(
+          $this->t(
+              '@count items have been queued for embedding regeneration. ' .
+              'They will be processed in the background via cron.',
+              [
+              '@count' => $total_items,
+              ]
+          )
+      );
+    } else {
       $this->messenger->addWarning($this->t('No items were queued. All items may already have embeddings.'));
     }
   }
@@ -240,7 +262,8 @@ class BulkRegenerateForm extends FormBase {
   /**
    * Process regeneration via batch API.
    */
-  protected function processViaBatch($server_id, array $index_ids, $batch_size, $force) {
+  protected function processViaBatch($server_id, array $index_ids, $batch_size, $force)
+  {
     $batch = [
       'title' => $this->t('Regenerating embeddings'),
       'operations' => [],
@@ -262,7 +285,8 @@ class BulkRegenerateForm extends FormBase {
   /**
    * Batch operation: Process a single index.
    */
-  public static function batchProcessIndex($server_id, $index_id, $batch_size, $force, &$context) {
+  public static function batchProcessIndex($server_id, $index_id, $batch_size, $force, &$context)
+  {
     // Initialize batch context.
     if (!isset($context['sandbox']['progress'])) {
       $index = \Drupal::entityTypeManager()->getStorage('search_api_index')->load($index_id);
@@ -303,8 +327,7 @@ class BulkRegenerateForm extends FormBase {
         }
 
         $context['results']['processed']++;
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $context['results']['errors']++;
         \Drupal::logger('search_api_postgresql')->error('Failed to regenerate embedding for item @item: @message', [
           '@item' => $item_id,
@@ -332,14 +355,14 @@ class BulkRegenerateForm extends FormBase {
   /**
    * Batch finished callback.
    */
-  public static function batchFinished($success, $results, $operations) {
+  public static function batchFinished($success, $results, $operations)
+  {
     if ($success) {
       \Drupal::messenger()->addStatus(t('Successfully processed @count items (@errors errors).', [
         '@count' => $results['processed'] ?? 0,
         '@errors' => $results['errors'] ?? 0,
       ]));
-    }
-    else {
+    } else {
       \Drupal::messenger()->addError(t('The batch process encountered an error.'));
     }
   }
@@ -347,7 +370,8 @@ class BulkRegenerateForm extends FormBase {
   /**
    * Gets AI-enabled PostgreSQL servers.
    */
-  protected function getAiEnabledServers() {
+  protected function getAiEnabledServers()
+  {
     $servers = $this->entityTypeManager
       ->getStorage('search_api_server')
       ->loadMultiple();
@@ -360,8 +384,7 @@ class BulkRegenerateForm extends FormBase {
       }
 
       $config = $backend->getConfiguration();
-      if (
-            !empty($config['ai_embeddings']['enabled']) ||
+      if (!empty($config['ai_embeddings']['enabled']) ||
             !empty($config['azure_embedding']['enabled']) ||
             !empty($config['vector_search']['enabled'])
         ) {
@@ -375,7 +398,8 @@ class BulkRegenerateForm extends FormBase {
   /**
    * Gets server options for select list.
    */
-  protected function getServerOptions(array $servers) {
+  protected function getServerOptions(array $servers)
+  {
     $options = [];
     foreach ($servers as $id => $server) {
       $options[$id] = $server->label();
@@ -386,7 +410,8 @@ class BulkRegenerateForm extends FormBase {
   /**
    * Gets indexes for a server.
    */
-  protected function getServerIndexes($server_id) {
+  protected function getServerIndexes($server_id)
+  {
     return $this->entityTypeManager
       ->getStorage('search_api_index')
       ->loadByProperties(['server' => $server_id]);
@@ -395,7 +420,8 @@ class BulkRegenerateForm extends FormBase {
   /**
    * Gets index options for checkboxes.
    */
-  protected function getIndexOptions(array $indexes) {
+  protected function getIndexOptions(array $indexes)
+  {
     $options = [];
     foreach ($indexes as $id => $index) {
       $tracker = $index->getTrackerInstance();
@@ -410,5 +436,4 @@ class BulkRegenerateForm extends FormBase {
     }
     return $options;
   }
-
 }

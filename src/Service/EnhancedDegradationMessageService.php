@@ -9,11 +9,13 @@ use Psr\Log\LoggerInterface;
 /**
  * Enhanced service for generating user-friendly degradation messages.
  */
-class EnhancedDegradationMessageService {
+class EnhancedDegradationMessageService
+{
   use StringTranslationTrait;
 
   /**
    * The logger service.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -21,25 +23,29 @@ class EnhancedDegradationMessageService {
 
   /**
    * Message templates for different degradation scenarios.
+   * {@inheritdoc}
    *
    * @var array
    */
   protected $messageTemplates = [
     'embedding_service_unavailable' => [
       'title' => 'AI Search Temporarily Unavailable',
-      'message' => 'Our AI-powered search is taking a short break. We\'ve switched to traditional text search to keep you searching smoothly.',
+      'message' => 'Our AI-powered search is taking a short break. ' .
+        'We\'ve switched to traditional text search to keep you searching smoothly.',
       'icon' => 'warning',
       'action' => 'Continue searching with text-based results.',
     ],
     'vector_search_degraded' => [
       'title' => 'Smart Search in Limited Mode',
-      'message' => 'Semantic search features are temporarily limited. Your searches will still work, but may be less contextually aware.',
+      'message' => 'Semantic search features are temporarily limited. ' .
+        'Your searches will still work, but may be less contextually aware.',
       'icon' => 'info',
       'action' => 'Results are still accurate using traditional search methods.',
     ],
     'partial_batch_failure' => [
       'title' => 'Content Update Partially Complete',
-      'message' => 'Most of your content has been processed successfully. Some items are being retried in the background.',
+      'message' => 'Most of your content has been processed successfully. ' .
+        'Some items are being retried in the background.',
       'icon' => 'warning',
       'action' => 'Search functionality remains fully available.',
     ],
@@ -63,7 +69,8 @@ class EnhancedDegradationMessageService {
     ],
     'queue_degraded' => [
       'title' => 'Background Processing Delayed',
-      'message' => 'Content updates are being processed more slowly than usual. Your current search results remain accurate.',
+      'message' => 'Content updates are being processed more slowly than usual. ' .
+        'Your current search results remain accurate.',
       'icon' => 'info',
       'action' => 'New content may take longer to appear in search results.',
     ],
@@ -77,6 +84,7 @@ class EnhancedDegradationMessageService {
 
   /**
    * Context-specific message variations.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -101,26 +109,31 @@ class EnhancedDegradationMessageService {
 
   /**
    * Constructs an EnhancedDegradationMessageService.
+   * {@inheritdoc}
    *
    * @param \Psr\Log\LoggerInterface $logger
    *   The logger service.
    */
-  public function __construct(LoggerInterface $logger) {
+  public function __construct(LoggerInterface $logger)
+  {
     $this->logger = $logger;
   }
 
   /**
    * Generates a user-friendly degradation message.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The degradation exception.
    * @param array $context
    *   Additional context for message customization.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Formatted message array with title, message, icon, and actions.
    */
-  public function generateMessage(GracefulDegradationException $exception, array $context = []) {
+  public function generateMessage(GracefulDegradationException $exception, array $context = [])
+  {
     $fallback_strategy = $exception->getFallbackStrategy();
     $template_key = $this->mapFallbackToTemplate($fallback_strategy);
 
@@ -145,14 +158,17 @@ class EnhancedDegradationMessageService {
 
   /**
    * Maps fallback strategy to message template.
+   * {@inheritdoc}
    *
    * @param string $fallback_strategy
    *   The fallback strategy.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The template key.
    */
-  protected function mapFallbackToTemplate($fallback_strategy) {
+  protected function mapFallbackToTemplate($fallback_strategy)
+  {
     $mapping = [
       'text_search_only' => 'embedding_service_unavailable',
       'text_search_fallback' => 'vector_search_degraded',
@@ -169,6 +185,7 @@ class EnhancedDegradationMessageService {
 
   /**
    * Enhances base template with contextual information.
+   * {@inheritdoc}
    *
    * @param array $template
    *   Base message template.
@@ -176,11 +193,13 @@ class EnhancedDegradationMessageService {
    *   Context information.
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The exception.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Enhanced message.
    */
-  protected function enhanceWithContext(array $template, array $context, GracefulDegradationException $exception) {
+  protected function enhanceWithContext(array $template, array $context, GracefulDegradationException $exception)
+  {
     $enhanced = $template;
 
     // Add time-sensitive context.
@@ -206,16 +225,19 @@ class EnhancedDegradationMessageService {
 
   /**
    * Generates technical details for administrators.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The exception.
    * @param array $context
    *   Context information.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Technical details.
    */
-  protected function generateTechnicalDetails(GracefulDegradationException $exception, array $context) {
+  protected function generateTechnicalDetails(GracefulDegradationException $exception, array $context)
+  {
     return [
       'exception_type' => get_class($exception),
       'fallback_strategy' => $exception->getFallbackStrategy(),
@@ -223,22 +245,25 @@ class EnhancedDegradationMessageService {
       'error_code' => $exception->getCode(),
       'should_log' => $exception->shouldLog(),
       'context' => $context,
-      'trace_id' => $context['trace_id'] ?? uniqid('trace_', TRUE),
+      'trace_id' => $context['trace_id'] ?? uniqid('trace_', true),
     ];
   }
 
   /**
    * Estimates resolution time based on exception type and context.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The exception.
    * @param array $context
    *   Context information.
+   *   {@inheritdoc}.
    *
    * @return string
    *   Estimated resolution time message.
    */
-  protected function estimateResolutionTime(GracefulDegradationException $exception, array $context) {
+  protected function estimateResolutionTime(GracefulDegradationException $exception, array $context)
+  {
     $fallback_strategy = $exception->getFallbackStrategy();
 
     $time_estimates = [
@@ -255,16 +280,19 @@ class EnhancedDegradationMessageService {
 
   /**
    * Generates alternative actions users can take.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The exception.
    * @param array $context
    *   Context information.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Alternative actions.
    */
-  protected function generateAlternativeActions(GracefulDegradationException $exception, array $context) {
+  protected function generateAlternativeActions(GracefulDegradationException $exception, array $context)
+  {
     $fallback_strategy = $exception->getFallbackStrategy();
 
     $actions = [
@@ -294,11 +322,13 @@ class EnhancedDegradationMessageService {
 
   /**
    * Gets time context for contextual messaging.
+   * {@inheritdoc}
    *
    * @return string
    *   Time context (business_hours, after_hours, weekend).
    */
-  protected function getTimeContext() {
+  protected function getTimeContext()
+  {
     $hour = (int) date('H');
     // 1-7, Monday to Sunday
     $day = date('N');
@@ -318,16 +348,19 @@ class EnhancedDegradationMessageService {
 
   /**
    * Assesses the impact level of the degradation.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The exception.
    * @param array $context
    *   Context information.
+   *   {@inheritdoc}.
    *
    * @return string
    *   Impact level (minimal, moderate, high).
    */
-  protected function assessImpactLevel(GracefulDegradationException $exception, array $context) {
+  protected function assessImpactLevel(GracefulDegradationException $exception, array $context)
+  {
     $fallback_strategy = $exception->getFallbackStrategy();
 
     $impact_levels = [
@@ -344,20 +377,22 @@ class EnhancedDegradationMessageService {
 
   /**
    * Personalizes message for different user roles.
+   * {@inheritdoc}
    *
    * @param array $message
    *   Base message.
    * @param string $user_role
    *   User role.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Personalized message.
    */
-  protected function personalizeForUserRole(array $message, $user_role) {
+  protected function personalizeForUserRole(array $message, $user_role)
+  {
     if ($user_role === 'administrator') {
       $message['admin_note'] = 'Check the system logs for more detailed information about this degradation.';
-    }
-    elseif ($user_role === 'editor') {
+    } elseif ($user_role === 'editor') {
       $message['editor_note'] = 'Content editing and publishing are not affected by this search issue.';
     }
 
@@ -366,14 +401,17 @@ class EnhancedDegradationMessageService {
 
   /**
    * Determines if search tips should be shown.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The exception.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if tips should be shown.
+   *   true if tips should be shown.
    */
-  protected function shouldShowSearchTips(GracefulDegradationException $exception) {
+  protected function shouldShowSearchTips(GracefulDegradationException $exception)
+  {
     $show_tips_for = [
       'text_search_only',
       'text_search_fallback',
@@ -385,14 +423,17 @@ class EnhancedDegradationMessageService {
 
   /**
    * Generates helpful search tips for degraded functionality.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The exception.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Search tips.
    */
-  protected function generateSearchTips(GracefulDegradationException $exception) {
+  protected function generateSearchTips(GracefulDegradationException $exception)
+  {
     return [
       'Use specific keywords rather than full sentences',
       'Put exact phrases in quotation marks',
@@ -404,11 +445,13 @@ class EnhancedDegradationMessageService {
 
   /**
    * Gets default template for unknown degradation types.
+   * {@inheritdoc}
    *
    * @return array
    *   Default template.
    */
-  protected function getDefaultTemplate() {
+  protected function getDefaultTemplate()
+  {
     return [
       'title' => 'Search Service Notice',
       'message' => 'We\'re experiencing a temporary issue with our search service. Functionality may be limited.',
@@ -419,16 +462,19 @@ class EnhancedDegradationMessageService {
 
   /**
    * Generates a status report for multiple degradations.
+   * {@inheritdoc}
    *
    * @param array $exceptions
    *   Array of degradation exceptions.
    * @param array $context
    *   Context information.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Status report.
    */
-  public function generateStatusReport(array $exceptions, array $context = []) {
+  public function generateStatusReport(array $exceptions, array $context = [])
+  {
     if (empty($exceptions)) {
       return [
         'status' => 'healthy',
@@ -462,14 +508,17 @@ class EnhancedDegradationMessageService {
 
   /**
    * Determines overall severity from multiple severity levels.
+   * {@inheritdoc}
    *
    * @param array $severity_levels
    *   Array of severity levels.
+   *   {@inheritdoc}.
    *
    * @return string
    *   Overall severity.
    */
-  protected function determineOverallSeverity(array $severity_levels) {
+  protected function determineOverallSeverity(array $severity_levels)
+  {
     if (in_array('high', $severity_levels)) {
       return 'degraded';
     }
@@ -481,14 +530,17 @@ class EnhancedDegradationMessageService {
 
   /**
    * Gets feature name from exception.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Exception\GracefulDegradationException $exception
    *   The exception.
+   *   {@inheritdoc}.
    *
    * @return string
    *   Feature name.
    */
-  protected function getFeatureName(GracefulDegradationException $exception) {
+  protected function getFeatureName(GracefulDegradationException $exception)
+  {
     $feature_map = [
       'text_search_only' => 'AI Search',
       'text_search_fallback' => 'Vector Search',
@@ -502,16 +554,19 @@ class EnhancedDegradationMessageService {
 
   /**
    * Gets status title based on severity and count.
+   * {@inheritdoc}
    *
    * @param string $severity
    *   Overall severity.
    * @param int $count
    *   Number of issues.
+   *   {@inheritdoc}.
    *
    * @return string
    *   Status title.
    */
-  protected function getStatusTitle($severity, $count) {
+  protected function getStatusTitle($severity, $count)
+  {
     $titles = [
       'degraded' => 'Search Services Significantly Impacted',
       'partial' => 'Some Search Features Limited',
@@ -523,21 +578,26 @@ class EnhancedDegradationMessageService {
 
   /**
    * Gets status message based on severity and affected features.
+   * {@inheritdoc}
    *
    * @param string $severity
    *   Overall severity.
    * @param array $features
    *   Affected features.
+   *   {@inheritdoc}.
    *
    * @return string
    *   Status message.
    */
-  protected function getStatusMessage($severity, array $features) {
+  protected function getStatusMessage($severity, array $features)
+  {
     $feature_list = implode(', ', $features);
 
     $messages = [
-      'degraded' => "Multiple search features are currently limited: {$feature_list}. Core search functionality remains available.",
-      'partial' => "Some search features are temporarily limited: {$feature_list}. Most functionality continues to work normally.",
+      'degraded' => "Multiple search features are currently limited: {$feature_list}. " .
+        'Core search functionality remains available.',
+      'partial' => "Some search features are temporarily limited: {$feature_list}. " .
+        'Most functionality continues to work normally.',
       'minor' => "Minor issues detected with: {$feature_list}. Impact on search experience should be minimal.",
     ];
 
@@ -546,14 +606,17 @@ class EnhancedDegradationMessageService {
 
   /**
    * Gets status icon based on severity.
+   * {@inheritdoc}
    *
    * @param string $severity
    *   Overall severity.
+   *   {@inheritdoc}.
    *
    * @return string
    *   Icon name.
    */
-  protected function getStatusIcon($severity) {
+  protected function getStatusIcon($severity)
+  {
     $icons = [
       'degraded' => 'error',
       'partial' => 'warning',
@@ -565,16 +628,19 @@ class EnhancedDegradationMessageService {
 
   /**
    * Gets worst case resolution time from multiple exceptions.
+   * {@inheritdoc}
    *
    * @param array $exceptions
    *   Array of exceptions.
    * @param array $context
    *   Context information.
+   *   {@inheritdoc}.
    *
    * @return string
    *   Worst case resolution time.
    */
-  protected function getWorstCaseResolution(array $exceptions, array $context) {
+  protected function getWorstCaseResolution(array $exceptions, array $context)
+  {
     $resolution_times = [];
 
     foreach ($exceptions as $exception) {
@@ -591,5 +657,4 @@ class EnhancedDegradationMessageService {
 
     return $this->contextVariations['duration_estimate']['short'];
   }
-
 }

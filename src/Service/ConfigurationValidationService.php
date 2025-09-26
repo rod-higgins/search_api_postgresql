@@ -11,9 +11,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Service for validating Search API PostgreSQL configurations.
  */
-class ConfigurationValidationService {
+class ConfigurationValidationService
+{
   /**
    * The entity type manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
@@ -21,6 +23,7 @@ class ConfigurationValidationService {
 
   /**
    * The key repository.
+   * {@inheritdoc}
    *
    * @var \Drupal\key\KeyRepositoryInterface
    */
@@ -28,6 +31,7 @@ class ConfigurationValidationService {
 
   /**
    * The logger.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -35,6 +39,7 @@ class ConfigurationValidationService {
 
   /**
    * Constructs a ConfigurationValidationService.
+   * {@inheritdoc}
    *
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity type manager.
@@ -44,9 +49,9 @@ class ConfigurationValidationService {
    *   The logger.
    */
   public function __construct(
-    EntityTypeManagerInterface $entity_type_manager,
-    KeyRepositoryInterface $key_repository,
-    LoggerInterface $logger,
+      EntityTypeManagerInterface $entity_type_manager,
+      KeyRepositoryInterface $key_repository,
+      LoggerInterface $logger,
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->keyRepository = $key_repository;
@@ -55,14 +60,17 @@ class ConfigurationValidationService {
 
   /**
    * Validates a server's configuration.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\ServerInterface $server
    *   The server to validate.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Validation results with 'errors' and 'warnings' arrays.
    */
-  public function validateServerConfiguration(ServerInterface $server) {
+  public function validateServerConfiguration(ServerInterface $server)
+  {
     $errors = [];
     $warnings = [];
 
@@ -75,8 +83,7 @@ class ConfigurationValidationService {
         $errors[] = 'Server is not using the PostgreSQL backend.';
         return ['errors' => $errors, 'warnings' => $warnings];
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $errors[] = 'Unable to validate server configuration: ' . $e->getMessage();
       return ['errors' => $errors, 'warnings' => $warnings];
     }
@@ -111,7 +118,8 @@ class ConfigurationValidationService {
   /**
    * Validates database connection configuration.
    */
-  protected function validateDatabaseConnection($config) {
+  protected function validateDatabaseConnection($config)
+  {
     $errors = [];
     $warnings = [];
     $connection = $config['connection'] ?? [];
@@ -129,7 +137,9 @@ class ConfigurationValidationService {
     $direct_password = $connection['password'] ?? '';
 
     if (empty($password_key) && empty($direct_password)) {
-      $warnings[] = 'No database password configured. This may be acceptable for development environments (like Lando with trust authentication) but is not recommended for production.';
+      $warnings[] = 'No database password configured. This may be acceptable ' .
+        'for development environments (like Lando with trust authentication) ' .
+        'but is not recommended for production.';
     }
 
     // If a password key is specified, validate it exists.
@@ -147,8 +157,10 @@ class ConfigurationValidationService {
 
     // Check SSL configuration for production.
     $ssl_mode = $connection['ssl_mode'] ?? 'require';
-    if (!in_array($ssl_mode, ['require', 'verify-ca', 'verify-full']) && empty($direct_password) && empty($password_key)) {
-      $warnings[] = 'Using weak SSL mode without password authentication. Consider using "require", "verify-ca", or "verify-full" for better security.';
+    if (!in_array($ssl_mode, ['require', 'verify-ca', 'verify-full']) &&
+        empty($direct_password) && empty($password_key)) {
+      $warnings[] = 'Using weak SSL mode without password authentication. ' .
+        'Consider using "require", "verify-ca", or "verify-full" for better security.';
     }
 
     return ['errors' => $errors, 'warnings' => $warnings];
@@ -157,7 +169,8 @@ class ConfigurationValidationService {
   /**
    * Validates key storage configuration.
    */
-  protected function validateKeyStorage($config) {
+  protected function validateKeyStorage($config)
+  {
     $errors = [];
     $warnings = [];
 
@@ -178,8 +191,7 @@ class ConfigurationValidationService {
         $key_validation = $this->validateKey($ai_config['azure']['api_key_key'], 'Azure OpenAI API');
         $errors = array_merge($errors, $key_validation['errors']);
         $warnings = array_merge($warnings, $key_validation['warnings']);
-      }
-      elseif (empty($ai_config['azure']['api_key'])) {
+      } elseif (empty($ai_config['azure']['api_key'])) {
         $warnings[] = 'Azure OpenAI API key not configured. Use Key module for secure storage.';
       }
 
@@ -188,8 +200,7 @@ class ConfigurationValidationService {
         $key_validation = $this->validateKey($ai_config['openai']['api_key_key'], 'OpenAI API');
         $errors = array_merge($errors, $key_validation['errors']);
         $warnings = array_merge($warnings, $key_validation['warnings']);
-      }
-      elseif (empty($ai_config['openai']['api_key'])) {
+      } elseif (empty($ai_config['openai']['api_key'])) {
         $warnings[] = 'OpenAI API key not configured. Use Key module for secure storage.';
       }
     }
@@ -200,7 +211,8 @@ class ConfigurationValidationService {
   /**
    * Validates a specific key.
    */
-  protected function validateKey($key_name, $type) {
+  protected function validateKey($key_name, $type)
+  {
     $errors = [];
     $warnings = [];
 
@@ -213,16 +225,14 @@ class ConfigurationValidationService {
       $key = $this->keyRepository->getKey($key_name);
       if (!$key) {
         $errors[] = "{$type} key '{$key_name}' not found.";
-      }
-      else {
+      } else {
         // Check if key has a value.
         $key_value = $key->getKeyValue();
         if (empty($key_value)) {
           $errors[] = "{$type} key '{$key_name}' exists but has no value.";
         }
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $errors[] = "Error accessing {$type} key '{$key_name}': " . $e->getMessage();
     }
 
@@ -232,7 +242,8 @@ class ConfigurationValidationService {
   /**
    * Validates AI embeddings configuration.
    */
-  protected function validateAiEmbeddingsConfiguration($config) {
+  protected function validateAiEmbeddingsConfiguration($config)
+  {
     $errors = [];
     $warnings = [];
 
@@ -266,8 +277,7 @@ class ConfigurationValidationService {
       if (!in_array($model, $valid_models)) {
         $warnings[] = "Unknown embedding model '{$model}'. Supported models: " . implode(', ', $valid_models);
       }
-    }
-    elseif ($provider === 'openai') {
+    } elseif ($provider === 'openai') {
       $openai_config = $ai_config['openai'] ?? [];
 
       if (empty($openai_config['api_key']) && empty($openai_config['api_key_key'])) {
@@ -288,7 +298,8 @@ class ConfigurationValidationService {
   /**
    * Validates vector search configuration.
    */
-  protected function validateVectorSearchConfiguration($config) {
+  protected function validateVectorSearchConfiguration($config)
+  {
     $errors = [];
     $warnings = [];
 
@@ -324,14 +335,17 @@ class ConfigurationValidationService {
 
   /**
    * Runs comprehensive tests for a server configuration.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\ServerInterface $server
    *   The server to test.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of comprehensive test results.
    */
-  public function runComprehensiveTests(ServerInterface $server) {
+  public function runComprehensiveTests(ServerInterface $server)
+  {
     $results = [];
 
     // Run configuration validation.
@@ -362,14 +376,16 @@ class ConfigurationValidationService {
   /**
    * Checks if AI embeddings are enabled.
    */
-  protected function isAiEmbeddingsEnabled($config) {
+  protected function isAiEmbeddingsEnabled($config)
+  {
     return !empty($config['ai_embeddings']['enabled']);
   }
 
   /**
    * Checks if vector search is enabled.
    */
-  protected function isVectorSearchEnabled($config) {
+  protected function isVectorSearchEnabled($config)
+  {
     // Vector search is available when AI embeddings are enabled.
     return $this->isAiEmbeddingsEnabled($config);
   }
@@ -377,14 +393,16 @@ class ConfigurationValidationService {
   /**
    * Check if AI features are enabled (NEW METHOD).
    */
-  private function isAiFeaturesEnabled(array $config) {
+  private function isAiFeaturesEnabled(array $config)
+  {
     return !empty($config['ai_features']['enabled']);
   }
 
   /**
    * Validate AI features configuration (REPLACES OLD METHODS).
    */
-  private function validateAiFeaturesConfiguration(array $config) {
+  private function validateAiFeaturesConfiguration(array $config)
+  {
     $errors = [];
     $warnings = [];
 
@@ -403,7 +421,7 @@ class ConfigurationValidationService {
         if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
           $errors[] = 'OpenAI API key is required.';
         }
-        break;
+          break;
 
       case 'azure_openai':
         $provider_config = $ai_config['azure_openai'] ?? [];
@@ -416,21 +434,21 @@ class ConfigurationValidationService {
         if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
           $errors[] = 'Azure OpenAI API key is required.';
         }
-        break;
+          break;
 
       case 'huggingface':
         $provider_config = $ai_config['huggingface'] ?? [];
         if (empty($provider_config['api_key_name']) && empty($provider_config['api_key'])) {
           $errors[] = 'Hugging Face API key is required.';
         }
-        break;
+          break;
 
       case 'local':
         $provider_config = $ai_config['local'] ?? [];
         if (empty($provider_config['model_path'])) {
           $errors[] = 'Local model path is required.';
         }
-        break;
+          break;
 
       default:
         $errors[] = "Unknown AI provider: {$provider}";
@@ -441,11 +459,13 @@ class ConfigurationValidationService {
 
   /**
    * Runs comprehensive system health checks.
+   * {@inheritdoc}
    *
    * @return array
    *   Array of health check results.
    */
-  public function runSystemHealthChecks() {
+  public function runSystemHealthChecks()
+  {
     $checks = [];
 
     // Get all PostgreSQL servers.
@@ -456,7 +476,7 @@ class ConfigurationValidationService {
 
     if (empty($postgresql_servers)) {
       $checks['no_servers'] = [
-        'status' => FALSE,
+        'status' => false,
         'message' => 'No PostgreSQL servers configured',
         'details' => 'Create a PostgreSQL server to use this module',
       ];
@@ -486,14 +506,17 @@ class ConfigurationValidationService {
 
   /**
    * Checks server health by running comprehensive tests.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\ServerInterface $server
    *   The server to check.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array containing health check results with 'overall' status.
    */
-  public function checkServerHealth(ServerInterface $server) {
+  public function checkServerHealth(ServerInterface $server)
+  {
     $tests = [];
 
     // Test database connection.
@@ -513,12 +536,12 @@ class ConfigurationValidationService {
     }
 
     // Determine overall health status.
-    $overall_health = TRUE;
+    $overall_health = true;
     $failed_tests = [];
 
     foreach ($tests as $test_name => $result) {
       if (!$result['success']) {
-        $overall_health = FALSE;
+        $overall_health = false;
         $failed_tests[] = $test_name;
       }
     }
@@ -535,28 +558,31 @@ class ConfigurationValidationService {
 
   /**
    * Checks if pgvector extension is available.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\PostgreSQL\PostgreSQLConnector $connector
    *   The database connector.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if pgvector is available.
+   *   true if pgvector is available.
    */
-  public function checkPgVectorExtension($connector) {
+  public function checkPgVectorExtension($connector)
+  {
     try {
       $sql = "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')";
       $stmt = $connector->executeQuery($sql);
       return (bool) $stmt->fetchColumn();
-    }
-    catch (\Exception $e) {
-      return FALSE;
+    } catch (\Exception $e) {
+      return false;
     }
   }
 
   /**
    * Tests database connection.
    */
-  public function testDatabaseConnection(ServerInterface $server) {
+  public function testDatabaseConnection(ServerInterface $server)
+  {
     try {
       $backend = $server->getBackend();
 
@@ -568,7 +594,7 @@ class ConfigurationValidationService {
       if (method_exists($backend, 'getDatabasePassword')) {
         $reflection = new \ReflectionClass($backend);
         $method = $reflection->getMethod('getDatabasePassword');
-        $method->setAccessible(TRUE);
+        $method->setAccessible(true);
         $connection_config['password'] = $method->invoke($backend);
       }
 
@@ -582,23 +608,20 @@ class ConfigurationValidationService {
       $password_info = '';
       if (!empty($connection_config['password_key'])) {
         $password_info = ' (using key: ' . $connection_config['password_key'] . ')';
-      }
-      elseif (!empty($connection_config['password'])) {
+      } elseif (!empty($connection_config['password'])) {
         $password_info = ' (using direct password)';
-      }
-      else {
+      } else {
         $password_info = ' (passwordless connection)';
       }
 
       return [
-        'success' => TRUE,
+        'success' => true,
         'message' => 'Database connection successful',
         'details' => 'Connected to ' . $connection_config['host'] . ':' . $connection_config['port'] . $password_info,
       ];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       return [
-        'success' => FALSE,
+        'success' => false,
         'message' => 'Database connection failed',
         'details' => $e->getMessage(),
       ];
@@ -608,7 +631,8 @@ class ConfigurationValidationService {
   /**
    * Tests key access.
    */
-  public function testKeyAccess(ServerInterface $server) {
+  public function testKeyAccess(ServerInterface $server)
+  {
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
@@ -619,7 +643,7 @@ class ConfigurationValidationService {
         if (method_exists($backend, 'getDatabasePassword')) {
           $reflection = new \ReflectionClass($backend);
           $method = $reflection->getMethod('getDatabasePassword');
-          $method->setAccessible(TRUE);
+          $method->setAccessible(true);
           $password = $method->invoke($backend);
 
           if (empty($password)) {
@@ -634,7 +658,7 @@ class ConfigurationValidationService {
         if (method_exists($backend, $method_name)) {
           $reflection = new \ReflectionClass($backend);
           $method = $reflection->getMethod($method_name);
-          $method->setAccessible(TRUE);
+          $method->setAccessible(true);
           $api_key = $method->invoke($backend);
 
           if (empty($api_key)) {
@@ -644,14 +668,13 @@ class ConfigurationValidationService {
       }
 
       return [
-        'success' => TRUE,
+        'success' => true,
         'message' => 'Key access successful',
         'details' => 'All configured keys are accessible',
       ];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       return [
-        'success' => FALSE,
+        'success' => false,
         'message' => 'Key access failed',
         'details' => $e->getMessage(),
       ];
@@ -661,7 +684,8 @@ class ConfigurationValidationService {
   /**
    * Tests pgvector extension.
    */
-  public function testPgVectorExtension(ServerInterface $server) {
+  public function testPgVectorExtension(ServerInterface $server)
+  {
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
@@ -682,12 +706,13 @@ class ConfigurationValidationService {
       return [
         'success' => $available,
         'message' => $available ? 'pgvector extension is available' : 'pgvector extension not found',
-        'details' => $available ? 'Vector search capabilities enabled' : 'Install pgvector extension for vector search',
+        'details' => $available ?
+          'Vector search capabilities enabled' :
+          'Install pgvector extension for vector search',
       ];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       return [
-        'success' => FALSE,
+        'success' => false,
         'message' => 'pgvector extension check failed',
         'details' => $e->getMessage(),
       ];
@@ -697,7 +722,8 @@ class ConfigurationValidationService {
   /**
    * Tests AI service connectivity.
    */
-  public function testAiService(ServerInterface $server) {
+  public function testAiService(ServerInterface $server)
+  {
     try {
       $backend = $server->getBackend();
       $config = $backend->getConfiguration();
@@ -716,31 +742,27 @@ class ConfigurationValidationService {
         if (empty($ai_config['endpoint']) || empty($ai_config['deployment_name'])) {
           throw new \Exception('AI service configuration incomplete - missing endpoint or deployment_name');
         }
-      }
-      elseif ($provider === 'openai') {
+      } elseif ($provider === 'openai') {
         $ai_config = $config['ai_embeddings']['openai'] ?? [];
 
         if (empty($ai_config['api_key']) && empty($ai_config['api_key_key'])) {
           throw new \Exception('OpenAI API key not configured');
         }
-      }
-      else {
+      } else {
         throw new \Exception('Unknown AI provider: ' . $provider);
       }
 
       return [
-        'success' => TRUE,
+        'success' => true,
         'message' => 'AI service configuration valid',
         'details' => 'Configuration appears correct for ' . ($ai_config['endpoint'] ?? 'OpenAI'),
       ];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       return [
-        'success' => FALSE,
+        'success' => false,
         'message' => 'AI service test failed',
         'details' => $e->getMessage(),
       ];
     }
   }
-
 }

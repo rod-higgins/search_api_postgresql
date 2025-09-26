@@ -14,10 +14,12 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Real implementation tests for SearchApiPostgreSQLException classes.
+ * {@inheritdoc}
  *
  * @group search_api_postgresql
  */
-class SearchApiPostgreSQLExceptionTest extends TestCase {
+class SearchApiPostgreSQLExceptionTest extends TestCase
+{
   /**
    * Exception classes under test.
    */
@@ -26,7 +28,8 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load actual exception classes.
@@ -51,15 +54,16 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests base SearchApiPostgreSQLException functionality.
    */
-  public function testBaseExceptionConstruction() {
+  public function testBaseExceptionConstruction()
+  {
     // Test EmbeddingServiceException (concrete implementation)
     $exception = new EmbeddingServiceException(
-          'Test embedding error',
-          123,
-          NULL,
-          FALSE,
-          ['api_key' => 'test']
-      );
+        'Test embedding error',
+        123,
+        null,
+        false,
+        ['api_key' => 'test']
+    );
 
     $this->assertEquals('Test embedding error', $exception->getMessage());
     $this->assertEquals(123, $exception->getCode());
@@ -72,14 +76,15 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests EmbeddingServiceException specific functionality.
    */
-  public function testEmbeddingServiceException() {
+  public function testEmbeddingServiceException()
+  {
     $exception = new EmbeddingServiceException(
-          'API key invalid',
-          401,
-          NULL,
-          TRUE,
-          ['endpoint' => 'https://api.openai.com']
-      );
+        'API key invalid',
+        401,
+        null,
+        true,
+        ['endpoint' => 'https://api.openai.com']
+    );
 
     $this->assertEquals('API key invalid', $exception->getMessage());
     $this->assertEquals(401, $exception->getCode());
@@ -98,13 +103,14 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests VectorSearchException functionality.
    */
-  public function testVectorSearchException() {
+  public function testVectorSearchException()
+  {
     $exception = new VectorSearchException(
-          'pgvector extension missing',
-          500,
-          NULL,
-          ['database' => 'search_db']
-      );
+        'pgvector extension missing',
+        500,
+        null,
+        ['database' => 'search_db']
+    );
 
     $this->assertEquals('pgvector extension missing', $exception->getMessage());
     $this->assertEquals(500, $exception->getCode());
@@ -123,14 +129,15 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests DatabaseConnectionException functionality.
    */
-  public function testDatabaseConnectionException() {
+  public function testDatabaseConnectionException()
+  {
     $exception = new DatabaseConnectionException(
-          'Connection timeout',
-          2002,
-          NULL,
-          TRUE,
-          ['host' => 'localhost', 'port' => 5432]
-      );
+        'Connection timeout',
+        2002,
+        null,
+        true,
+        ['host' => 'localhost', 'port' => 5432]
+    );
 
     $this->assertEquals('Connection timeout', $exception->getMessage());
     $this->assertEquals(2002, $exception->getCode());
@@ -149,7 +156,8 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests BatchOperationException functionality.
    */
-  public function testBatchOperationException() {
+  public function testBatchOperationException()
+  {
     $partialResults = [
       ['id' => 1, 'status' => 'success'],
       ['id' => 2, 'status' => 'success'],
@@ -160,13 +168,13 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
     ];
 
     $exception = new BatchOperationException(
-          'Batch processing partially failed',
-          $partialResults,
-          $failedItems,
-          206,
-          NULL,
-          ['batch_id' => 'batch_001']
-      );
+        'Batch processing partially failed',
+        $partialResults,
+        $failedItems,
+        206,
+        null,
+        ['batch_id' => 'batch_001']
+    );
 
     $this->assertEquals('Batch processing partially failed', $exception->getMessage());
     $this->assertEquals(206, $exception->getCode());
@@ -191,13 +199,14 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests ConfigurationException functionality.
    */
-  public function testConfigurationException() {
+  public function testConfigurationException()
+  {
     $exception = new ConfigurationException(
-          'Invalid API configuration',
-          422,
-          NULL,
-          ['config_key' => 'azure_endpoint']
-      );
+        'Invalid API configuration',
+        422,
+        null,
+        ['config_key' => 'azure_endpoint']
+    );
 
     $this->assertEquals('Invalid API configuration', $exception->getMessage());
     $this->assertEquals(422, $exception->getCode());
@@ -216,15 +225,16 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests RateLimitException functionality.
    */
-  public function testRateLimitException() {
+  public function testRateLimitException()
+  {
     $exception = new RateLimitException(
-          'API rate limit exceeded',
-    // Retry after 5 minutes.
+        'API rate limit exceeded',
+        // Retry after 5 minutes.
           300,
-          429,
-          NULL,
-          ['requests_remaining' => 0]
-      );
+        429,
+        null,
+        ['requests_remaining' => 0]
+    );
 
     $this->assertEquals('API rate limit exceeded', $exception->getMessage());
     $this->assertEquals(429, $exception->getCode());
@@ -246,13 +256,14 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests CacheException functionality.
    */
-  public function testCacheException() {
+  public function testCacheException()
+  {
     $exception = new CacheException(
-          'Redis connection failed',
-          503,
-          NULL,
-          ['cache_backend' => 'redis']
-      );
+        'Redis connection failed',
+        503,
+        null,
+        ['cache_backend' => 'redis']
+    );
 
     $this->assertEquals('Redis connection failed', $exception->getMessage());
     $this->assertEquals(503, $exception->getCode());
@@ -271,7 +282,8 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests exception inheritance chain.
    */
-  public function testExceptionInheritance() {
+  public function testExceptionInheritance()
+  {
     $exception = new EmbeddingServiceException('test');
 
     $this->assertInstanceOf(SearchApiPostgreSQLException::class, $exception);
@@ -281,13 +293,14 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests exception chaining with previous exceptions.
    */
-  public function testExceptionChaining() {
+  public function testExceptionChaining()
+  {
     $originalException = new \Exception('Original error');
     $wrappedException = new DatabaseConnectionException(
-          'Database error',
-          0,
-          $originalException
-      );
+        'Database error',
+        0,
+        $originalException
+    );
 
     $this->assertEquals($originalException, $wrappedException->getPrevious());
     $this->assertEquals('Original error', $wrappedException->getPrevious()->getMessage());
@@ -296,7 +309,8 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests exception context data handling.
    */
-  public function testContextDataHandling() {
+  public function testContextDataHandling()
+  {
     $context = [
       'operation' => 'embedding_generation',
       'entity_id' => 123,
@@ -306,12 +320,12 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
     ];
 
     $exception = new EmbeddingServiceException(
-          'Context test',
-          0,
-          NULL,
-          TRUE,
-          $context
-      );
+        'Context test',
+        0,
+        null,
+        true,
+        $context
+    );
 
     $retrievedContext = $exception->getContext();
     $this->assertEquals($context, $retrievedContext);
@@ -323,7 +337,8 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
   /**
    * Tests severity level validation.
    */
-  public function testSeverityLevels() {
+  public function testSeverityLevels()
+  {
     $severityTests = [
       ['class' => EmbeddingServiceException::class, 'expected' => 'warning'],
       ['class' => VectorSearchException::class, 'expected' => 'warning'],
@@ -336,23 +351,23 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
     foreach ($severityTests as $test) {
       if ($test['class'] === BatchOperationException::class) {
         $exception = new $test['class']('test', [], []);
-      }
-      else {
+      } else {
         $exception = new $test['class']('test');
       }
 
       $this->assertEquals(
-            $test['expected'],
-            $exception->getSeverity(),
-            "Severity mismatch for {$test['class']}"
-        );
+          $test['expected'],
+          $exception->getSeverity(),
+          "Severity mismatch for {$test['class']}"
+      );
     }
   }
 
   /**
    * Tests fallback strategy validation.
    */
-  public function testFallbackStrategies() {
+  public function testFallbackStrategies()
+  {
     $strategyTests = [
       ['class' => EmbeddingServiceException::class, 'expected' => 'skip_embeddings'],
       ['class' => VectorSearchException::class, 'expected' => 'fallback_to_text'],
@@ -365,59 +380,59 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
     foreach ($strategyTests as $test) {
       if ($test['class'] === BatchOperationException::class) {
         $exception = new $test['class']('test', [], []);
-      }
-      else {
+      } else {
         $exception = new $test['class']('test');
       }
 
       $this->assertEquals(
-            $test['expected'],
-            $exception->getFallbackStrategy(),
-            "Fallback strategy mismatch for {$test['class']}"
-        );
+          $test['expected'],
+          $exception->getFallbackStrategy(),
+          "Fallback strategy mismatch for {$test['class']}"
+      );
     }
   }
 
   /**
    * Tests retryable flag validation.
    */
-  public function testRetryableFlags() {
+  public function testRetryableFlags()
+  {
     $retryableTests = [
-      ['class' => EmbeddingServiceException::class, 'default' => TRUE],
-      ['class' => VectorSearchException::class, 'default' => FALSE],
-      ['class' => DatabaseConnectionException::class, 'default' => TRUE],
-      ['class' => ConfigurationException::class, 'default' => FALSE],
-      ['class' => RateLimitException::class, 'default' => TRUE],
-      ['class' => CacheException::class, 'default' => FALSE],
+      ['class' => EmbeddingServiceException::class, 'default' => true],
+      ['class' => VectorSearchException::class, 'default' => false],
+      ['class' => DatabaseConnectionException::class, 'default' => true],
+      ['class' => ConfigurationException::class, 'default' => false],
+      ['class' => RateLimitException::class, 'default' => true],
+      ['class' => CacheException::class, 'default' => false],
     ];
 
     foreach ($retryableTests as $test) {
       if ($test['class'] === BatchOperationException::class) {
         $exception = new $test['class']('test', [], []);
-      }
-      else {
+      } else {
         $exception = new $test['class']('test');
       }
 
       $this->assertEquals(
-            $test['default'],
-            $exception->isRetryable(),
-            "Retryable flag mismatch for {$test['class']}"
-        );
+          $test['default'],
+          $exception->isRetryable(),
+          "Retryable flag mismatch for {$test['class']}"
+      );
     }
   }
 
   /**
    * Tests exception serialization for logging.
    */
-  public function testExceptionSerialization() {
+  public function testExceptionSerialization()
+  {
     $exception = new EmbeddingServiceException(
-          'Serialization test',
-          500,
-          NULL,
-          TRUE,
-          ['key' => 'value']
-      );
+        'Serialization test',
+        500,
+        null,
+        true,
+        ['key' => 'value']
+    );
 
     // Test that exception can be converted to string.
     $stringified = (string) $exception;
@@ -432,5 +447,4 @@ class SearchApiPostgreSQLExceptionTest extends TestCase {
     $this->assertIsString($exception->getFallbackStrategy());
     $this->assertIsArray($exception->getContext());
   }
-
 }

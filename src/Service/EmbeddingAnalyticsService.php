@@ -10,9 +10,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Service for tracking and analyzing embedding usage, costs, and performance.
  */
-class EmbeddingAnalyticsService {
+class EmbeddingAnalyticsService
+{
   /**
    * The database connection.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Database\Connection
    */
@@ -20,6 +22,7 @@ class EmbeddingAnalyticsService {
 
   /**
    * The entity type manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
@@ -27,6 +30,7 @@ class EmbeddingAnalyticsService {
 
   /**
    * The config factory.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Config\ConfigFactoryInterface
    */
@@ -34,6 +38,7 @@ class EmbeddingAnalyticsService {
 
   /**
    * The logger.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -41,6 +46,7 @@ class EmbeddingAnalyticsService {
 
   /**
    * Analytics table name.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -48,6 +54,7 @@ class EmbeddingAnalyticsService {
 
   /**
    * Cost tracking table name.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -55,6 +62,7 @@ class EmbeddingAnalyticsService {
 
   /**
    * Performance metrics table name.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -62,6 +70,7 @@ class EmbeddingAnalyticsService {
 
   /**
    * Daily aggregates table name.
+   * {@inheritdoc}
    *
    * @var string
    */
@@ -69,6 +78,7 @@ class EmbeddingAnalyticsService {
 
   /**
    * Constructs an EmbeddingAnalyticsService.
+   * {@inheritdoc}
    *
    * @param \Drupal\Core\Database\Connection $database
    *   The database connection.
@@ -80,10 +90,10 @@ class EmbeddingAnalyticsService {
    *   The logger.
    */
   public function __construct(
-    Connection $database,
-    EntityTypeManagerInterface $entity_type_manager,
-    ConfigFactoryInterface $config_factory,
-    LoggerInterface $logger,
+      Connection $database,
+      EntityTypeManagerInterface $entity_type_manager,
+      ConfigFactoryInterface $config_factory,
+      LoggerInterface $logger,
   ) {
     $this->database = $database;
     $this->entityTypeManager = $entity_type_manager;
@@ -95,6 +105,7 @@ class EmbeddingAnalyticsService {
 
   /**
    * Records an embedding API call.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
@@ -109,7 +120,8 @@ class EmbeddingAnalyticsService {
    * @param array $metadata
    *   Additional metadata.
    */
-  public function recordApiCall($server_id, $operation, $token_count, $cost, $duration_ms, array $metadata = []) {
+  public function recordApiCall($server_id, $operation, $token_count, $cost, $duration_ms, array $metadata = [])
+  {
     try {
       $this->database->insert($this->analyticsTable)
         ->fields([
@@ -122,14 +134,14 @@ class EmbeddingAnalyticsService {
           'timestamp' => time(),
         ])
         ->execute();
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to record API call: @message', ['@message' => $e->getMessage()]);
     }
   }
 
   /**
    * Records a performance metric.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
@@ -144,7 +156,8 @@ class EmbeddingAnalyticsService {
    * @param string|null $index_id
    *   Optional index ID.
    */
-  public function recordMetric($server_id, $metric_type, $metric_name, $value, array $metadata = [], $index_id = NULL) {
+  public function recordMetric($server_id, $metric_type, $metric_name, $value, array $metadata = [], $index_id = null)
+  {
     try {
       $fields = [
         'server_id' => $server_id,
@@ -162,24 +175,26 @@ class EmbeddingAnalyticsService {
       $this->database->insert($this->metricsTable)
         ->fields($fields)
         ->execute();
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to record metric: @message', ['@message' => $e->getMessage()]);
     }
   }
 
   /**
    * Gets cost analytics for a period.
+   * {@inheritdoc}
    *
    * @param string $period
    *   The time period (24h, 7d, 30d, 90d).
    * @param string|null $server_id
    *   Optional server ID filter.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Cost analytics data.
    */
-  public function getCostAnalytics($period = '7d', $server_id = NULL) {
+  public function getCostAnalytics($period = '7d', $server_id = null)
+  {
     // Default response for non-AI backends.
     $default_response = [
       'current_cost' => 0,
@@ -256,8 +271,7 @@ class EmbeddingAnalyticsService {
             $first_half_query->condition('timestamp', [$start_time, $mid_time], 'BETWEEN')
               ->addExpression('SUM(cost_usd)', 'total_cost');
             $first_half = $first_half_query->execute()->fetchField();
-          }
-          else {
+          } else {
             $first_half = 0;
           }
 
@@ -266,16 +280,14 @@ class EmbeddingAnalyticsService {
             $second_half_query->condition('timestamp', $mid_time, '>')
               ->addExpression('SUM(cost_usd)', 'total_cost');
             $second_half = $second_half_query->execute()->fetchField();
-          }
-          else {
+          } else {
             $second_half = 0;
           }
 
           if ($first_half > 0) {
             $trend = (($second_half - $first_half) / $first_half) * 100;
           }
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
           // If trend calculation fails, just use 0.
           $trend = 0;
           $this->logger->warning('Failed to calculate cost trend: @message', ['@message' => $e->getMessage()]);
@@ -292,8 +304,7 @@ class EmbeddingAnalyticsService {
         'trend' => $trend,
         'by_operation' => $by_operation,
       ];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       // If any database operation fails, log error and return defaults.
       $this->logger->error('Failed to get cost analytics: @message', ['@message' => $e->getMessage()]);
       return $default_response;
@@ -302,11 +313,13 @@ class EmbeddingAnalyticsService {
 
   /**
    * Gets cache analytics data.
+   * {@inheritdoc}
    *
    * @return array
    *   Cache analytics data.
    */
-  public function getCacheAnalytics() {
+  public function getCacheAnalytics()
+  {
     try {
       // Get cache-related metrics from the metrics table.
       $query = $this->database->select($this->metricsTable, 'm')
@@ -335,8 +348,7 @@ class EmbeddingAnalyticsService {
           'timestamp' => time(),
         ],
       ];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to get cache analytics: @message', ['@message' => $e->getMessage()]);
       return [
         'cache_metrics' => [],
@@ -353,16 +365,19 @@ class EmbeddingAnalyticsService {
 
   /**
    * Gets server metrics for a specific time period.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
    * @param string $period
    *   The time period (1h, 24h, 7d, 30d, 90d).
+   *   {@inheritdoc}.
    *
    * @return array
    *   Server metrics data.
    */
-  public function getServerMetrics($server_id, $period = '24h') {
+  public function getServerMetrics($server_id, $period = '24h')
+  {
     $period_seconds = $this->getPeriodSeconds($period);
     $start_time = time() - $period_seconds;
 
@@ -395,8 +410,7 @@ class EmbeddingAnalyticsService {
       foreach ($query_metrics as $metric) {
         if ($metric->metric_name === 'query') {
           $search_queries++;
-        }
-        elseif ($metric->metric_name === 'query_time') {
+        } elseif ($metric->metric_name === 'query_time') {
           $total_query_time += $metric->value;
           $query_count++;
         }
@@ -451,8 +465,7 @@ class EmbeddingAnalyticsService {
       if ($total_operations > 0) {
         $metrics['error_rate'] = round(($error_count / $total_operations) * 100, 2);
       }
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to get server metrics for @server: @message', [
         '@server' => $server_id,
         '@message' => $e->getMessage(),
@@ -464,16 +477,19 @@ class EmbeddingAnalyticsService {
 
   /**
    * Gets performance metrics for a period.
+   * {@inheritdoc}
    *
    * @param string $period
    *   The time period.
    * @param string|null $server_id
    *   Optional server ID filter.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Performance metrics data.
    */
-  public function getPerformanceMetrics($period = '7d', $server_id = NULL) {
+  public function getPerformanceMetrics($period = '7d', $server_id = null)
+  {
     $start_time = time() - $this->getPeriodSeconds($period);
 
     $query = $this->database->select($this->metricsTable, 'm')
@@ -515,26 +531,25 @@ class EmbeddingAnalyticsService {
           if ($record->metric_name === 'latency') {
             $hourly_buckets[$hour]['search_latency'][] = $record->value;
           }
-          break;
+            break;
 
         case 'cache':
           if ($record->metric_name === 'hit') {
             $hourly_buckets[$hour]['cache_hits']++;
-          }
-          elseif ($record->metric_name === 'miss') {
+          } elseif ($record->metric_name === 'miss') {
             $hourly_buckets[$hour]['cache_misses']++;
           }
-          break;
+            break;
 
         case 'queue':
           if ($record->metric_name === 'size') {
             $hourly_buckets[$hour]['queue_size'][] = $record->value;
           }
-          break;
+            break;
 
         case 'error':
           $hourly_buckets[$hour]['errors']++;
-          break;
+            break;
       }
 
       $hourly_buckets[$hour]['total']++;
@@ -581,10 +596,11 @@ class EmbeddingAnalyticsService {
 
   /**
    * Aggregates daily statistics.
-   *
+   * {@inheritdoc}
    * This method is called by cron to aggregate analytics data into daily summaries.
    */
-  public function aggregateDailyStats() {
+  public function aggregateDailyStats()
+  {
     try {
       // Get the last aggregation timestamp.
       $last_aggregation = $this->database->select($this->dailyAggregatesTable, 'da')
@@ -688,8 +704,7 @@ class EmbeddingAnalyticsService {
         '@start' => date('Y-m-d', $start_date),
         '@end' => date('Y-m-d', $end_date - 1),
       ]);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Failed to aggregate daily stats: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -698,20 +713,23 @@ class EmbeddingAnalyticsService {
 
   /**
    * Gets server statistics.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Server statistics.
    */
-  public function getServerStats($server_id) {
+  public function getServerStats($server_id)
+  {
     $stats = [
       'total_embeddings' => 0,
       'total_cost' => 0,
       'avg_latency' => 0,
       'cache_hit_rate' => 0,
-      'last_activity' => NULL,
+      'last_activity' => null,
     ];
 
     // Get total embeddings and cost.
@@ -775,40 +793,44 @@ class EmbeddingAnalyticsService {
 
   /**
    * Converts period string to seconds.
+   * {@inheritdoc}
    *
    * @param string $period
    *   The period string.
+   *   {@inheritdoc}.
    *
    * @return int
    *   Number of seconds.
    */
-  protected function getPeriodSeconds($period) {
+  protected function getPeriodSeconds($period)
+  {
     switch ($period) {
       case '1h':
-        return 3600;
+          return 3600;
 
       case '24h':
-        return 86400;
+          return 86400;
 
       case '7d':
-        return 604800;
+          return 604800;
 
       case '30d':
-        return 2592000;
+          return 2592000;
 
       case '90d':
-        return 7776000;
+          return 7776000;
 
       default:
         // Default to 7 days.
-        return 604800;
+          return 604800;
     }
   }
 
   /**
    * Ensures analytics tables exist.
    */
-  protected function ensureTablesExist() {
+  protected function ensureTablesExist()
+  {
     $schema = $this->database->schema();
 
     // Analytics table.
@@ -818,25 +840,25 @@ class EmbeddingAnalyticsService {
         'fields' => [
           'id' => [
             'type' => 'serial',
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Primary key',
           ],
           'server_id' => [
             'type' => 'varchar',
             'length' => 255,
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Server ID',
           ],
           'operation' => [
             'type' => 'varchar',
             'length' => 255,
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Operation type',
           ],
           'token_count' => [
             'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
             'default' => 0,
             'description' => 'Number of tokens',
           ],
@@ -844,14 +866,14 @@ class EmbeddingAnalyticsService {
             'type' => 'numeric',
             'precision' => 10,
             'scale' => 6,
-            'not null' => TRUE,
+            'not null' => true,
             'default' => 0,
             'description' => 'Cost in USD',
           ],
           'duration_ms' => [
             'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
             'default' => 0,
             'description' => 'Duration in milliseconds',
           ],
@@ -861,8 +883,8 @@ class EmbeddingAnalyticsService {
           ],
           'timestamp' => [
             'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
             'description' => 'Unix timestamp',
           ],
         ],
@@ -883,13 +905,13 @@ class EmbeddingAnalyticsService {
         'fields' => [
           'id' => [
             'type' => 'serial',
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Primary key',
           ],
           'server_id' => [
             'type' => 'varchar',
             'length' => 255,
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Server ID',
           ],
           'index_id' => [
@@ -900,20 +922,20 @@ class EmbeddingAnalyticsService {
           'metric_type' => [
             'type' => 'varchar',
             'length' => 100,
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Metric type (search, cache, etc)',
           ],
           'metric_name' => [
             'type' => 'varchar',
             'length' => 255,
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Specific metric name',
           ],
           'value' => [
             'type' => 'numeric',
             'precision' => 15,
             'scale' => 6,
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Metric value',
           ],
           'metadata' => [
@@ -922,8 +944,8 @@ class EmbeddingAnalyticsService {
           ],
           'timestamp' => [
             'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
             'description' => 'Unix timestamp',
           ],
         ],
@@ -944,31 +966,31 @@ class EmbeddingAnalyticsService {
         'fields' => [
           'id' => [
             'type' => 'serial',
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Primary key',
           ],
           'date' => [
             'type' => 'varchar',
             'length' => 10,
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Date (YYYY-MM-DD)',
           ],
           'server_id' => [
             'type' => 'varchar',
             'length' => 255,
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Server ID',
           ],
           'operation' => [
             'type' => 'varchar',
             'length' => 255,
-            'not null' => TRUE,
+            'not null' => true,
             'description' => 'Operation type',
           ],
           'total_calls' => [
             'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
             'default' => 0,
             'description' => 'Total API calls',
           ],
@@ -976,14 +998,14 @@ class EmbeddingAnalyticsService {
             'type' => 'numeric',
             'precision' => 10,
             'scale' => 6,
-            'not null' => TRUE,
+            'not null' => true,
             'default' => 0,
             'description' => 'Total cost in USD',
           ],
           'total_tokens' => [
             'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
             'default' => 0,
             'description' => 'Total tokens processed',
           ],
@@ -991,14 +1013,14 @@ class EmbeddingAnalyticsService {
             'type' => 'numeric',
             'precision' => 10,
             'scale' => 2,
-            'not null' => TRUE,
+            'not null' => true,
             'default' => 0,
             'description' => 'Average duration in milliseconds',
           ],
           'created' => [
             'type' => 'int',
-            'unsigned' => TRUE,
-            'not null' => TRUE,
+            'unsigned' => true,
+            'not null' => true,
             'description' => 'Timestamp when aggregate was created',
           ],
         ],
@@ -1014,5 +1036,4 @@ class EmbeddingAnalyticsService {
       $schema->createTable($this->dailyAggregatesTable, $table_spec);
     }
   }
-
 }

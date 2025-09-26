@@ -10,7 +10,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class EmbeddingCacheInterfaceTest extends TestCase {
+class EmbeddingCacheInterfaceTest extends TestCase
+{
   /**
    * Test cache implementation.
    */
@@ -19,7 +20,8 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load actual interface.
@@ -31,49 +33,53 @@ class EmbeddingCacheInterfaceTest extends TestCase {
       private $stats = ['hits' => 0, 'misses' => 0, 'sets' => 0];
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function get($text_hash) {
+      public function get($text_hash)
+      {
         if (isset($this->storage[$text_hash])) {
           $this->stats['hits']++;
           return $this->storage[$text_hash]['data'];
         }
         $this->stats['misses']++;
-        return NULL;
+        return null;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function set($text_hash, array $embedding, $ttl = NULL) {
+      public function set($text_hash, array $embedding, $ttl = null)
+      {
         $this->storage[$text_hash] = [
           'data' => $embedding,
           'ttl' => $ttl,
           'created' => time(),
         ];
         $this->stats['sets']++;
-        return TRUE;
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function invalidate($text_hash) {
+      public function invalidate($text_hash)
+      {
         if (isset($this->storage[$text_hash])) {
           unset($this->storage[$text_hash]);
-          return TRUE;
+          return true;
         }
-        return FALSE;
+        return false;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getMultiple(array $text_hashes) {
+      public function getMultiple(array $text_hashes)
+      {
         $results = [];
         foreach ($text_hashes as $hash) {
           $result = $this->get($hash);
-          if ($result !== NULL) {
+          if ($result !== null) {
             $results[$hash] = $result;
           }
         }
@@ -81,29 +87,32 @@ class EmbeddingCacheInterfaceTest extends TestCase {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function setMultiple(array $items, $ttl = NULL) {
+      public function setMultiple(array $items, $ttl = null)
+      {
         foreach ($items as $hash => $embedding) {
           if (!$this->set($hash, $embedding, $ttl)) {
-            return FALSE;
+            return false;
           }
         }
-        return TRUE;
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function clear() {
+      public function clear()
+      {
         $this->storage = [];
-        return TRUE;
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getStats() {
+      public function getStats()
+      {
         return array_merge($this->stats, [
           'size' => count($this->storage),
           'memory_usage' => memory_get_usage(),
@@ -111,9 +120,10 @@ class EmbeddingCacheInterfaceTest extends TestCase {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function maintenance() {
+      public function maintenance()
+      {
         // Remove expired entries.
         $now = time();
         foreach ($this->storage as $hash => $item) {
@@ -121,7 +131,7 @@ class EmbeddingCacheInterfaceTest extends TestCase {
             unset($this->storage[$hash]);
           }
         }
-        return TRUE;
+        return true;
       }
 
     };
@@ -130,17 +140,19 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * Tests cache interface compliance.
    */
-  public function testInterfaceCompliance() {
+  public function testInterfaceCompliance()
+  {
     $this->assertInstanceOf(
-          EmbeddingCacheInterface::class,
-          $this->cache
-      );
+        EmbeddingCacheInterface::class,
+        $this->cache
+    );
   }
 
   /**
    * Tests get and set operations.
    */
-  public function testGetAndSet() {
+  public function testGetAndSet()
+  {
     $textHash = hash('sha256', 'test content');
     $embedding = array_fill(0, 1536, 0.1);
 
@@ -160,7 +172,8 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * Tests invalidate operation.
    */
-  public function testInvalidate() {
+  public function testInvalidate()
+  {
     $textHash = hash('sha256', 'test content for invalidation');
     $embedding = array_fill(0, 1536, 0.2);
 
@@ -183,7 +196,8 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * Tests getMultiple operation.
    */
-  public function testGetMultiple() {
+  public function testGetMultiple()
+  {
     $items = [
       hash('sha256', 'content1') => array_fill(0, 1536, 0.1),
       hash('sha256', 'content2') => array_fill(0, 1536, 0.2),
@@ -220,7 +234,8 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * Tests setMultiple operation.
    */
-  public function testSetMultiple() {
+  public function testSetMultiple()
+  {
     $items = [
       hash('sha256', 'batch1') => array_fill(0, 1536, 0.4),
       hash('sha256', 'batch2') => array_fill(0, 1536, 0.5),
@@ -256,7 +271,8 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * Tests clear operation.
    */
-  public function testClear() {
+  public function testClear()
+  {
     // Add some items.
     $items = [
       hash('sha256', 'clear1') => array_fill(0, 1536, 0.9),
@@ -285,7 +301,8 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * Tests getStats operation.
    */
-  public function testGetStats() {
+  public function testGetStats()
+  {
     // Get initial stats.
     $initialStats = $this->cache->getStats();
     $this->assertIsArray($initialStats);
@@ -317,7 +334,8 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * Tests maintenance operation.
    */
-  public function testMaintenance() {
+  public function testMaintenance()
+  {
     // Add some items with TTL.
     $shortTtlHash = hash('sha256', 'short ttl');
     $longTtlHash = hash('sha256', 'long ttl');
@@ -348,13 +366,14 @@ class EmbeddingCacheInterfaceTest extends TestCase {
     // The short TTL item should be expired
     // The long TTL and no TTL items should remain.
     // Maintenance completed successfully.
-    $this->assertTrue(TRUE);
+    $this->assertTrue(true);
   }
 
   /**
    * Tests interface method signatures.
    */
-  public function testInterfaceMethodSignatures() {
+  public function testInterfaceMethodSignatures()
+  {
     $reflection = new \ReflectionClass(EmbeddingCacheInterface::class);
     $methods = $reflection->getMethods();
 
@@ -375,17 +394,18 @@ class EmbeddingCacheInterfaceTest extends TestCase {
 
     foreach ($expectedMethods as $expectedMethod) {
       $this->assertContains(
-            $expectedMethod,
-            $methodNames,
-            "Interface should define method: {$expectedMethod}"
-        );
+          $expectedMethod,
+          $methodNames,
+          "Interface should define method: {$expectedMethod}"
+      );
     }
   }
 
   /**
    * Tests embedding data validation.
    */
-  public function testEmbeddingDataValidation() {
+  public function testEmbeddingDataValidation()
+  {
     $validEmbeddings = [
     // Standard OpenAI embedding size.
       array_fill(0, 1536, 0.1),
@@ -410,7 +430,8 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * Tests hash validation.
    */
-  public function testHashValidation() {
+  public function testHashValidation()
+  {
     $validHashes = [
       hash('sha256', 'test content'),
       hash('md5', 'test content'),
@@ -432,7 +453,8 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * Tests cache size management.
    */
-  public function testCacheSizeManagement() {
+  public function testCacheSizeManagement()
+  {
     $initialStats = $this->cache->getStats();
     $initialSize = $initialStats['size'];
 
@@ -456,7 +478,8 @@ class EmbeddingCacheInterfaceTest extends TestCase {
   /**
    * Tests TTL functionality.
    */
-  public function testTtlFunctionality() {
+  public function testTtlFunctionality()
+  {
     $embedding = array_fill(0, 1536, 0.7);
 
     // Test setting with TTL.
@@ -486,5 +509,4 @@ class EmbeddingCacheInterfaceTest extends TestCase {
       $this->assertEquals($embedding, $this->cache->get($hash));
     }
   }
-
 }

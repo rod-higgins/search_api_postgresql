@@ -12,9 +12,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Resilient embedding service with graceful degradation capabilities.
  */
-class ResilientEmbeddingService implements EmbeddingServiceInterface {
+class ResilientEmbeddingService implements EmbeddingServiceInterface
+{
   /**
    * The underlying embedding service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface
    */
@@ -22,6 +24,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The circuit breaker service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\CircuitBreakerService
    */
@@ -29,6 +32,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The cache manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager
    */
@@ -36,6 +40,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * The logger.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -43,6 +48,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Service configuration.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -50,6 +56,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Constructs a ResilientEmbeddingService.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\Service\EmbeddingServiceInterface $embedding_service
    *   The underlying embedding service.
@@ -63,11 +70,11 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
    *   Service configuration.
    */
   public function __construct(
-    EmbeddingServiceInterface $embedding_service,
-    CircuitBreakerService $circuit_breaker,
-    EmbeddingCacheManager $cache_manager,
-    LoggerInterface $logger,
-    array $config = [],
+      EmbeddingServiceInterface $embedding_service,
+      CircuitBreakerService $circuit_breaker,
+      EmbeddingCacheManager $cache_manager,
+      LoggerInterface $logger,
+      array $config = [],
   ) {
     $this->embeddingService = $embedding_service;
     $this->circuitBreaker = $circuit_breaker;
@@ -79,34 +86,36 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function generateEmbedding($text) {
+  public function generateEmbedding($text)
+  {
     if (empty(trim($text))) {
-      return NULL;
+      return null;
     }
 
     // Try cache first.
     $cached_embedding = $this->getCachedEmbedding($text);
-    if ($cached_embedding !== NULL) {
+    if ($cached_embedding !== null) {
       return $cached_embedding;
     }
 
     // Use circuit breaker for external API call.
     return $this->circuitBreaker->execute(
-          'embedding_generation',
-          function () use ($text) {
-              return $this->generateEmbeddingWithRetry($text);
-          },
-          function ($exception) use ($text) {
-              return $this->handleEmbeddingFailure($text, $exception);
-          },
-          ['operation' => 'single_embedding', 'text_length' => strlen($text)]
-      );
+        'embedding_generation',
+        function () use ($text) {
+            return $this->generateEmbeddingWithRetry($text);
+        },
+        function ($exception) use ($text) {
+            return $this->handleEmbeddingFailure($text, $exception);
+        },
+        ['operation' => 'single_embedding', 'text_length' => strlen($text)]
+    );
   }
 
   /**
    * {@inheritdoc}
    */
-  public function generateBatchEmbeddings(array $texts) {
+  public function generateBatchEmbeddings(array $texts)
+  {
     if (empty($texts)) {
       return [];
     }
@@ -132,10 +141,9 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
     foreach ($valid_texts as $i => $text) {
       $cached = $this->getCachedEmbedding($text);
-      if ($cached !== NULL) {
+      if ($cached !== null) {
         $cached_results[$text_indices[$i]] = $cached;
-      }
-      else {
+      } else {
         $uncached_texts[] = $text;
         $uncached_indices[] = $text_indices[$i];
       }
@@ -154,17 +162,19 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function getDimension() {
+  public function getDimension()
+  {
     return $this->embeddingService->getDimension();
   }
 
   /**
    * {@inheritdoc}
    */
-  public function isAvailable() {
+  public function isAvailable()
+  {
     // Check if circuit breaker allows the service.
     if (!$this->circuitBreaker->isServiceAvailable('embedding_generation')) {
-      return FALSE;
+      return false;
     }
 
     return $this->embeddingService->isAvailable();
@@ -172,17 +182,21 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Generates embedding with retry logic.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text to embed.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   The embedding or NULL on failure.
+   *   {@inheritdoc}
    *
    * @throws \Exception
    *   On unrecoverable failures.
    */
-  protected function generateEmbeddingWithRetry($text) {
+  protected function generateEmbeddingWithRetry($text)
+  {
     $max_retries = $this->config['max_retries'];
     $base_delay = $this->config['base_retry_delay'];
 
@@ -197,8 +211,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
         }
 
         throw new \Exception('Embedding service returned empty result');
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $is_last_attempt = ($attempt === $max_retries);
 
         // Determine if this is a retryable error.
@@ -219,45 +232,48 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
     }
 
     throw new EmbeddingServiceUnavailableException(
-          'Embedding service',
-          new \Exception('Max retries exceeded')
-      );
+        'Embedding service',
+        new \Exception('Max retries exceeded')
+    );
   }
 
   /**
    * Processes batch embeddings with partial failure handling.
+   * {@inheritdoc}
    *
    * @param array $texts
    *   Texts to process.
    * @param array $indices
    *   Original indices for the texts.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Results keyed by original indices.
    */
-  protected function processBatchWithDegradation(array $texts, array $indices) {
+  protected function processBatchWithDegradation(array $texts, array $indices)
+  {
     $batch_size = $this->config['batch_size'];
     $results = [];
     $all_failures = [];
 
     // Split into smaller batches.
-    $batches = array_chunk($texts, $batch_size, TRUE);
-    $index_batches = array_chunk($indices, $batch_size, TRUE);
+    $batches = array_chunk($texts, $batch_size, true);
+    $index_batches = array_chunk($indices, $batch_size, true);
 
     foreach ($batches as $batch_index => $batch_texts) {
       $batch_indices = $index_batches[$batch_index];
 
       try {
         $batch_results = $this->circuitBreaker->execute(
-              'embedding_batch_generation',
-              function () use ($batch_texts) {
-                  return $this->embeddingService->generateBatchEmbeddings($batch_texts);
-              },
-              function ($exception) use ($batch_texts, $batch_indices) {
-                        return $this->handleBatchFailure($batch_texts, $batch_indices, $exception);
-              },
-              ['operation' => 'batch_embedding', 'batch_size' => count($batch_texts)]
-          );
+            'embedding_batch_generation',
+            function () use ($batch_texts) {
+                return $this->embeddingService->generateBatchEmbeddings($batch_texts);
+            },
+            function ($exception) use ($batch_texts, $batch_indices) {
+                      return $this->handleBatchFailure($batch_texts, $batch_indices, $exception);
+            },
+            ['operation' => 'batch_embedding', 'batch_size' => count($batch_texts)]
+        );
 
         // Map results back to original indices.
         foreach ($batch_results as $batch_pos => $embedding) {
@@ -269,8 +285,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
             $this->cacheEmbedding($batch_texts[$batch_pos], $embedding);
           }
         }
-      }
-      catch (PartialBatchFailureException $e) {
+      } catch (PartialBatchFailureException $e) {
         // Handle partial batch failure.
         $successful = $e->getSuccessfulItems();
         $failed = $e->getFailedItems();
@@ -296,8 +311,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
           '@success' => count($successful),
           '@total' => count($batch_texts),
         ]);
-      }
-      catch (GracefulDegradationException $e) {
+      } catch (GracefulDegradationException $e) {
         // Entire batch failed, but we can continue.
         foreach ($batch_indices as $batch_pos => $original_index) {
           $all_failures[$original_index] = $e->getMessage();
@@ -317,8 +331,7 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
       foreach ($indices as $index) {
         if (isset($results[$index])) {
           $successful_items[$index] = $results[$index];
-        }
-        elseif (isset($all_failures[$index])) {
+        } elseif (isset($all_failures[$index])) {
           $failed_items[$index] = $all_failures[$index];
         }
       }
@@ -336,16 +349,19 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Handles embedding generation failure.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text that failed.
    * @param \Exception $exception
    *   The failure exception.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   Fallback embedding or NULL.
    */
-  protected function handleEmbeddingFailure($text, \Exception $exception) {
+  protected function handleEmbeddingFailure($text, \Exception $exception)
+  {
     // Check if we have a fallback strategy.
     if ($this->config['enable_fallback']) {
       // Try to get a cached similar embedding.
@@ -361,11 +377,12 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
       '@message' => $exception->getMessage(),
     ]);
 
-    return NULL;
+    return null;
   }
 
   /**
    * Handles batch failure with individual item processing.
+   * {@inheritdoc}
    *
    * @param array $texts
    *   The texts that failed.
@@ -373,14 +390,17 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
    *   The indices for the texts.
    * @param \Exception $exception
    *   The failure exception.
+   *   {@inheritdoc}.
    *
    * @return array
    *   Partial results.
+   *   {@inheritdoc}
    *
    * @throws \Drupal\search_api_postgresql\Exception\PartialBatchFailureException
    *   When some items succeed and others fail.
    */
-  protected function handleBatchFailure(array $texts, array $indices, \Exception $exception) {
+  protected function handleBatchFailure(array $texts, array $indices, \Exception $exception)
+  {
     // If circuit breaker is open or this is a complete service failure,
     // don't try individual processing.
     if (!$this->circuitBreaker->isServiceAvailable('embedding_generation')) {
@@ -400,12 +420,10 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
         $embedding = $this->generateEmbeddingWithRetry($text);
         if ($embedding) {
           $successful[$pos] = $embedding;
-        }
-        else {
+        } else {
           $failed[$pos] = 'No embedding returned';
         }
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $failed[$pos] = $e->getMessage();
       }
 
@@ -424,46 +442,49 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets cached embedding for text.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   Cached embedding or NULL.
    */
-  protected function getCachedEmbedding($text) {
+  protected function getCachedEmbedding($text)
+  {
     if (!$this->cacheManager) {
-      return NULL;
+      return null;
     }
 
     try {
       return $this->cacheManager->getCachedEmbedding($text, $this->getCacheMetadata());
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->warning('Cache retrieval failed: @message', [
         '@message' => $e->getMessage(),
       ]);
-      return NULL;
+      return null;
     }
   }
 
   /**
    * Caches an embedding.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text.
    * @param array $embedding
    *   The embedding.
    */
-  protected function cacheEmbedding($text, array $embedding) {
+  protected function cacheEmbedding($text, array $embedding)
+  {
     if (!$this->cacheManager) {
       return;
     }
 
     try {
       $this->cacheManager->cacheEmbedding($text, $embedding, $this->getCacheMetadata());
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->warning('Cache storage failed: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -472,44 +493,50 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets a fallback embedding for failed generation.
+   * {@inheritdoc}
    *
    * @param string $text
    *   The text.
+   *   {@inheritdoc}.
    *
    * @return array|null
    *   Fallback embedding or NULL.
    */
-  protected function getFallbackEmbedding($text) {
+  protected function getFallbackEmbedding($text)
+  {
     // Simple fallback: try to find cached embedding for similar text
     // In a more sophisticated implementation, this could use:
     // - Simplified embeddings (fewer dimensions)
     // - Pre-computed embeddings for common terms
     // - Statistical text features as pseudo-embeddings.
     if (!$this->cacheManager) {
-      return NULL;
+      return null;
     }
 
     // For now, return NULL - this is where you'd implement fallback strategies.
-    return NULL;
+    return null;
   }
 
   /**
    * Checks if an error is retryable.
+   * {@inheritdoc}
    *
    * @param \Exception $exception
    *   The exception to check.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if retryable.
+   *   true if retryable.
    */
-  protected function isRetryableError(\Exception $exception) {
+  protected function isRetryableError(\Exception $exception)
+  {
     $message = $exception->getMessage();
     $code = $exception->getCode();
 
     // Retryable errors: network issues, rate limits, temporary server errors.
     $retryable_codes = [429, 500, 502, 503, 504];
     if (in_array($code, $retryable_codes)) {
-      return TRUE;
+      return true;
     }
 
     // Check message for retryable conditions.
@@ -523,26 +550,29 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
     ];
 
     foreach ($retryable_messages as $retryable) {
-      if (stripos($message, $retryable) !== FALSE) {
-        return TRUE;
+      if (stripos($message, $retryable) !== false) {
+        return true;
       }
     }
 
-    return FALSE;
+    return false;
   }
 
   /**
    * Wraps an exception with appropriate degradation exception.
+   * {@inheritdoc}
    *
    * @param \Exception $exception
    *   The original exception.
    * @param int $retry_attempts
    *   Number of retry attempts made.
+   *   {@inheritdoc}.
    *
    * @return \Drupal\search_api_postgresql\Exception\GracefulDegradationException
    *   The wrapped exception.
    */
-  protected function wrapException(\Exception $exception, $retry_attempts = 0) {
+  protected function wrapException(\Exception $exception, $retry_attempts = 0)
+  {
     return DegradationExceptionFactory::createFromException($exception, [
       'service_name' => 'Embedding Service',
       'retry_attempts' => $retry_attempts,
@@ -551,11 +581,13 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets cache metadata.
+   * {@inheritdoc}
    *
    * @return array
    *   Cache metadata.
    */
-  protected function getCacheMetadata() {
+  protected function getCacheMetadata()
+  {
     return [
       'service' => 'resilient_embedding',
       'dimension' => $this->getDimension(),
@@ -564,18 +596,20 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets default configuration.
+   * {@inheritdoc}
    *
    * @return array
    *   Default configuration.
    */
-  protected function getDefaultConfig() {
+  protected function getDefaultConfig()
+  {
     return [
       'max_retries' => 3,
     // Milliseconds.
       'base_retry_delay' => 1000,
       'batch_size' => 10,
-      'enable_fallback' => TRUE,
-      'individual_fallback' => TRUE,
+      'enable_fallback' => true,
+      'individual_fallback' => true,
     // Milliseconds between individual requests.
       'individual_delay' => 100,
     ];
@@ -583,15 +617,17 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
 
   /**
    * Gets service statistics including degradation info.
+   * {@inheritdoc}
    *
    * @return array
    *   Service statistics.
    */
-  public function getServiceStats() {
+  public function getServiceStats()
+  {
     return [
       'circuit_breaker_stats' => $this->circuitBreaker->getServiceStats('embedding_generation'),
       'underlying_service_available' => $this->embeddingService->isAvailable(),
-      'cache_enabled' => $this->cacheManager !== NULL,
+      'cache_enabled' => $this->cacheManager !== null,
       'config' => $this->config,
     ];
   }
@@ -599,9 +635,9 @@ class ResilientEmbeddingService implements EmbeddingServiceInterface {
   /**
    * Resets the circuit breaker for this service.
    */
-  public function resetCircuitBreaker() {
+  public function resetCircuitBreaker()
+  {
     $this->circuitBreaker->resetCircuit('embedding_generation');
     $this->circuitBreaker->resetCircuit('embedding_batch_generation');
   }
-
 }

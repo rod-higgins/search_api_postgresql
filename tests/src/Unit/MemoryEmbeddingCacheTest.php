@@ -11,7 +11,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class MemoryEmbeddingCacheTest extends TestCase {
+class MemoryEmbeddingCacheTest extends TestCase
+{
   /**
    * Simple logger implementation for testing.
    */
@@ -34,7 +35,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load the actual module files.
@@ -45,57 +47,66 @@ class MemoryEmbeddingCacheTest extends TestCase {
     $this->logger = new class implements LoggerInterface {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function emergency($message, array $context = []) {
+      public function emergency($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function alert($message, array $context = []) {
+      public function alert($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function critical($message, array $context = []) {
+      public function critical($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function error($message, array $context = []) {
+      public function error($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function warning($message, array $context = []) {
+      public function warning($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function notice($message, array $context = []) {
+      public function notice($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function info($message, array $context = []) {
+      public function info($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function debug($message, array $context = []) {
+      public function debug($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function log($level, $message, array $context = []) {
+      public function log($level, $message, array $context = [])
+      {
       }
 
     };
@@ -116,7 +127,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    *
    * @covers ::get
    */
-  public function testCacheMiss() {
+  public function testCacheMiss()
+  {
     $hash = str_repeat('a', 64);
 
     $result = $this->cache->get($hash);
@@ -129,7 +141,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::get
    * @covers ::set
    */
-  public function testCacheHitAndSet() {
+  public function testCacheHitAndSet()
+  {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
@@ -148,7 +161,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::get
    * @covers ::set
    */
-  public function testExpiredCacheEntry() {
+  public function testExpiredCacheEntry()
+  {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
@@ -170,7 +184,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::get
    * @covers ::set
    */
-  public function testNoExpirationCacheEntry() {
+  public function testNoExpirationCacheEntry()
+  {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
@@ -189,7 +204,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::invalidate
    * @covers ::set
    */
-  public function testInvalidate() {
+  public function testInvalidate()
+  {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
@@ -210,7 +226,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    *
    * @covers ::invalidate
    */
-  public function testInvalidateNonExistent() {
+  public function testInvalidateNonExistent()
+  {
     $hash = str_repeat('a', 64);
 
     $result = $this->cache->invalidate($hash);
@@ -223,7 +240,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::getMultiple
    * @covers ::set
    */
-  public function testGetMultiple() {
+  public function testGetMultiple()
+  {
     $entries = [
       str_repeat('a', 64) => [1.0, 2.0, 3.0],
       str_repeat('b', 64) => [4.0, 5.0, 6.0],
@@ -257,7 +275,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::setMultiple
    * @covers ::get
    */
-  public function testSetMultiple() {
+  public function testSetMultiple()
+  {
     $items = [
       str_repeat('a', 64) => [1.0, 2.0, 3.0],
       str_repeat('b', 64) => [4.0, 5.0, 6.0],
@@ -280,7 +299,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::set
    * @covers ::get
    */
-  public function testClear() {
+  public function testClear()
+  {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
@@ -304,7 +324,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::set
    * @covers ::get
    */
-  public function testGetStats() {
+  public function testGetStats()
+  {
     $hash1 = str_repeat('a', 64);
     $hash2 = str_repeat('b', 64);
     $embedding1 = [1.0, 2.0, 3.0];
@@ -338,7 +359,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::set
    * @covers ::performCleanup
    */
-  public function testCacheCleanupOnMaxEntries() {
+  public function testCacheCleanupOnMaxEntries()
+  {
     // Set config with very low max entries.
     $cache = new MemoryEmbeddingCache($this->logger, [
       'default_ttl' => 3600,
@@ -364,7 +386,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::maintenance
    * @covers ::set
    */
-  public function testCacheMaintenance() {
+  public function testCacheMaintenance()
+  {
     // Add some entries with short TTL.
     $this->cache->set(str_repeat('a', 64), [1.0], 1);
     $this->cache->set(str_repeat('b', 64), [2.0], 3600);
@@ -384,14 +407,15 @@ class MemoryEmbeddingCacheTest extends TestCase {
   /**
    * Tests hash validation.
    */
-  public function testHashValidation() {
+  public function testHashValidation()
+  {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Invalid hash format');
 
     // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateHash');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     // Test with invalid hash.
     $method->invokeArgs($this->cache, ['invalid_hash']);
@@ -400,14 +424,15 @@ class MemoryEmbeddingCacheTest extends TestCase {
   /**
    * Tests embedding validation.
    */
-  public function testEmbeddingValidation() {
+  public function testEmbeddingValidation()
+  {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Embedding cannot be empty');
 
     // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateEmbedding');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     // Test with empty embedding.
     $method->invokeArgs($this->cache, [[]]);
@@ -422,7 +447,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::getMultiple
    * @covers ::setMultiple
    */
-  public function testEmptyInputHandling() {
+  public function testEmptyInputHandling()
+  {
     // Test empty hash.
     $this->assertNull($this->cache->get(''));
     $this->assertFalse($this->cache->set('', [1.0]));
@@ -439,7 +465,8 @@ class MemoryEmbeddingCacheTest extends TestCase {
    * @covers ::get
    * @covers ::set
    */
-  public function testAccessTimeAndHitCountTracking() {
+  public function testAccessTimeAndHitCountTracking()
+  {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
@@ -453,11 +480,10 @@ class MemoryEmbeddingCacheTest extends TestCase {
     // Use reflection to check metadata.
     $reflection = new \ReflectionClass($this->cache);
     $metadata_property = $reflection->getProperty('metadata');
-    $metadata_property->setAccessible(TRUE);
+    $metadata_property->setAccessible(true);
     $metadata = $metadata_property->getValue($this->cache);
 
     $this->assertEquals(3, $metadata[$hash]['hit_count']);
     $this->assertGreaterThan(time() - 10, $metadata[$hash]['last_accessed']);
   }
-
 }

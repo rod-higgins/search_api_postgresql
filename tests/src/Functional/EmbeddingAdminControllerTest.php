@@ -9,7 +9,8 @@ use Drupal\Tests\BrowserTestBase;
  *
  * @group search_api_postgresql
  */
-class EmbeddingAdminControllerTest extends BrowserTestBase {
+class EmbeddingAdminControllerTest extends BrowserTestBase
+{
   /**
    * {@inheritdoc}
    */
@@ -41,7 +42,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Create admin user with appropriate permissions.
@@ -63,7 +65,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests admin dashboard access and basic functionality.
    */
-  public function testAdminDashboardAccess() {
+  public function testAdminDashboardAccess()
+  {
     // Test unauthorized access.
     $this->drupalLogin($this->regularUser);
     $this->drupalGet('/admin/config/search/search-api/postgresql/dashboard');
@@ -79,7 +82,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests analytics page functionality.
    */
-  public function testAnalyticsPage() {
+  public function testAnalyticsPage()
+  {
     $this->drupalLogin($this->adminUser);
 
     $this->drupalGet('/admin/config/search/search-api/postgresql/analytics');
@@ -95,7 +99,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests cache management page.
    */
-  public function testCacheManagementPage() {
+  public function testCacheManagementPage()
+  {
     $this->drupalLogin($this->adminUser);
 
     $this->drupalGet('/admin/config/search/search-api/postgresql/cache');
@@ -110,7 +115,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests queue management page.
    */
-  public function testQueueManagementPage() {
+  public function testQueueManagementPage()
+  {
     $this->drupalLogin($this->adminUser);
 
     $this->drupalGet('/admin/config/search/search-api/postgresql/queue');
@@ -125,7 +131,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests server status endpoint.
    */
-  public function testServerStatusEndpoint() {
+  public function testServerStatusEndpoint()
+  {
     $this->drupalLogin($this->adminUser);
 
     // Test with non-existent server.
@@ -139,7 +146,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests configuration validation endpoint.
    */
-  public function testConfigurationValidation() {
+  public function testConfigurationValidation()
+  {
     $this->drupalLogin($this->adminUser);
 
     $this->drupalGet('/admin/config/search/search-api/postgresql/validate');
@@ -156,7 +164,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests embedding operations page.
    */
-  public function testEmbeddingOperationsPage() {
+  public function testEmbeddingOperationsPage()
+  {
     $this->drupalLogin($this->adminUser);
 
     $this->drupalGet('/admin/config/search/search-api/postgresql/embeddings');
@@ -171,7 +180,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests system status integration.
    */
-  public function testSystemStatusIntegration() {
+  public function testSystemStatusIntegration()
+  {
     $this->drupalLogin($this->adminUser);
 
     $this->drupalGet('/admin/reports/status');
@@ -186,7 +196,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests AJAX endpoints.
    */
-  public function testAjaxEndpoints() {
+  public function testAjaxEndpoints()
+  {
     $this->drupalLogin($this->adminUser);
 
     // Test cache statistics AJAX endpoint.
@@ -205,7 +216,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests error handling for invalid requests.
    */
-  public function testErrorHandling() {
+  public function testErrorHandling()
+  {
     $this->drupalLogin($this->adminUser);
 
     // Test invalid server ID.
@@ -220,7 +232,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests breadcrumb navigation.
    */
-  public function testBreadcrumbNavigation() {
+  public function testBreadcrumbNavigation()
+  {
     $this->drupalLogin($this->adminUser);
 
     $this->drupalGet('/admin/config/search/search-api/postgresql/dashboard');
@@ -236,7 +249,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests action forms and submissions.
    */
-  public function testActionForms() {
+  public function testActionForms()
+  {
     $this->drupalLogin($this->adminUser);
 
     // Test cache clear action.
@@ -259,7 +273,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests responsive design elements.
    */
-  public function testResponsiveDesign() {
+  public function testResponsiveDesign()
+  {
     $this->drupalLogin($this->adminUser);
 
     $this->drupalGet('/admin/config/search/search-api/postgresql/dashboard');
@@ -275,7 +290,8 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
   /**
    * Tests help text and documentation links.
    */
-  public function testHelpAndDocumentation() {
+  public function testHelpAndDocumentation()
+  {
     $this->drupalLogin($this->adminUser);
 
     $this->drupalGet('/admin/config/search/search-api/postgresql/dashboard');
@@ -287,5 +303,4 @@ class EmbeddingAdminControllerTest extends BrowserTestBase {
     // Should contain links to relevant documentation.
     $this->assertSession()->linkExists('Documentation');
   }
-
 }

@@ -14,9 +14,11 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Drush commands for Search API PostgreSQL.
  */
-class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInjectionInterface {
+class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInjectionInterface
+{
   /**
    * The entity type manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\Core\Entity\EntityTypeManagerInterface
    */
@@ -24,6 +26,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * The queue manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Queue\EmbeddingQueueManager|null
    */
@@ -31,6 +34,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * The cache manager.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Cache\EmbeddingCacheManager|null
    */
@@ -38,6 +42,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * The validation service.
+   * {@inheritdoc}
    *
    * @var \Drupal\search_api_postgresql\Service\ConfigurationValidationService|null
    */
@@ -45,6 +50,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * The logger.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -54,11 +60,11 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
    * Constructs a SearchApiPostgreSQLCommands object.
    */
   public function __construct(
-    EntityTypeManagerInterface $entity_type_manager,
-    ?EmbeddingQueueManager $queue_manager = NULL,
-    ?EmbeddingCacheManager $cache_manager = NULL,
-    ?ConfigurationValidationService $validation_service = NULL,
-    ?LoggerInterface $logger = NULL,
+      EntityTypeManagerInterface $entity_type_manager,
+      ?EmbeddingQueueManager $queue_manager = null,
+      ?EmbeddingCacheManager $cache_manager = null,
+      ?ConfigurationValidationService $validation_service = null,
+      ?LoggerInterface $logger = null,
   ) {
     parent::__construct();
     $this->entityTypeManager = $entity_type_manager;
@@ -71,29 +77,37 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container) {
+  public static function create(ContainerInterface $container)
+  {
     // Use NULL if services don't exist (e.g., during uninstall)
     return new static(
-          $container->get('entity_type.manager'),
-          $container->has('search_api_postgresql.embedding_queue_manager') ? $container->get('search_api_postgresql.embedding_queue_manager') : NULL,
-          $container->has('search_api_postgresql.cache_manager') ? $container->get('search_api_postgresql.cache_manager') : NULL,
-          $container->has('search_api_postgresql.configuration_validator') ? $container->get('search_api_postgresql.configuration_validator') : NULL,
-          $container->has('logger.channel.search_api_postgresql') ? $container->get('logger.channel.search_api_postgresql') : NULL
-      );
+        $container->get('entity_type.manager'),
+        $container->has('search_api_postgresql.embedding_queue_manager') ?
+          $container->get('search_api_postgresql.embedding_queue_manager') : null,
+        $container->has('search_api_postgresql.cache_manager') ?
+          $container->get('search_api_postgresql.cache_manager') : null,
+        $container->has('search_api_postgresql.configuration_validator') ?
+          $container->get('search_api_postgresql.configuration_validator') : null,
+        $container->has('logger.channel.search_api_postgresql') ?
+          $container->get('logger.channel.search_api_postgresql') : null
+    );
   }
 
   /**
    * Tests AI service connectivity for a server.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
+   *   {@inheritdoc}.
    *
    * @command search-api-postgresql:test-ai
    * @aliases sap-test-ai
-   * @usage search-api-postgresql:test-ai my_server
+   * @usage   search-api-postgresql:test-ai my_server
    *   Tests AI service for the specified server.
    */
-  public function testAi($server_id) {
+  public function testAi($server_id)
+  {
     if (!$this->validationService) {
       throw new \Exception(dt('Validation service not available. Please ensure the module is properly installed.'));
     }
@@ -113,8 +127,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
       if (!empty($result['details'])) {
         $this->io()->text($result['details']);
       }
-    }
-    else {
+    } else {
       $this->io()->error($result['message']);
       if (!empty($result['details'])) {
         $this->io()->text($result['details']);
@@ -124,20 +137,23 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * Regenerates embeddings for an index.
+   * {@inheritdoc}
    *
    * @param string $index_id
    *   The index ID.
    * @param array $options
    *   Command options.
+   *   {@inheritdoc}.
    *
    * @command search-api-postgresql:regenerate-embeddings
-   * @option batch-size Number of items per batch
-   * @option force Force regeneration of existing embeddings
+   * @option  batch-size Number of items per batch
+   * @option  force Force regeneration of existing embeddings
    * @aliases sap-regen
-   * @usage search-api-postgresql:regenerate-embeddings my_index --batch-size=50
+   * @usage   search-api-postgresql:regenerate-embeddings my_index --batch-size=50
    *   Regenerates embeddings for the specified index.
    */
-  public function regenerateEmbeddings($index_id, $options = ['batch-size' => 10, 'force' => FALSE]) {
+  public function regenerateEmbeddings($index_id, $options = ['batch-size' => 10, 'force' => false])
+  {
     $index = $this->entityTypeManager->getStorage('search_api_index')->load($index_id);
 
     if (!$index) {
@@ -162,16 +178,19 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * Shows embedding statistics for an index.
+   * {@inheritdoc}
    *
-   * @command search-api-postgresql:embedding-stats
    * @param string $index_id
    *   The index ID.
+   *   {@inheritdoc}.
    *
+   * @command search-api-postgresql:embedding-stats
    * @aliases sap-stats
-   * @usage search-api-postgresql:embedding-stats my_index
+   * @usage   search-api-postgresql:embedding-stats my_index
    *   Shows embedding statistics for the specified index.
    */
-  public function embeddingStats($index_id) {
+  public function embeddingStats($index_id)
+  {
     $index = $this->entityTypeManager->getStorage('search_api_index')->load($index_id);
 
     if (!$index) {
@@ -200,13 +219,15 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * Shows queue status.
+   * {@inheritdoc}
    *
    * @command search-api-postgresql:queue-status
    * @aliases sap-queue
-   * @usage search-api-postgresql:queue-status
+   * @usage   search-api-postgresql:queue-status
    *   Shows the current queue status.
    */
-  public function queueStatus() {
+  public function queueStatus()
+  {
     $this->io()->title('Embedding Queue Status');
 
     $stats = $this->queueManager->getQueueStats();
@@ -237,15 +258,17 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * Processes queue items.
+   * {@inheritdoc}
    *
    * @command search-api-postgresql:queue-process
-   * @option max-items Maximum items to process
-   * @option time-limit Time limit in seconds
+   * @option  max-items Maximum items to process
+   * @option  time-limit Time limit in seconds
    * @aliases sap-process
-   * @usage search-api-postgresql:queue-process --max-items=50
+   * @usage   search-api-postgresql:queue-process --max-items=50
    *   Processes up to 50 queue items.
    */
-  public function queueProcess($options = ['max-items' => 50, 'time-limit' => 60]) {
+  public function queueProcess($options = ['max-items' => 50, 'time-limit' => 60])
+  {
     $this->io()->title('Processing Embedding Queue');
 
     $result = $this->queueManager->processQueue([
@@ -268,16 +291,19 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * Shows cache statistics.
+   * {@inheritdoc}
    *
-   * @command search-api-postgresql:cache-stats
    * @param string $server_id
    *   The server ID.
+   *   {@inheritdoc}.
    *
+   * @command search-api-postgresql:cache-stats
    * @aliases sap-cache
-   * @usage search-api-postgresql:cache-stats my_server
+   * @usage   search-api-postgresql:cache-stats my_server
    *   Shows cache statistics for the server.
    */
-  public function cacheStats($server_id) {
+  public function cacheStats($server_id)
+  {
     $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
 
     if (!$server) {
@@ -301,17 +327,22 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * Clears the embedding cache.
+   * {@inheritdoc}
    *
-   * @command search-api-postgresql:cache-clear
    * @param string $server_id
    *   The server ID.
+   * @param array $options
+   *   Command options.
+   *   {@inheritdoc}.
    *
-   * @option confirm Skip confirmation
+   * @command search-api-postgresql:cache-clear
+   * @option  confirm Skip confirmation
    * @aliases sap-cache-clear
-   * @usage search-api-postgresql:cache-clear my_server
+   * @usage   search-api-postgresql:cache-clear my_server
    *   Clears the cache for the specified server.
    */
-  public function cacheClear($server_id, $options = ['confirm' => FALSE]) {
+  public function cacheClear($server_id, $options = ['confirm' => false])
+  {
     $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
 
     if (!$server) {
@@ -335,16 +366,19 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
 
   /**
    * Validates server configuration.
+   * {@inheritdoc}
    *
-   * @command search-api-postgresql:validate
    * @param string $server_id
    *   The server ID.
+   *   {@inheritdoc}.
    *
+   * @command search-api-postgresql:validate
    * @aliases sap-validate
-   * @usage search-api-postgresql:validate my_server
+   * @usage   search-api-postgresql:validate my_server
    *   Validates the server configuration.
    */
-  public function validate($server_id) {
+  public function validate($server_id)
+  {
     $server = $this->entityTypeManager->getStorage('search_api_server')->load($server_id);
 
     if (!$server) {
@@ -359,8 +393,7 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
     if (!empty($health_check['configuration'])) {
       if ($health_check['configuration']['success']) {
         $this->io()->success('Configuration: Valid');
-      }
-      else {
+      } else {
         $this->io()->error('Configuration: Has issues');
         foreach ($health_check['configuration']['errors'] as $error) {
           $this->io()->text('  Error: ' . $error);
@@ -374,22 +407,19 @@ class SearchApiPostgreSQLCommands extends DrushCommands implements ContainerInje
         if ($test_name === 'overall') {
           continue;
         }
-        if ($result['success'] ?? FALSE) {
+        if ($result['success'] ?? false) {
           $this->io()->success($test_name . ': ' . ($result['message'] ?? 'OK'));
-        }
-        else {
+        } else {
           $this->io()->error($test_name . ': ' . ($result['message'] ?? 'Failed'));
         }
       }
     }
 
     // Display overall result.
-    if ($health_check['overall']['success'] ?? FALSE) {
+    if ($health_check['overall']['success'] ?? false) {
       $this->io()->success('Overall: Server configuration is valid.');
-    }
-    else {
+    } else {
       $this->io()->error('Overall: Server configuration has issues.');
     }
   }
-
 }

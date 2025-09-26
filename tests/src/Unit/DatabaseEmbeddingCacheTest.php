@@ -11,7 +11,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class DatabaseEmbeddingCacheTest extends TestCase {
+class DatabaseEmbeddingCacheTest extends TestCase
+{
   /**
    * Real database connection implementation for testing.
    */
@@ -44,7 +45,8 @@ class DatabaseEmbeddingCacheTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load actual cache classes.
@@ -74,57 +76,66 @@ class DatabaseEmbeddingCacheTest extends TestCase {
     $this->logger = new class implements LoggerInterface {
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function emergency($message, array $context = []) {
+      public function emergency($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function alert($message, array $context = []) {
+      public function alert($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function critical($message, array $context = []) {
+      public function critical($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function error($message, array $context = []) {
+      public function error($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function warning($message, array $context = []) {
+      public function warning($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function notice($message, array $context = []) {
+      public function notice($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function info($message, array $context = []) {
+      public function info($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function debug($message, array $context = []) {
+      public function debug($message, array $context = [])
+      {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function log($level, $message, array $context = []) {
+      public function log($level, $message, array $context = [])
+      {
       }
 
     };
@@ -134,68 +145,77 @@ class DatabaseEmbeddingCacheTest extends TestCase {
     $this->connection = new class ($storage) {
       private $storage;
 
-      public function __construct(&$storage) {
+      public function __construct(&$storage)
+      {
         $this->storage = &$storage;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function select($table, $alias = NULL, array $options = []) {
+      public function select($table, $alias = null, array $options = [])
+      {
         return new class ($this->storage, $table) {
           private $storage;
           private $table;
           private $conditions = [];
           private $fields = [];
-          private $limit = NULL;
+          private $limit = null;
 
-          public function __construct(&$storage, $table) {
+          public function __construct(&$storage, $table)
+          {
             $this->storage = &$storage;
             $this->table = $table;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function fields($table_alias, array $fields = []) {
+          public function fields($table_alias, array $fields = [])
+          {
             $this->fields = $fields;
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function condition($field, $value = NULL, $operator = '=') {
+          public function condition($field, $value = null, $operator = '=')
+          {
             $this->conditions[] = [$field, $value, $operator];
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function range($start = NULL, $length = NULL) {
+          public function range($start = null, $length = null)
+          {
             $this->limit = $length;
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function addExpression($expression, $alias = NULL, $arguments = []) {
+          public function addExpression($expression, $alias = null, $arguments = [])
+          {
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function execute() {
+          public function execute()
+          {
             return new class ($this->storage, $this->table, $this->conditions, $this->limit) {
               private $storage;
               private $table;
               private $conditions;
               private $limit;
 
-              public function __construct(&$storage, $table, $conditions, $limit) {
+              public function __construct(&$storage, $table, $conditions, $limit)
+              {
                 $this->storage = &$storage;
                 $this->table = $table;
                 $this->conditions = $conditions;
@@ -203,18 +223,19 @@ class DatabaseEmbeddingCacheTest extends TestCase {
               }
 
               /**
-               *
+               * {@inheritdoc}
                */
-              public function fetchAssoc() {
+              public function fetchAssoc()
+              {
                 if (!isset($this->storage[$this->table])) {
-                  return FALSE;
+                  return false;
                 }
 
                 foreach ($this->storage[$this->table] as $row) {
-                  $match = TRUE;
+                  $match = true;
                   foreach ($this->conditions as [$field, $value, $operator]) {
                     if ($operator === '=' && $row[$field] !== $value) {
-                      $match = FALSE;
+                      $match = false;
                       break;
                     }
                   }
@@ -222,23 +243,24 @@ class DatabaseEmbeddingCacheTest extends TestCase {
                     return $row;
                   }
                 }
-                return FALSE;
+                return false;
               }
 
               /**
-               *
+               * {@inheritdoc}
                */
-              public function fetchAllKeyed() {
+              public function fetchAllKeyed()
+              {
                 $results = [];
                 if (!isset($this->storage[$this->table])) {
                   return $results;
                 }
 
                 foreach ($this->storage[$this->table] as $row) {
-                  $match = TRUE;
+                  $match = true;
                   foreach ($this->conditions as [$field, $value, $operator]) {
                     if ($operator === 'IN' && !in_array($row[$field], $value)) {
-                      $match = FALSE;
+                      $match = false;
                       break;
                     }
                   }
@@ -250,19 +272,20 @@ class DatabaseEmbeddingCacheTest extends TestCase {
               }
 
               /**
-               *
+               * {@inheritdoc}
                */
-              public function fetchField() {
+              public function fetchField()
+              {
                 if (!isset($this->storage[$this->table])) {
                   return 0;
                 }
 
                 $count = 0;
                 foreach ($this->storage[$this->table] as $row) {
-                  $match = TRUE;
+                  $match = true;
                   foreach ($this->conditions as [$field, $value, $operator]) {
                     if ($operator === '<' && $row[$field] >= $value) {
-                      $match = FALSE;
+                      $match = false;
                       break;
                     }
                   }
@@ -277,9 +300,10 @@ class DatabaseEmbeddingCacheTest extends TestCase {
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function countQuery() {
+          public function countQuery()
+          {
             return $this;
           }
 
@@ -287,49 +311,55 @@ class DatabaseEmbeddingCacheTest extends TestCase {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function merge($table, array $options = []) {
+      public function merge($table, array $options = [])
+      {
         return new class ($this->storage, $table) {
           private $storage;
           private $table;
           private $key_field;
           private $fields_data = [];
 
-          public function __construct(&$storage, $table) {
+          public function __construct(&$storage, $table)
+          {
             $this->storage = &$storage;
             $this->table = $table;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function key(array $key) {
+          public function key(array $key)
+          {
             $this->key_field = array_keys($key)[0];
             $this->fields_data = array_merge($this->fields_data, $key);
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function fields(array $fields) {
+          public function fields(array $fields)
+          {
             $this->fields_data = array_merge($this->fields_data, $fields);
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function expression($field, $expression) {
+          public function expression($field, $expression)
+          {
             $this->fields_data[$field] = time();
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function execute() {
+          public function execute()
+          {
             if (!isset($this->storage[$this->table])) {
               $this->storage[$this->table] = [];
             }
@@ -342,54 +372,59 @@ class DatabaseEmbeddingCacheTest extends TestCase {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function update($table, array $options = []) {
+      public function update($table, array $options = [])
+      {
         return new class ($this->storage, $table) {
           private $storage;
           private $table;
           private $conditions = [];
           private $fields_data = [];
 
-          public function __construct(&$storage, $table) {
+          public function __construct(&$storage, $table)
+          {
             $this->storage = &$storage;
             $this->table = $table;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function fields(array $fields) {
+          public function fields(array $fields)
+          {
             $this->fields_data = $fields;
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function condition($field, $value = NULL, $operator = '=') {
+          public function condition($field, $value = null, $operator = '=')
+          {
             $this->conditions[] = [$field, $value, $operator];
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function execute() {
+          public function execute()
+          {
             if (!isset($this->storage[$this->table])) {
               return 0;
             }
 
             $updated = 0;
             foreach ($this->storage[$this->table] as &$row) {
-              $match = TRUE;
+              $match = true;
               foreach ($this->conditions as [$field, $value, $operator]) {
                 if ($operator === '=' && $row[$field] !== $value) {
-                  $match = FALSE;
+                  $match = false;
                   break;
                 }
                 if ($operator === 'IN' && !in_array($row[$field], $value)) {
-                  $match = FALSE;
+                  $match = false;
                   break;
                 }
               }
@@ -405,31 +440,35 @@ class DatabaseEmbeddingCacheTest extends TestCase {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function delete($table, array $options = []) {
+      public function delete($table, array $options = [])
+      {
         return new class ($this->storage, $table) {
           private $storage;
           private $table;
           private $conditions = [];
 
-          public function __construct(&$storage, $table) {
+          public function __construct(&$storage, $table)
+          {
             $this->storage = &$storage;
             $this->table = $table;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function condition($field, $value = NULL, $operator = '=') {
+          public function condition($field, $value = null, $operator = '=')
+          {
             $this->conditions[] = [$field, $value, $operator];
             return $this;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function execute() {
+          public function execute()
+          {
             if (!isset($this->storage[$this->table])) {
               return 0;
             }
@@ -438,21 +477,23 @@ class DatabaseEmbeddingCacheTest extends TestCase {
             if (empty($this->conditions)) {
               $deleted = count($this->storage[$this->table]);
               $this->storage[$this->table] = [];
-            }
-            else {
-              $this->storage[$this->table] = array_filter($this->storage[$this->table], function ($row) use (&$deleted) {
-                  $match = TRUE;
-                foreach ($this->conditions as [$field, $value, $operator]) {
-                  if ($operator === '=' && $row[$field] !== $value) {
-                    $match = FALSE;
-                    break;
-                  }
-                }
-                if ($match) {
+            } else {
+              $this->storage[$this->table] = array_filter(
+                  $this->storage[$this->table],
+                  function ($row) use (&$deleted) {
+                    $match = true;
+                    foreach ($this->conditions as [$field, $value, $operator]) {
+                      if ($operator === '=' && $row[$field] !== $value) {
+                        $match = false;
+                        break;
+                      }
+                    }
+                    if ($match) {
                                 $deleted++;
-                }
+                    }
                                         return !$match;
-              });
+                  }
+              );
             }
             return $deleted;
           }
@@ -461,30 +502,34 @@ class DatabaseEmbeddingCacheTest extends TestCase {
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function startTransaction($name = '') {
-        return TRUE;
+      public function startTransaction($name = '')
+      {
+        return true;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function schema() {
+      public function schema()
+      {
         return new class {
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function tableExists($table) {
-            return TRUE;
+          public function tableExists($table)
+          {
+            return true;
           }
 
           /**
-           *
+           * {@inheritdoc}
            */
-          public function createTable($table, $spec) {
-            return TRUE;
+          public function createTable($table, $spec)
+          {
+            return true;
           }
 
         };
@@ -498,7 +543,7 @@ class DatabaseEmbeddingCacheTest extends TestCase {
       'max_entries' => 1000,
     // Disable random cleanup for deterministic tests.
       'cleanup_probability' => 0.0,
-      'enable_compression' => FALSE,
+      'enable_compression' => false,
     ];
 
     $this->cache = new DatabaseEmbeddingCache($this->connection, $this->logger, $this->config);
@@ -507,7 +552,8 @@ class DatabaseEmbeddingCacheTest extends TestCase {
   /**
    * Tests cache miss scenario with real implementation.
    */
-  public function testCacheMiss() {
+  public function testCacheMiss()
+  {
     $hash = str_repeat('a', 64);
 
     // No data in storage - should return null.
@@ -518,7 +564,8 @@ class DatabaseEmbeddingCacheTest extends TestCase {
   /**
    * Tests cache hit scenario with real implementation.
    */
-  public function testCacheHit() {
+  public function testCacheHit()
+  {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
@@ -533,7 +580,8 @@ class DatabaseEmbeddingCacheTest extends TestCase {
    *
    * @covers ::get
    */
-  public function testExpiredCacheEntry() {
+  public function testExpiredCacheEntry()
+  {
     $hash = str_repeat('a', 64);
 
     $select = $this->createMock(SelectInterface::class);
@@ -543,7 +591,7 @@ class DatabaseEmbeddingCacheTest extends TestCase {
 
     $statement = $this->createMock(StatementInterface::class);
     // No results due to expiry condition.
-    $statement->method('fetchAssoc')->willReturn(FALSE);
+    $statement->method('fetchAssoc')->willReturn(false);
 
     $select->method('execute')->willReturn($statement);
     $this->connection->method('select')->willReturn($select);
@@ -557,7 +605,8 @@ class DatabaseEmbeddingCacheTest extends TestCase {
    *
    * @covers ::set
    */
-  public function testSet() {
+  public function testSet()
+  {
     $hash = str_repeat('a', 64);
     $embedding = [1.0, 2.0, 3.0];
 
@@ -578,7 +627,8 @@ class DatabaseEmbeddingCacheTest extends TestCase {
    *
    * @covers ::invalidate
    */
-  public function testInvalidate() {
+  public function testInvalidate()
+  {
     $hash = str_repeat('a', 64);
 
     $delete = $this->createMock(DeleteInterface::class);
@@ -596,7 +646,8 @@ class DatabaseEmbeddingCacheTest extends TestCase {
    *
    * @covers ::getMultiple
    */
-  public function testGetMultiple() {
+  public function testGetMultiple()
+  {
     $hashes = [str_repeat('a', 64), str_repeat('b', 64)];
     $embeddings = [
       [1.0, 2.0, 3.0],
@@ -635,7 +686,8 @@ class DatabaseEmbeddingCacheTest extends TestCase {
    *
    * @covers ::setMultiple
    */
-  public function testSetMultiple() {
+  public function testSetMultiple()
+  {
     $items = [
       str_repeat('a', 64) => [1.0, 2.0, 3.0],
       str_repeat('b', 64) => [4.0, 5.0, 6.0],
@@ -648,7 +700,7 @@ class DatabaseEmbeddingCacheTest extends TestCase {
     $merge->method('execute')->willReturn(1);
 
     $this->connection->method('merge')->willReturn($merge);
-    $this->connection->method('startTransaction')->willReturn(TRUE);
+    $this->connection->method('startTransaction')->willReturn(true);
 
     $result = $this->cache->setMultiple($items);
     $this->assertTrue($result);
@@ -659,7 +711,8 @@ class DatabaseEmbeddingCacheTest extends TestCase {
    *
    * @covers ::clear
    */
-  public function testClear() {
+  public function testClear()
+  {
     $delete = $this->createMock(DeleteInterface::class);
     $delete->method('execute')->willReturn(5);
 
@@ -674,7 +727,8 @@ class DatabaseEmbeddingCacheTest extends TestCase {
    *
    * @covers ::getStats
    */
-  public function testGetStats() {
+  public function testGetStats()
+  {
     // Mock main stats query.
     $select = $this->createMock(SelectInterface::class);
     $select->method('addExpression')->willReturnSelf();
@@ -715,14 +769,15 @@ class DatabaseEmbeddingCacheTest extends TestCase {
    *
    * @covers ::validateHash
    */
-  public function testHashValidation() {
+  public function testHashValidation()
+  {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Invalid hash format');
 
     // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateHash');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     // Test with invalid hash.
     $method->invokeArgs($this->cache, ['invalid_hash']);
@@ -733,14 +788,15 @@ class DatabaseEmbeddingCacheTest extends TestCase {
    *
    * @covers ::validateEmbedding
    */
-  public function testEmbeddingValidation() {
+  public function testEmbeddingValidation()
+  {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Embedding cannot be empty');
 
     // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateEmbedding');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     // Test with empty embedding.
     $method->invokeArgs($this->cache, [[]]);
@@ -749,14 +805,15 @@ class DatabaseEmbeddingCacheTest extends TestCase {
   /**
    * Tests embedding with invalid dimensions.
    */
-  public function testEmbeddingDimensionsValidation() {
+  public function testEmbeddingDimensionsValidation()
+  {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('Embedding too large');
 
     // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateEmbedding');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     // Test with too many dimensions.
     $large_embedding = array_fill(0, 20000, 1.0);
@@ -766,14 +823,15 @@ class DatabaseEmbeddingCacheTest extends TestCase {
   /**
    * Tests embedding with non-numeric values.
    */
-  public function testEmbeddingNonNumericValidation() {
+  public function testEmbeddingNonNumericValidation()
+  {
     $this->expectException(\InvalidArgumentException::class);
     $this->expectExceptionMessage('is not numeric');
 
     // Use reflection to test protected method.
     $reflection = new \ReflectionClass($this->cache);
     $method = $reflection->getMethod('validateEmbedding');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     // Test with non-numeric values.
     $invalid_embedding = [1.0, 'not_a_number', 3.0];
@@ -783,17 +841,18 @@ class DatabaseEmbeddingCacheTest extends TestCase {
   /**
    * Tests serialization and unserialization of embeddings.
    */
-  public function testEmbeddingSerialization() {
+  public function testEmbeddingSerialization()
+  {
     $embedding = [1.0, 2.5, -3.7, 0.0];
 
     // Use reflection to test protected methods.
     $reflection = new \ReflectionClass($this->cache);
 
     $serialize_method = $reflection->getMethod('serializeEmbedding');
-    $serialize_method->setAccessible(TRUE);
+    $serialize_method->setAccessible(true);
 
     $unserialize_method = $reflection->getMethod('unserializeEmbedding');
-    $unserialize_method->setAccessible(TRUE);
+    $unserialize_method->setAccessible(true);
 
     // Test serialization.
     $serialized = $serialize_method->invokeArgs($this->cache, [$embedding]);
@@ -803,5 +862,4 @@ class DatabaseEmbeddingCacheTest extends TestCase {
     $unserialized = $unserialize_method->invokeArgs($this->cache, [$serialized]);
     $this->assertEquals($embedding, $unserialized);
   }
-
 }

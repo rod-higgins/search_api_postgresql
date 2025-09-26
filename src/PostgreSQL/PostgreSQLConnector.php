@@ -12,9 +12,11 @@ use Drupal\search_api\SearchApiException;
 /**
  * PostgreSQL database connector.
  */
-class PostgreSQLConnector {
+class PostgreSQLConnector
+{
   /**
    * The database connection.
+   * {@inheritdoc}
    *
    * @var \PDO
    */
@@ -22,6 +24,7 @@ class PostgreSQLConnector {
 
   /**
    * Connection configuration.
+   * {@inheritdoc}
    *
    * @var array
    */
@@ -29,6 +32,7 @@ class PostgreSQLConnector {
 
   /**
    * Logger service.
+   * {@inheritdoc}
    *
    * @var \Psr\Log\LoggerInterface
    */
@@ -36,24 +40,28 @@ class PostgreSQLConnector {
 
   /**
    * Constructor.
+   * {@inheritdoc}
    *
    * @param array $config
    *   Database connection configuration.
    * @param \Psr\Log\LoggerInterface $logger
    *   Logger service.
    */
-  public function __construct(array $config, LoggerInterface $logger) {
+  public function __construct(array $config, LoggerInterface $logger)
+  {
     $this->config = $config + $this->getDefaultConfig();
     $this->logger = $logger;
   }
 
   /**
    * Get default configuration.
+   * {@inheritdoc}
    *
    * @return array
    *   Default configuration values.
    */
-  protected function getDefaultConfig() {
+  protected function getDefaultConfig()
+  {
     return [
       'host' => 'localhost',
       'port' => 5432,
@@ -69,14 +77,17 @@ class PostgreSQLConnector {
 
   /**
    * Connect to the database.
+   * {@inheritdoc}
    *
    * @return \PDO
    *   The PDO connection.
+   *   {@inheritdoc}
    *
    * @throws \Exception
    *   If connection fails.
    */
-  public function connect() {
+  public function connect()
+  {
     if ($this->connection) {
       return $this->connection;
     }
@@ -89,8 +100,7 @@ class PostgreSQLConnector {
       $this->connection->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
       return $this->connection;
-    }
-    catch (\PDOException $e) {
+    } catch (\PDOException $e) {
       $this->logger->error('Failed to connect to PostgreSQL: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -100,11 +110,13 @@ class PostgreSQLConnector {
 
   /**
    * Build the DSN string.
+   * {@inheritdoc}
    *
    * @return string
    *   The DSN string.
    */
-  protected function buildDsn() {
+  protected function buildDsn()
+  {
     $dsn_parts = [
       'host=' . $this->config['host'],
       'port=' . $this->config['port'],
@@ -132,16 +144,18 @@ class PostgreSQLConnector {
 
   /**
    * Build PDO options array.
+   * {@inheritdoc}
    *
    * @return array
    *   PDO options.
    */
-  protected function buildPdoOptions() {
+  protected function buildPdoOptions()
+  {
     $options = [
       \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
       \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
       \PDO::ATTR_TIMEOUT => 30,
-      \PDO::ATTR_EMULATE_PREPARES => FALSE,
+      \PDO::ATTR_EMULATE_PREPARES => false,
     ];
 
     return $options;
@@ -149,16 +163,19 @@ class PostgreSQLConnector {
 
   /**
    * Check if a table exists.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (unquoted).
    * @param string $schema_name
    *   The schema name (defaults to 'public').
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if the table exists.
+   *   true if the table exists.
    */
-  public function tableExists($table_name, $schema_name = 'public') {
+  public function tableExists($table_name, $schema_name = 'public')
+  {
     try {
       $sql = "SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -167,27 +184,29 @@ class PostgreSQLConnector {
       )";
       $stmt = $this->executePrepared($sql, [$schema_name, $table_name]);
       return (bool) $stmt->fetchColumn();
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->warning('Error checking if table exists @table in schema @schema: @message', [
         '@table' => $table_name,
         '@schema' => $schema_name,
         '@message' => $e->getMessage(),
       ]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Test the database connection.
+   * {@inheritdoc}
    *
    * @return array
    *   Array with connection test results.
+   *   {@inheritdoc}
    *
    * @throws \Exception
    *   If connection test fails.
    */
-  public function testConnection() {
+  public function testConnection()
+  {
     try {
       $connection = $this->connect();
 
@@ -197,7 +216,7 @@ class PostgreSQLConnector {
 
       if (empty($version)) {
         return [
-          'success' => FALSE,
+          'success' => false,
           'error' => 'Connection test failed: Could not retrieve database version.',
           'database' => $this->config['database'] ?? '',
           'version' => '',
@@ -205,20 +224,19 @@ class PostgreSQLConnector {
       }
 
       return [
-        'success' => TRUE,
+        'success' => true,
         'database' => $this->config['database'] ?? '',
         'version' => $version,
         'host' => $this->config['host'] ?? '',
         'port' => $this->config['port'] ?? 5432,
       ];
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Connection test failed: @message', [
         '@message' => $e->getMessage(),
       ]);
 
       return [
-        'success' => FALSE,
+        'success' => false,
         'error' => $e->getMessage(),
         'database' => $this->config['database'] ?? '',
         'version' => '',
@@ -229,21 +247,21 @@ class PostgreSQLConnector {
   /**
    * Execute a query with debugging.
    */
-  public function executeQuery($sql, array $params = []) {
-    $start_time = microtime(TRUE);
+  public function executeQuery($sql, array $params = [])
+  {
+    $start_time = microtime(true);
     try {
       $connection = $this->connect();
 
       if (empty($params)) {
         $result = $connection->query($sql);
-      }
-      else {
+      } else {
         $stmt = $connection->prepare($sql);
         $stmt->execute($params);
         $result = $stmt;
       }
 
-      $elapsed = microtime(TRUE) - $start_time;
+      $elapsed = microtime(true) - $start_time;
 
       // Log slow queries.
       if ($elapsed > 1.0) {
@@ -254,9 +272,8 @@ class PostgreSQLConnector {
       }
 
       return $result;
-    }
-    catch (\PDOException $e) {
-      $elapsed = microtime(TRUE) - $start_time;
+    } catch (\PDOException $e) {
+      $elapsed = microtime(true) - $start_time;
       $this->logger->error('Query failed after @seconds seconds: @sql - Error: @error', [
         '@seconds' => round($elapsed, 2),
         '@sql' => $sql,
@@ -268,26 +285,29 @@ class PostgreSQLConnector {
 
   /**
    * Execute a prepared statement.
+   * {@inheritdoc}
    *
    * @param string $sql
    *   The SQL query with placeholders.
    * @param array $params
    *   Query parameters.
+   *   {@inheritdoc}.
    *
    * @return \PDOStatement
    *   The executed statement.
+   *   {@inheritdoc}
    *
    * @throws \Exception
    *   If statement execution fails.
    */
-  public function executePrepared($sql, array $params = []) {
+  public function executePrepared($sql, array $params = [])
+  {
     try {
       $connection = $this->connect();
       $stmt = $connection->prepare($sql);
       $stmt->execute($params);
       return $stmt;
-    }
-    catch (\PDOException $e) {
+    } catch (\PDOException $e) {
       $this->logger->error('Prepared statement execution failed: @message. SQL: @sql', [
         '@message' => $e->getMessage(),
         '@sql' => $sql,
@@ -299,19 +319,21 @@ class PostgreSQLConnector {
 
   /**
    * Begin a transaction.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE on success.
+   *   true on success.
+   *   {@inheritdoc}
    *
    * @throws \Exception
    *   If transaction cannot be started.
    */
-  public function beginTransaction() {
+  public function beginTransaction()
+  {
     try {
       $connection = $this->connect();
       return $connection->beginTransaction();
-    }
-    catch (\PDOException $e) {
+    } catch (\PDOException $e) {
       $this->logger->error('Failed to begin transaction: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -322,21 +344,23 @@ class PostgreSQLConnector {
 
   /**
    * Commit a transaction.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE on success.
+   *   true on success.
+   *   {@inheritdoc}
    *
    * @throws \Exception
    *   If transaction cannot be committed.
    */
-  public function commit() {
+  public function commit()
+  {
     try {
       if ($this->connection) {
         return $this->connection->commit();
       }
-      return FALSE;
-    }
-    catch (\PDOException $e) {
+      return false;
+    } catch (\PDOException $e) {
       $this->logger->error('Failed to commit transaction: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -347,21 +371,23 @@ class PostgreSQLConnector {
 
   /**
    * Rollback a transaction.
+   * {@inheritdoc}
    *
    * @return bool
-   *   TRUE on success.
+   *   true on success.
+   *   {@inheritdoc}
    *
    * @throws \Exception
    *   If transaction cannot be rolled back.
    */
-  public function rollback() {
+  public function rollback()
+  {
     try {
       if ($this->connection) {
         return $this->connection->rollback();
       }
-      return FALSE;
-    }
-    catch (\PDOException $e) {
+      return false;
+    } catch (\PDOException $e) {
       $this->logger->error('Failed to rollback transaction: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -372,20 +398,22 @@ class PostgreSQLConnector {
 
   /**
    * Get table columns.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name (unquoted).
+   *   {@inheritdoc}.
    *
    * @return array
    *   Array of column names.
    */
-  public function getTableColumns($table_name) {
+  public function getTableColumns($table_name)
+  {
     try {
       $sql = "SELECT column_name FROM information_schema.columns WHERE table_name = ? ORDER BY ordinal_position";
       $stmt = $this->executePrepared($sql, [$table_name]);
       return $stmt->fetchAll(\PDO::FETCH_COLUMN);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->warning('Error getting table columns for @table: @message', [
         '@table' => $table_name,
         '@message' => $e->getMessage(),
@@ -396,79 +424,93 @@ class PostgreSQLConnector {
 
   /**
    * Escapes a string for use in LIKE patterns.
+   * {@inheritdoc}
    *
    * @param string $string
    *   The string to escape.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The escaped string.
    */
-  public function escapeLikePattern($string) {
+  public function escapeLikePattern($string)
+  {
     // Escape PostgreSQL LIKE pattern special characters.
     return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $string);
   }
 
   /**
    * Check if an extension exists.
+   * {@inheritdoc}
    *
    * @param string $extension_name
    *   The extension name.
+   *   {@inheritdoc}.
    *
    * @return bool
-   *   TRUE if extension is installed.
+   *   true if extension is installed.
    */
-  public function extensionExists($extension_name) {
+  public function extensionExists($extension_name)
+  {
     try {
       $sql = "SELECT 1 FROM pg_extension WHERE extname = ?";
       $stmt = $this->executePrepared($sql, [$extension_name]);
-      return $stmt->fetchColumn() !== FALSE;
-    }
-    catch (\Exception $e) {
+      return $stmt->fetchColumn() !== false;
+    } catch (\Exception $e) {
       $this->logger->warning('Error checking if extension exists: @message', [
         '@message' => $e->getMessage(),
       ]);
-      return FALSE;
+      return false;
     }
   }
 
   /**
    * Get the last insert ID.
+   * {@inheritdoc}
    *
    * @param string $sequence_name
    *   Optional sequence name.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The last insert ID.
    */
-  public function lastInsertId($sequence_name = NULL) {
+  public function lastInsertId($sequence_name = null)
+  {
     $connection = $this->connect();
     return $connection->lastInsertId($sequence_name);
   }
 
   /**
    * Quote a string for safe SQL usage.
+   * {@inheritdoc}
    *
    * @param string $string
    *   The string to quote.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The quoted string.
    */
-  public function quote($string) {
+  public function quote($string)
+  {
     $connection = $this->connect();
     return $connection->quote($string);
   }
 
   /**
    * Quotes a table name for safe SQL usage.
+   * {@inheritdoc}
    *
    * @param string $table_name
    *   The table name to quote.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The properly quoted table name.
    */
-  public function quoteTableName($table_name) {
+  public function quoteTableName($table_name)
+  {
     // Remove any existing quotes and validate the name.
     $table_name = trim($table_name, '"');
 
@@ -483,14 +525,17 @@ class PostgreSQLConnector {
 
   /**
    * Quotes a column name for safe SQL usage.
+   * {@inheritdoc}
    *
    * @param string $column_name
    *   The column name to quote.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The properly quoted column name.
    */
-  public function quoteColumnName($column_name) {
+  public function quoteColumnName($column_name)
+  {
     // Remove any existing quotes and validate the name.
     $column_name = trim($column_name, '"');
 
@@ -505,14 +550,17 @@ class PostgreSQLConnector {
 
   /**
    * Quotes an index name for safe SQL usage.
+   * {@inheritdoc}
    *
    * @param string $index_name
    *   The index name to quote.
+   *   {@inheritdoc}.
    *
    * @return string
    *   The properly quoted index name.
    */
-  public function quoteIndexName($index_name) {
+  public function quoteIndexName($index_name)
+  {
     // Remove any existing quotes and validate the name.
     $index_name = trim($index_name, '"');
 
@@ -527,21 +575,25 @@ class PostgreSQLConnector {
 
   /**
    * Validates an identifier without quoting it.
-   *
+   * {@inheritdoc}
    * Used for metadata queries where unquoted names are needed.
+   * {@inheritdoc}
    *
    * @param string $identifier
    *   The identifier to validate.
    * @param string $type
    *   The type of identifier (for error messages).
+   *   {@inheritdoc}.
    *
    * @return string
    *   The validated but unquoted identifier.
+   *   {@inheritdoc}
    *
    * @throws \InvalidArgumentException
    *   If the identifier is invalid.
    */
-  public function validateIdentifier($identifier, $type = 'identifier') {
+  public function validateIdentifier($identifier, $type = 'identifier')
+  {
     // Remove any existing quotes and validate the name.
     $identifier = trim($identifier, '"');
 
@@ -556,17 +608,21 @@ class PostgreSQLConnector {
 
   /**
    * Executes a search query - FOLLOWS search_api_db PATTERNS.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api\Query\QueryInterface $query
    *   The search query.
+   *   {@inheritdoc}.
    *
    * @return \Drupal\search_api\Query\ResultSetInterface
    *   The search results.
+   *   {@inheritdoc}
    *
    * @throws \Drupal\search_api\SearchApiException
    *   If the search fails.
    */
-  public function search(QueryInterface $query) {
+  public function search(QueryInterface $query)
+  {
     try {
       $index = $query->getIndex();
       $backend = $index->getServerInstance()->getBackend();
@@ -586,7 +642,7 @@ class PostgreSQLConnector {
 
       // Handle result count first.
       $skip_count = $query->getOption('skip result count');
-      $count = NULL;
+      $count = null;
 
       if (!$skip_count) {
         try {
@@ -595,16 +651,14 @@ class PostgreSQLConnector {
             $count_query_info = $query_builder->buildCountQuery($query);
             $count_stmt = $this->executePrepared($count_query_info['sql'], $count_query_info['params']);
             $count = (int) $count_stmt->fetchColumn();
-          }
-          else {
+          } else {
             // Execute main query to get count.
             $stmt = $this->executePrepared($sql, $params);
             $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
             $count = count($rows);
           }
           $results->setResultCount($count);
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $e) {
           $this->logger->warning('Count query failed: @message', [
             '@message' => $e->getMessage(),
           ]);
@@ -618,7 +672,7 @@ class PostgreSQLConnector {
         $stmt = $this->executePrepared($sql, $params);
         $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-        $indexed_fields = $index->getFields(TRUE);
+        $indexed_fields = $index->getFields(true);
         $retrieved_field_names = $query->getOption('search_api_retrieved_field_values', []);
 
         // Process each result row (like search_api_db)
@@ -638,14 +692,12 @@ class PostgreSQLConnector {
       }
 
       return $results;
-    }
-    catch (\PDOException $e) {
+    } catch (\PDOException $e) {
       if ($query instanceof RefinableCacheableDependencyInterface) {
         $query->mergeCacheMaxAge(0);
       }
       throw new SearchApiException('A database exception occurred while searching.', $e->getCode(), $e);
-    }
-    catch (\Exception $e) {
+    } catch (\Exception $e) {
       $this->logger->error('Search execution failed: @message', [
         '@message' => $e->getMessage(),
       ]);
@@ -655,6 +707,7 @@ class PostgreSQLConnector {
 
   /**
    * Extract retrieved field values where available (like search_api_db).
+   * {@inheritdoc}
    *
    * @param object $row
    *   The database row.
@@ -665,7 +718,12 @@ class PostgreSQLConnector {
    * @param \Drupal\search_api\Item\ItemInterface $item
    *   The item to populate.
    */
-  protected function extractRetrievedFieldValuesWhereAvailable($row, array $indexed_fields, array $retrieved_field_names, $item) {
+  protected function extractRetrievedFieldValuesWhereAvailable(
+      $row,
+      array $indexed_fields,
+      array $retrieved_field_names,
+      $item
+  ) {
     // Convert row array to object if needed.
     if (is_array($row)) {
       $row = (object) $row;
@@ -688,8 +746,7 @@ class PostgreSQLConnector {
         if ($item_field) {
           $item_field->setValues([$field_value]);
         }
-      }
-      catch (\Exception $e) {
+      } catch (\Exception $e) {
         $this->logger->warning('Failed to set field @field on item @item: @error', [
           '@field' => $field_id,
           '@item' => $item->getId(),
@@ -701,11 +758,13 @@ class PostgreSQLConnector {
 
   /**
    * Handle serialization - exclude PDO connection and logger.
+   * {@inheritdoc}
    *
    * @return array
    *   Properties to serialize.
    */
-  public function __sleep(): array {
+  public function __sleep(): array
+  {
     // Exclude non-serializable resources from serialization.
     $properties = get_object_vars($this);
     unset($properties['connection']);
@@ -716,9 +775,10 @@ class PostgreSQLConnector {
   /**
    * Handle unserialization - recreate logger and reset connection.
    */
-  public function __wakeup(): void {
+  public function __wakeup(): void
+  {
     // Reset the connection so it will be recreated when needed.
-    $this->connection = NULL;
+    $this->connection = null;
 
     // Recreate the logger service using the service container.
     $this->logger = \Drupal::logger('search_api_postgresql');
@@ -726,67 +786,75 @@ class PostgreSQLConnector {
 
   /**
    * Get the fields helper service.
+   * {@inheritdoc}
    *
    * @return \Drupal\search_api\Utility\FieldsHelperInterface
    *   The fields helper.
    */
-  protected function getFieldsHelper() {
+  protected function getFieldsHelper()
+  {
     return \Drupal::service('search_api.fields_helper');
   }
 
   /**
    * Process field value based on field type.
+   * {@inheritdoc}
    *
    * @param mixed $value
    *   The raw field value from database.
    * @param string $field_type
    *   The Search API field type.
+   *   {@inheritdoc}.
    *
    * @return mixed
    *   The processed field value.
    */
-  protected function processFieldValue($value, $field_type) {
-    if ($value === NULL) {
-      return NULL;
+  protected function processFieldValue($value, $field_type)
+  {
+    if ($value === null) {
+      return null;
     }
 
     switch ($field_type) {
       case 'boolean':
-        return (bool) $value;
+          return (bool) $value;
 
       case 'integer':
-        return (int) $value;
+          return (int) $value;
 
       case 'decimal':
-        return (float) $value;
+          return (float) $value;
 
       case 'date':
         // Convert timestamp to proper format if needed.
         if (is_numeric($value)) {
           return (int) $value;
         }
-        return strtotime($value);
+          return strtotime($value);
 
       case 'text':
       case 'string':
       case 'postgresql_fulltext':
       default:
-        return (string) $value;
+          return (string) $value;
     }
   }
 
   /**
    * Creates the appropriate query builder based on backend configuration.
+   * {@inheritdoc}
    *
    * @param \Drupal\search_api_postgresql\PostgreSQL\FieldMapper $field_mapper
    *   The field mapper.
    * @param array $backend_config
    *   The backend configuration.
+   *   {@inheritdoc}.
    *
    * @return \Drupal\search_api_postgresql\PostgreSQL\QueryBuilder
    *   The query builder instance.
    */
-  protected function createQueryBuilder(FieldMapper $field_mapper, array $backend_config) {
+  protected function createQueryBuilder(FieldMapper $field_mapper, array $backend_config)
+  {
     // Check if vector search is enabled.
     $ai_config = $backend_config['ai_embeddings'] ?? [];
     $vector_enabled = !empty($ai_config['enabled']);
@@ -802,19 +870,18 @@ class PostgreSQLConnector {
             $embedding_service = \Drupal::getContainer()->get('search_api_postgresql.azure_embedding');
             if (class_exists('Drupal\search_api_postgresql\PostgreSQL\AzureVectorQueryBuilder')) {
               return new AzureVectorQueryBuilder(
-                      $this,
-                      $field_mapper,
-                      $backend_config,
-                      $embedding_service
-                  );
+                  $this,
+                  $field_mapper,
+                  $backend_config,
+                  $embedding_service
+              );
             }
-          }
-          catch (\Exception $e) {
+          } catch (\Exception $e) {
             $this->logger->warning('Azure embedding service not available, falling back to standard search: @message', [
               '@message' => $e->getMessage(),
             ]);
           }
-          break;
+            break;
 
         default:
           // Try to get general embedding service.
@@ -829,32 +896,30 @@ class PostgreSQLConnector {
                   $backend_config,
                   $embedding_service
               );
-            }
-            elseif (class_exists('Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder')) {
+            } elseif (class_exists('Drupal\search_api_postgresql\PostgreSQL\VectorQueryBuilder')) {
               return new VectorQueryBuilder(
                   $this,
                   $field_mapper,
                   $backend_config,
                   $embedding_service
-                          );
+              );
             }
-          }
-          catch (\Exception $e) {
+          } catch (\Exception $e) {
             $this->logger->warning('Embedding service not available, falling back to standard search: @message', [
               '@message' => $e->getMessage(),
             ]);
           }
-          break;
+            break;
       }
     }
 
     // Fall back to standard query builder.
     if (class_exists('Drupal\search_api_postgresql\PostgreSQL\QueryBuilder')) {
       return new QueryBuilder(
-            $this,
-            $field_mapper,
-            $backend_config
-        );
+          $this,
+          $field_mapper,
+          $backend_config
+      );
     }
 
     // Throw an exception if no query builder is available.
@@ -863,11 +928,13 @@ class PostgreSQLConnector {
 
   /**
    * Get connection information.
+   * {@inheritdoc}
    *
    * @return array
    *   Connection information.
    */
-  public function getConnectionInfo() {
+  public function getConnectionInfo()
+  {
     return [
       'host' => $this->config['host'],
       'port' => $this->config['port'],
@@ -880,15 +947,16 @@ class PostgreSQLConnector {
   /**
    * Close the database connection.
    */
-  public function disconnect() {
-    $this->connection = NULL;
+  public function disconnect()
+  {
+    $this->connection = null;
   }
 
   /**
    * Destructor.
    */
-  public function __destruct() {
+  public function __destruct()
+  {
     $this->disconnect();
   }
-
 }

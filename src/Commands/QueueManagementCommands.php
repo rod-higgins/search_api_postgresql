@@ -11,17 +11,20 @@ use Symfony\Component\Console\Helper\Table;
 /**
  * Drush commands for managing embedding queues.
  */
-class QueueManagementCommands extends DrushCommands {
+class QueueManagementCommands extends DrushCommands
+{
 
   /**
    * Shows embedding queue status.
+   * {@inheritdoc}
    *
    * @command search-api-postgresql:queue-status
    * @aliases sapg-queue-status
-   * @usage search-api-postgresql:queue-status
+   * @usage   search-api-postgresql:queue-status
    *   Show embedding queue status and statistics.
    */
-  public function queueStatus() {
+  public function queueStatus()
+  {
     $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
     $stats = $queue_manager->getQueueStats();
 
@@ -60,22 +63,25 @@ class QueueManagementCommands extends DrushCommands {
 
   /**
    * Processes embedding queue items manually.
+   * {@inheritdoc}
    *
    * @param array $options
    *   Command options.
+   *   {@inheritdoc}.
    *
    * @command search-api-postgresql:queue-process
    * @aliases sapg-queue-process
-   * @option max-items
+   * @option  max-items
    *   Maximum number of items to process (default: 50)
-   * @option time-limit
+   * @option  time-limit
    *   Time limit in seconds (default: 60)
-   * @option continuous
+   * @option  continuous
    *   Keep processing until queue is empty
-   * @usage search-api-postgresql:queue-process --max-items=100
+   * @usage   search-api-postgresql:queue-process --max-items=100
    *   Process up to 100 items from the embedding queue.
    */
-  public function processQueue(array $options = ['max-items' => 50, 'time-limit' => 60, 'continuous' => FALSE]) {
+  public function processQueue(array $options = ['max-items' => 50, 'time-limit' => 60, 'continuous' => false])
+  {
     $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
 
     $max_items = (int) $options['max-items'];
@@ -88,7 +94,7 @@ class QueueManagementCommands extends DrushCommands {
       $total_processed = 0;
       $rounds = 0;
 
-      while (TRUE) {
+      while (true) {
         $rounds++;
         $this->output()->writeln("\n--- Processing Round {$rounds} ---");
 
@@ -109,8 +115,7 @@ class QueueManagementCommands extends DrushCommands {
       }
 
       $this->output()->writeln("\n<info>Total items processed: {$total_processed} in {$rounds} rounds</info>");
-    }
-    else {
+    } else {
       $this->output()->writeln('<info>Processing embedding queue...</info>');
 
       $results = $queue_manager->processQueue($max_items, $time_limit);
@@ -120,13 +125,15 @@ class QueueManagementCommands extends DrushCommands {
 
   /**
    * Clears the embedding queue.
+   * {@inheritdoc}
    *
    * @command search-api-postgresql:queue-clear
    * @aliases sapg-queue-clear
-   * @usage search-api-postgresql:queue-clear
+   * @usage   search-api-postgresql:queue-clear
    *   Clear all items from the embedding queue.
    */
-  public function clearQueue() {
+  public function clearQueue()
+  {
     $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
 
     // Get current count for confirmation.
@@ -146,26 +153,28 @@ class QueueManagementCommands extends DrushCommands {
 
     if ($success) {
       $this->output()->writeln('<info>Queue cleared successfully</info>');
-    }
-    else {
+    } else {
       $this->output()->writeln('<error>Failed to clear queue</error>');
     }
   }
 
   /**
    * Enables or disables queue processing for a server.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
    * @param string $action
    *   Action: enable or disable.
+   *   {@inheritdoc}.
    *
    * @command search-api-postgresql:queue-server
    * @aliases sapg-queue-server
-   * @usage search-api-postgresql:queue-server my_server enable
+   * @usage   search-api-postgresql:queue-server my_server enable
    *   Enable queue processing for the specified server.
    */
-  public function manageServerQueue($server_id, $action) {
+  public function manageServerQueue($server_id, $action)
+  {
     $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
 
     $server = Server::load($server_id);
@@ -180,44 +189,47 @@ class QueueManagementCommands extends DrushCommands {
 
     switch (strtolower($action)) {
       case 'enable':
-        $queue_manager->setQueueEnabledForServer($server_id, TRUE);
+        $queue_manager->setQueueEnabledForServer($server_id, true);
         $this->output()->writeln("<info>Queue processing enabled for server '{$server_id}'</info>");
-        break;
+          break;
 
       case 'disable':
-        $queue_manager->setQueueEnabledForServer($server_id, FALSE);
+        $queue_manager->setQueueEnabledForServer($server_id, false);
         $this->output()->writeln("<info>Queue processing disabled for server '{$server_id}'</info>");
-        break;
+          break;
 
       case 'status':
         $enabled = $queue_manager->isQueueEnabledForServer($server_id);
         $status = $enabled ? 'enabled' : 'disabled';
         $this->output()->writeln("Queue processing for server '{$server_id}': {$status}");
-        break;
+          break;
 
       default:
-        throw new \Exception("Invalid action '{$action}'. Use: enable, disable, or status");
+          throw new \Exception("Invalid action '{$action}'. Use: enable, disable, or status");
     }
   }
 
   /**
    * Queues an index for embedding regeneration.
+   * {@inheritdoc}
    *
    * @param string $index_id
    *   The index ID.
    * @param array $options
    *   Command options.
+   *   {@inheritdoc}.
    *
    * @command search-api-postgresql:queue-regenerate
    * @aliases sapg-queue-regen
-   * @option batch-size
+   * @option  batch-size
    *   Batch size for processing (default: 50)
-   * @option priority
+   * @option  priority
    *   Priority level: high, normal, low (default: normal)
-   * @usage search-api-postgresql:queue-regenerate my_index --batch-size=100
+   * @usage   search-api-postgresql:queue-regenerate my_index --batch-size=100
    *   Queue the index for embedding regeneration with batch size 100.
    */
-  public function queueRegenerateEmbeddings($index_id, array $options = ['batch-size' => 50, 'priority' => 'normal']) {
+  public function queueRegenerateEmbeddings($index_id, array $options = ['batch-size' => 50, 'priority' => 'normal'])
+  {
     $index = Index::load($index_id);
 
     if (!$index) {
@@ -244,33 +256,34 @@ class QueueManagementCommands extends DrushCommands {
     $priority = $priority_map[$priority_name] ?? 100;
 
     $success = $queue_manager->queueIndexEmbeddingRegeneration(
-          $server->id(),
-          $index_id,
-          $batch_size,
-          // Start from offset 0.
+        $server->id(),
+        $index_id,
+        $batch_size,
+        // Start from offset 0.
           0,
-          $priority
-      );
+        $priority
+    );
 
     if ($success) {
       $this->output()->writeln("<info>Queued embedding regeneration for index '{$index_id}'</info>");
       $this->output()->writeln("Batch size: {$batch_size}");
       $this->output()->writeln("Priority: {$priority_name} ({$priority})");
-    }
-    else {
+    } else {
       $this->output()->writeln("<error>Failed to queue embedding regeneration</error>");
     }
   }
 
   /**
    * Shows queue configuration for all servers.
+   * {@inheritdoc}
    *
    * @command search-api-postgresql:queue-config
    * @aliases sapg-queue-config
-   * @usage search-api-postgresql:queue-config
+   * @usage   search-api-postgresql:queue-config
    *   Show queue configuration for all PostgreSQL servers.
    */
-  public function showQueueConfig() {
+  public function showQueueConfig()
+  {
     $queue_manager = \Drupal::service('search_api_postgresql.embedding_queue_manager');
 
     // Get all PostgreSQL servers.
@@ -295,12 +308,12 @@ class QueueManagementCommands extends DrushCommands {
 
       $queue_enabled = $queue_manager->isQueueEnabledForServer($server->id()) ? 'Yes' : 'No';
 
-      $ai_enabled = FALSE;
-      if ($config['ai_embeddings']['enabled'] ?? FALSE) {
-        $ai_enabled = TRUE;
+      $ai_enabled = false;
+      if ($config['ai_embeddings']['enabled'] ?? false) {
+        $ai_enabled = true;
       }
-      if ($config['azure_embedding']['enabled'] ?? FALSE) {
-        $ai_enabled = TRUE;
+      if ($config['azure_embedding']['enabled'] ?? false) {
+        $ai_enabled = true;
       }
 
       $table->addRow([
@@ -326,16 +339,19 @@ class QueueManagementCommands extends DrushCommands {
 
   /**
    * Tests queue processing with a sample item.
+   * {@inheritdoc}
    *
    * @param string $server_id
    *   The server ID.
+   *   {@inheritdoc}.
    *
    * @command search-api-postgresql:queue-test
    * @aliases sapg-queue-test
-   * @usage search-api-postgresql:queue-test my_server
+   * @usage   search-api-postgresql:queue-test my_server
    *   Test queue processing with a sample embedding generation.
    */
-  public function testQueue($server_id) {
+  public function testQueue($server_id)
+  {
     $server = Server::load($server_id);
 
     if (!$server) {
@@ -358,13 +374,13 @@ class QueueManagementCommands extends DrushCommands {
     // Queue a test item.
     $test_text = "This is a test text for embedding generation via queue processing.";
     $success = $queue_manager->queueEmbeddingGeneration(
-          $server_id,
-          'test_index',
-          'test_item_' . time(),
-          $test_text,
-          // High priority for testing.
+        $server_id,
+        'test_index',
+        'test_item_' . time(),
+        $test_text,
+        // High priority for testing.
           50
-      );
+    );
 
     if (!$success) {
       throw new \Exception('Failed to queue test item.');
@@ -385,19 +401,20 @@ class QueueManagementCommands extends DrushCommands {
 
     if ($results['processed'] > 0) {
       $this->output()->writeln('<info>Queue test completed successfully!</info>');
-    }
-    else {
+    } else {
       $this->output()->writeln('<comment>WARNING: No items were processed. Check logs for details.</comment>');
     }
   }
 
   /**
    * Displays processing results in a formatted way.
+   * {@inheritdoc}
    *
    * @param array $results
    *   Processing results.
    */
-  protected function displayProcessingResults(array $results) {
+  protected function displayProcessingResults(array $results)
+  {
     $this->output()->writeln("\nProcessing Results:");
     $this->output()->writeln("  Processed: {$results['processed']}");
     $this->output()->writeln("  Failed: {$results['failed']}");
@@ -416,5 +433,4 @@ class QueueManagementCommands extends DrushCommands {
       }
     }
   }
-
 }

@@ -83,7 +83,7 @@ Cypress.Commands.add('createSearchIndex', (indexData) => {
   cy.get('#edit-server').select(config.server)
 
   // Select data source
-  cy.get(`input[value="${config.datasource}"]`).check()
+  cy.get(`input[value = "${config.datasource}"]`).check()
 
   cy.get('#edit-submit').click()
   cy.contains('The index was successfully saved.')
@@ -96,15 +96,15 @@ Cypress.Commands.add('addIndexFields', (fields) => {
     cy.wait(500)
 
     // Select field
-    cy.get(`input[value="${field.property}"]`).check()
+    cy.get(`input[value = "${field.property}"]`).check()
     cy.get('#edit-submit-add-field').click()
 
     // Configure field
-    cy.get(`#edit-fields-${field.property}-label`).clear().type(field.label)
-    cy.get(`#edit-fields-${field.property}-type`).select(field.type)
+    cy.get(`#edit - fields - ${field.property} - label`).clear().type(field.label)
+    cy.get(`#edit - fields - ${field.property} - type`).select(field.type)
 
     if (field.boost) {
-      cy.get(`#edit-fields-${field.property}-boost`).clear().type(field.boost.toString())
+      cy.get(`#edit - fields - ${field.property} - boost`).clear().type(field.boost.toString())
     }
   })
 
@@ -169,7 +169,7 @@ Cypress.on('uncaught:exception', (err, runnable) => {
   // Ignore common Drupal JS errors that don't affect testing
   if (err.message.includes('Script error') ||
       err.message.includes('Non-Error promise rejection captured')) {
-    return false
+    return FALSE
   }
-  return true
+  return TRUE
 })

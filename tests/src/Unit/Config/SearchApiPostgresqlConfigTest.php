@@ -10,7 +10,8 @@ use PHPUnit\Framework\TestCase;
  *
  * @group search_api_postgresql
  */
-class SearchApiPostgresqlConfigTest extends TestCase {
+class SearchApiPostgresqlConfigTest extends TestCase
+{
   /**
    * The configuration service under test.
    */
@@ -29,7 +30,8 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     // Load actual class.
@@ -43,26 +45,28 @@ class SearchApiPostgresqlConfigTest extends TestCase {
         'api_key' => 'test_api_key',
         'deployment_name' => 'text-embedding-ada-002',
         'api_version' => '2024-02-01',
-        'cache_enabled' => TRUE,
+        'cache_enabled' => true,
         'cache_ttl' => 3600,
         'batch_size' => 50,
         'max_retries' => 3,
         'timeout' => 30,
-        'queue_enabled' => TRUE,
-        'debug_mode' => FALSE,
+        'queue_enabled' => true,
+        'debug_mode' => false,
       ];
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function get($key) {
-        return $this->data[$key] ?? NULL;
+      public function get($key)
+      {
+        return $this->data[$key] ?? null;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function set($key, $value) {
+      public function set($key, $value)
+      {
         $this->data[$key] = $value;
       }
 
@@ -72,21 +76,24 @@ class SearchApiPostgresqlConfigTest extends TestCase {
     $this->configFactory = new class ($this->config) {
       private $config;
 
-      public function __construct($config) {
+      public function __construct($config)
+      {
         $this->config = $config;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function get($name) {
+      public function get($name)
+      {
         return $this->config;
       }
 
       /**
-       *
+       * {@inheritdoc}
        */
-      public function getEditable($name) {
+      public function getEditable($name)
+      {
         return $this->config;
       }
 
@@ -94,24 +101,26 @@ class SearchApiPostgresqlConfigTest extends TestCase {
 
     // Create the service instance.
     $this->configService = new SearchApiPostgresqlConfig(
-          $this->configFactory
-      );
+        $this->configFactory
+    );
   }
 
   /**
    * Tests service instantiation.
    */
-  public function testServiceInstantiation() {
+  public function testServiceInstantiation()
+  {
     $this->assertInstanceOf(
-          SearchApiPostgresqlConfig::class,
-          $this->configService
-      );
+        SearchApiPostgresqlConfig::class,
+        $this->configService
+    );
   }
 
   /**
    * Tests getting configuration values.
    */
-  public function testGetConfigurationValues() {
+  public function testGetConfigurationValues()
+  {
     // Test existing values.
     $this->assertEquals('azure_openai', $this->configService->get('embedding_service'));
     $this->assertEquals('https://test.openai.azure.com/', $this->configService->get('azure_endpoint'));
@@ -134,11 +143,12 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests getting non-existent configuration values with defaults.
    */
-  public function testGetNonExistentValuesWithDefaults() {
+  public function testGetNonExistentValuesWithDefaults()
+  {
     // Test non-existent key with default.
     $this->assertEquals('default_value', $this->configService->get('non_existent_key', 'default_value'));
     $this->assertEquals(42, $this->configService->get('another_missing_key', 42));
-    $this->assertTrue($this->configService->get('missing_boolean', TRUE));
+    $this->assertTrue($this->configService->get('missing_boolean', true));
     $this->assertEquals([], $this->configService->get('missing_array', []));
 
     // Test non-existent key without default (should return null)
@@ -148,7 +158,8 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests checking if configuration keys exist.
    */
-  public function testHasConfigurationKeys() {
+  public function testHasConfigurationKeys()
+  {
     // Test existing keys.
     $this->assertTrue($this->configService->has('embedding_service'));
     $this->assertTrue($this->configService->has('azure_endpoint'));
@@ -165,7 +176,8 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests getting the raw configuration object.
    */
-  public function testGetConfigObject() {
+  public function testGetConfigObject()
+  {
     $configObject = $this->configService->getConfig();
     $this->assertNotNull($configObject);
 
@@ -178,7 +190,8 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests configuration value types.
    */
-  public function testConfigurationValueTypes() {
+  public function testConfigurationValueTypes()
+  {
     // String values.
     $stringConfigs = [
       'embedding_service',
@@ -224,7 +237,8 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests Azure OpenAI configuration validation.
    */
-  public function testAzureOpenAIConfiguration() {
+  public function testAzureOpenAIConfiguration()
+  {
     $endpoint = $this->configService->get('azure_endpoint');
     $apiKey = $this->configService->get('api_key');
     $deployment = $this->configService->get('deployment_name');
@@ -251,7 +265,8 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests cache configuration validation.
    */
-  public function testCacheConfiguration() {
+  public function testCacheConfiguration()
+  {
     $cacheEnabled = $this->configService->get('cache_enabled');
     $cacheTtl = $this->configService->get('cache_ttl');
 
@@ -268,7 +283,8 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests queue configuration validation.
    */
-  public function testQueueConfiguration() {
+  public function testQueueConfiguration()
+  {
     $queueEnabled = $this->configService->get('queue_enabled');
     $batchSize = $this->configService->get('batch_size');
 
@@ -285,7 +301,8 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests retry and timeout configuration.
    */
-  public function testRetryAndTimeoutConfiguration() {
+  public function testRetryAndTimeoutConfiguration()
+  {
     $maxRetries = $this->configService->get('max_retries');
     $timeout = $this->configService->get('timeout');
 
@@ -305,36 +322,38 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests configuration defaults fallback.
    */
-  public function testConfigurationDefaults() {
+  public function testConfigurationDefaults()
+  {
     $defaultValues = [
       'cache_ttl' => 3600,
       'batch_size' => 50,
       'max_retries' => 3,
       'timeout' => 30,
-      'cache_enabled' => TRUE,
-      'queue_enabled' => TRUE,
-      'debug_mode' => FALSE,
+      'cache_enabled' => true,
+      'queue_enabled' => true,
+      'debug_mode' => false,
     ];
 
     foreach ($defaultValues as $key => $expectedDefault) {
       $value = $this->configService->get($key, $expectedDefault);
       $this->assertEquals(
-            $expectedDefault,
-            $value,
-            "Default value for '{$key}' should be {$expectedDefault}"
-        );
+          $expectedDefault,
+          $value,
+          "Default value for '{$key}' should be {$expectedDefault}"
+      );
     }
   }
 
   /**
    * Tests configuration with empty/null values.
    */
-  public function testEmptyAndNullValues() {
+  public function testEmptyAndNullValues()
+  {
     // Set some values to null in the mock config.
-    $this->config->set('nullable_setting', NULL);
+    $this->config->set('nullable_setting', null);
     $this->config->set('empty_string', '');
     $this->config->set('zero_value', 0);
-    $this->config->set('false_value', FALSE);
+    $this->config->set('false_value', false);
 
     // Test null value with default.
     $this->assertEquals('fallback', $this->configService->get('nullable_setting', 'fallback'));
@@ -346,7 +365,7 @@ class SearchApiPostgresqlConfigTest extends TestCase {
     $this->assertEquals(0, $this->configService->get('zero_value', 99));
 
     // Test false value (should return false, not default)
-    $this->assertFalse($this->configService->get('false_value', TRUE));
+    $this->assertFalse($this->configService->get('false_value', true));
 
     // Test has() method with these values.
     $this->assertFalse($this->configService->has('nullable_setting'));
@@ -358,9 +377,10 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests configuration service error handling.
    */
-  public function testErrorHandling() {
+  public function testErrorHandling()
+  {
     // Test with various invalid key types.
-    $invalidKeys = [NULL, FALSE, 0, [], new \stdClass()];
+    $invalidKeys = [null, false, 0, [], new \stdClass()];
 
     foreach ($invalidKeys as $invalidKey) {
       // These should not throw exceptions but may return null.
@@ -375,7 +395,8 @@ class SearchApiPostgresqlConfigTest extends TestCase {
   /**
    * Tests configuration validation helpers.
    */
-  public function testConfigurationValidation() {
+  public function testConfigurationValidation()
+  {
     // Test that all required Azure OpenAI settings are present.
     $requiredAzureSettings = [
       'azure_endpoint',
@@ -386,16 +407,15 @@ class SearchApiPostgresqlConfigTest extends TestCase {
 
     foreach ($requiredAzureSettings as $setting) {
       $this->assertTrue(
-            $this->configService->has($setting),
-            "Required Azure setting '{$setting}' should be configured"
-        );
+          $this->configService->has($setting),
+          "Required Azure setting '{$setting}' should be configured"
+      );
 
       $value = $this->configService->get($setting);
       $this->assertNotEmpty(
-            $value,
-            "Required Azure setting '{$setting}' should not be empty"
-        );
+          $value,
+          "Required Azure setting '{$setting}' should not be empty"
+      );
     }
   }
-
 }

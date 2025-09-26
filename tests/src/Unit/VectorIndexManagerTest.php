@@ -19,10 +19,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Tests the Vector Index Manager.
  *
- * @group search_api_postgresql
+ * @group              search_api_postgresql
  * @coversDefaultClass \Drupal\search_api_postgresql\Service\VectorIndexManager
  */
-class VectorIndexManagerTest extends UnitTestCase {
+class VectorIndexManagerTest extends UnitTestCase
+{
   /**
    * The database connection mock.
    *
@@ -68,7 +69,8 @@ class VectorIndexManagerTest extends UnitTestCase {
   /**
    * {@inheritdoc}
    */
-  protected function setUp(): void {
+  protected function setUp(): void
+  {
     parent::setUp();
 
     $this->connection = $this->createMock(Connection::class);
@@ -96,10 +98,10 @@ class VectorIndexManagerTest extends UnitTestCase {
     ]);
 
     $this->vectorIndexManager = new VectorIndexManager(
-          $this->connection,
-          $this->logger,
-          $this->config
-      );
+        $this->connection,
+        $this->logger,
+        $this->config
+    );
   }
 
   /**
@@ -107,14 +109,15 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::createVectorIndex
    */
-  public function testVectorIndexCreation() {
+  public function testVectorIndexCreation()
+  {
     $table_name = 'search_api_test_index_vectors';
 
     // Mock table existence check.
     $this->schema->expects($this->once())
       ->method('tableExists')
       ->with($table_name)
-      ->willReturn(FALSE);
+      ->willReturn(false);
 
     // Mock successful table creation.
     $this->schema->expects($this->once())
@@ -124,7 +127,7 @@ class VectorIndexManagerTest extends UnitTestCase {
     // Mock index creation queries.
     $this->connection->expects($this->atLeastOnce())
       ->method('query')
-      ->willReturn(TRUE);
+      ->willReturn(true);
 
     $result = $this->vectorIndexManager->createVectorIndex($this->index);
     $this->assertTrue($result);
@@ -135,14 +138,15 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::createVectorIndex
    */
-  public function testVectorIndexCreationTableExists() {
+  public function testVectorIndexCreationTableExists()
+  {
     $table_name = 'search_api_test_index_vectors';
 
     // Mock table existence check.
     $this->schema->expects($this->once())
       ->method('tableExists')
       ->with($table_name)
-      ->willReturn(TRUE);
+      ->willReturn(true);
 
     // Should not attempt to create table.
     $this->schema->expects($this->never())
@@ -157,7 +161,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::insertVectors
    */
-  public function testVectorInsertion() {
+  public function testVectorInsertion()
+  {
     $vectors = [
       'item_1' => [
         'item_id' => 'item_1',
@@ -190,7 +195,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::insertVectors
    */
-  public function testLargeBatchVectorInsertion() {
+  public function testLargeBatchVectorInsertion()
+  {
     // Create vectors exceeding batch size.
     $vectors = [];
     for ($i = 0; $i < 2500; $i++) {
@@ -221,7 +227,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::searchSimilarVectors
    */
-  public function testVectorSimilaritySearch() {
+  public function testVectorSimilaritySearch()
+  {
     $query_vector = array_fill(0, 1536, 0.5);
     $limit = 10;
     $threshold = 0.8;
@@ -254,11 +261,11 @@ class VectorIndexManagerTest extends UnitTestCase {
     $this->connection->method('select')->willReturn($select);
 
     $results = $this->vectorIndexManager->searchSimilarVectors(
-          $this->index,
-          $query_vector,
-          $limit,
-          $threshold
-      );
+        $this->index,
+        $query_vector,
+        $limit,
+        $threshold
+    );
 
     $this->assertCount(2, $results);
     $this->assertEquals('item_1', $results[0]['item_id']);
@@ -270,7 +277,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::updateVector
    */
-  public function testVectorUpdating() {
+  public function testVectorUpdating()
+  {
     $item_id = 'item_1';
     $new_embedding = array_fill(0, 1536, 0.8);
     $new_content = 'Updated document content';
@@ -286,11 +294,11 @@ class VectorIndexManagerTest extends UnitTestCase {
       ->willReturn($update);
 
     $result = $this->vectorIndexManager->updateVector(
-          $this->index,
-          $item_id,
-          $new_embedding,
-          $new_content
-      );
+        $this->index,
+        $item_id,
+        $new_embedding,
+        $new_content
+    );
 
     $this->assertTrue($result);
   }
@@ -300,7 +308,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::deleteVector
    */
-  public function testVectorDeletion() {
+  public function testVectorDeletion()
+  {
     $item_id = 'item_1';
 
     // Mock delete query.
@@ -321,7 +330,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::deleteVectors
    */
-  public function testBulkVectorDeletion() {
+  public function testBulkVectorDeletion()
+  {
     $item_ids = ['item_1', 'item_2', 'item_3'];
 
     // Mock delete query.
@@ -342,13 +352,14 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::optimizeIndex
    */
-  public function testIndexOptimization() {
+  public function testIndexOptimization()
+  {
     $table_name = 'search_api_test_index_vectors';
 
     // Mock optimization queries.
     $this->connection->expects($this->atLeastOnce())
       ->method('query')
-      ->willReturn(TRUE);
+      ->willReturn(true);
 
     $result = $this->vectorIndexManager->optimizeIndex($this->index);
     $this->assertTrue($result);
@@ -359,7 +370,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::getIndexStatistics
    */
-  public function testIndexStatisticsCollection() {
+  public function testIndexStatisticsCollection()
+  {
     $mock_stats = [
       'total_vectors' => 10000,
       'avg_similarity' => 0.75,
@@ -389,7 +401,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::checkIndexHealth
    */
-  public function testIndexHealthChecking() {
+  public function testIndexHealthChecking()
+  {
     // Mock health check queries.
     $select = $this->createMock(SelectInterface::class);
     $select->method('addExpression')->willReturnSelf();
@@ -398,12 +411,12 @@ class VectorIndexManagerTest extends UnitTestCase {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchField')->willReturnOnConsecutiveCalls(
     // Total vectors.
-          10000,
-          // Corrupted vectors.
+        10000,
+        // Corrupted vectors.
           50,
-          // Orphaned vectors.
+        // Orphaned vectors.
           5
-      );
+    );
 
     $select->method('execute')->willReturn($statement);
     $this->connection->method('select')->willReturn($select);
@@ -421,7 +434,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::checkIndexHealth
    */
-  public function testCorruptedIndexDetection() {
+  public function testCorruptedIndexDetection()
+  {
     // Mock corrupted index scenario.
     $select = $this->createMock(SelectInterface::class);
     $select->method('addExpression')->willReturnSelf();
@@ -430,12 +444,12 @@ class VectorIndexManagerTest extends UnitTestCase {
     $statement = $this->createMock(StatementInterface::class);
     $statement->method('fetchField')->willReturnOnConsecutiveCalls(
     // Total vectors.
-          10000,
-          // Corrupted vectors (20% - high corruption)
+        10000,
+        // Corrupted vectors (20% - high corruption)
           2000,
-          // Orphaned vectors.
+        // Orphaned vectors.
           500
-      );
+    );
 
     $select->method('execute')->willReturn($statement);
     $this->connection->method('select')->willReturn($select);
@@ -452,7 +466,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::rebuildIndex
    */
-  public function testIndexRebuilding() {
+  public function testIndexRebuilding()
+  {
     $table_name = 'search_api_test_index_vectors';
 
     // Mock table operations for rebuild.
@@ -467,7 +482,7 @@ class VectorIndexManagerTest extends UnitTestCase {
     // Mock index recreation.
     $this->connection->expects($this->atLeastOnce())
       ->method('query')
-      ->willReturn(TRUE);
+      ->willReturn(true);
 
     $result = $this->vectorIndexManager->rebuildIndex($this->index);
     $this->assertTrue($result);
@@ -478,7 +493,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::insertVectors
    */
-  public function testMemoryExhaustionHandling() {
+  public function testMemoryExhaustionHandling()
+  {
     // Create very large vector set to trigger memory issues.
     $vectors = [];
     for ($i = 0; $i < 50000; $i++) {
@@ -494,8 +510,8 @@ class VectorIndexManagerTest extends UnitTestCase {
     $insert->method('fields')->willReturnSelf();
     $insert->method('values')->willReturnSelf();
     $insert->method('execute')->willThrowException(
-          new \Exception('Fatal error: Allowed memory size exhausted')
-      );
+        new \Exception('Fatal error: Allowed memory size exhausted')
+    );
 
     $this->connection->method('insert')->willReturn($insert);
 
@@ -509,7 +525,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::searchSimilarVectors
    */
-  public function testDatabaseConnectionFailure() {
+  public function testDatabaseConnectionFailure()
+  {
     $query_vector = array_fill(0, 1536, 0.5);
 
     // Mock database connection failure.
@@ -526,11 +543,12 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::validateVectorDimensions
    */
-  public function testVectorDimensionValidation() {
+  public function testVectorDimensionValidation()
+  {
     // Use reflection to access protected method.
     $reflection = new \ReflectionClass($this->vectorIndexManager);
     $method = $reflection->getMethod('validateVectorDimensions');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     // Test valid dimensions.
     $valid_vector = array_fill(0, 1536, 0.1);
@@ -549,11 +567,12 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::calculateDistance
    */
-  public function testDistanceMetricCalculations() {
+  public function testDistanceMetricCalculations()
+  {
     // Use reflection to access protected method.
     $reflection = new \ReflectionClass($this->vectorIndexManager);
     $method = $reflection->getMethod('calculateDistance');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     $vector1 = [1.0, 0.0, 0.0];
     $vector2 = [0.0, 1.0, 0.0];
@@ -577,11 +596,12 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::validateIndexConfiguration
    */
-  public function testIndexConfigurationValidation() {
+  public function testIndexConfigurationValidation()
+  {
     // Use reflection to access protected method.
     $reflection = new \ReflectionClass($this->vectorIndexManager);
     $method = $reflection->getMethod('validateIndexConfiguration');
-    $method->setAccessible(TRUE);
+    $method->setAccessible(true);
 
     // Test valid configuration.
     $valid_config = [
@@ -608,7 +628,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::insertVectors
    */
-  public function testConcurrentAccessHandling() {
+  public function testConcurrentAccessHandling()
+  {
     $vectors = [
       'item_1' => [
         'item_id' => 'item_1',
@@ -626,7 +647,7 @@ class VectorIndexManagerTest extends UnitTestCase {
           $this->throwException(new \Exception('Deadlock found when trying to get lock')),
           // Success on retry.
           1
-          ));
+      ));
 
     $this->connection->expects($this->exactly(2))
       ->method('insert')
@@ -642,7 +663,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::getPerformanceMetrics
    */
-  public function testPerformanceMonitoring() {
+  public function testPerformanceMonitoring()
+  {
     $mock_metrics = [
       'avg_insert_time' => 0.05,
       'avg_search_time' => 0.02,
@@ -672,11 +694,12 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::performMaintenance
    */
-  public function testIndexCleanupAndMaintenance() {
+  public function testIndexCleanupAndMaintenance()
+  {
     // Mock maintenance operations.
     $this->connection->expects($this->atLeastOnce())
       ->method('query')
-      ->willReturn(TRUE);
+      ->willReturn(true);
 
     $maintenance_result = $this->vectorIndexManager->performMaintenance($this->index);
 
@@ -692,13 +715,14 @@ class VectorIndexManagerTest extends UnitTestCase {
    * @covers ::backupIndex
    * @covers ::restoreIndex
    */
-  public function testBackupAndRecoveryOperations() {
+  public function testBackupAndRecoveryOperations()
+  {
     $backup_path = '/tmp/vector_index_backup.sql';
 
     // Mock backup operation.
     $this->connection->expects($this->once())
       ->method('query')
-      ->willReturn(TRUE);
+      ->willReturn(true);
 
     $backup_result = $this->vectorIndexManager->backupIndex($this->index, $backup_path);
     $this->assertTrue($backup_result);
@@ -713,7 +737,8 @@ class VectorIndexManagerTest extends UnitTestCase {
    *
    * @covers ::calibrateSimilarityThreshold
    */
-  public function testVectorSimilarityThresholdCalibration() {
+  public function testVectorSimilarityThresholdCalibration()
+  {
     $sample_queries = [
       'query1' => array_fill(0, 1536, 0.1),
       'query2' => array_fill(0, 1536, 0.2),
@@ -733,13 +758,12 @@ class VectorIndexManagerTest extends UnitTestCase {
     $this->connection->method('select')->willReturn($select);
 
     $optimal_threshold = $this->vectorIndexManager->calibrateSimilarityThreshold(
-          $this->index,
-          $sample_queries
-      );
+        $this->index,
+        $sample_queries
+    );
 
     $this->assertIsFloat($optimal_threshold);
     $this->assertGreaterThan(0, $optimal_threshold);
     $this->assertLessThan(1, $optimal_threshold);
   }
-
 }
